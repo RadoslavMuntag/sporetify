@@ -38,10 +38,14 @@ FloatingWindow {
     target: player
     function onPhaseChanged() { window.loadWhenReady() }
   }
-  property bool loadedOnce: false
+  // The library loads as soon as the daemon answers at all: connected, it
+  // is fresh; offline, it is what was saved. Coming back online refreshes it.
+  property string loadedIn: ""
   function loadWhenReady() {
-    if (loadedOnce || player.phase !== "ready") return
-    loadedOnce = true
+    var phase = player.phase
+    if ((phase !== "ready" && phase !== "offline") || loadedIn === phase) return
+    if (loadedIn === "ready" && phase === "offline") return
+    loadedIn = phase
     library.loadPlaylists()
   }
   Component.onCompleted: loadWhenReady()
@@ -49,6 +53,10 @@ FloatingWindow {
   function openSelected() {
     var item = sidebar.itemAt(sidebar.currentIndex)
     if (!item) return
+    if (item.kind === "folder") {
+      toggleFolder(item.id)
+      return
+    }
     library.go({ kind: "playlist", uri: item.uri, name: item.name }, tracks.currentIndex)
     pane = "list"
   }
@@ -65,7 +73,26 @@ FloatingWindow {
       id: prefs
       // Draw each track's creature.
       property bool creatures: true
+      // Ids of sidebar folders that are folded shut, comma separated.
+      property string foldedFolders: ""
     }
+  }
+
+  readonly property var foldedFolders: {
+    var out = {}
+    var ids = prefs.foldedFolders.split(",")
+    for (var i = 0; i < ids.length; i++) if (ids[i] !== "") out[ids[i]] = true
+    return out
+  }
+  function toggleFolder(id) {
+    var next = []
+    var had = false
+    for (var key in foldedFolders) {
+      if (key === id) had = true
+      else next.push(key)
+    }
+    if (!had) next.push(id)
+    prefs.foldedFolders = next.join(",")
   }
 
   property bool searchOpen: false
@@ -102,6 +129,16 @@ FloatingWindow {
     function onNotice(text, isError) {
       window.noticeText = text
       window.noticeIsError = isError
+      noticeTimer.restart()
+    }
+  }
+  // A refused action (play while offline, a daemon error) is said out loud.
+  Connections {
+    target: player
+    function onLastErrorChanged() {
+      if (player.lastError === "") return
+      window.noticeText = player.lastError
+      window.noticeIsError = true
       noticeTimer.restart()
     }
   }
@@ -144,7 +181,6 @@ FloatingWindow {
       else library.activate(tracks.currentIndex)
       return
     case "reload":
-      loadedOnce = player.phase === "ready"
       library.reload()
       return
     }
@@ -191,6 +227,8 @@ FloatingWindow {
         history: library.historyIndex + 1 + "/" + library.history.length,
         phase: player.phase, help: window.helpOpen, searchOpen: window.searchOpen, notice: window.noticeText,
         playingLiked: library.playingLiked, rows: rows,
+        artPath: library.artPath, offline: player.offline, sidebar: sidebar.count,
+        playingArt: player.track && player.track.art_path ? player.track.art_path : "",
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
       })
@@ -222,6 +260,8 @@ FloatingWindow {
       width: Math.min(Theme.space(280), parent.width * 0.3)
       library: library
       focused: window.pane === "sidebar"
+      collapsed: window.foldedFolders
+      offline: player.offline
       onActivated: window.openSelected()
     }
 
@@ -373,7 +413,6 @@ FloatingWindow {
         text: {
           switch (player.phase) {
           case "signed_out": return "Sign in to Spotify to start listening"
-          case "offline": return "Can't reach Spotify. Retrying…"
           case "no_premium": return "Spotify Premium is required to play"
           case "incompatible": return "Daemon and app versions differ. Rebuild the daemon"
           default: return "The Sporetify daemon is not reachable"

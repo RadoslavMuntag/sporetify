@@ -55,11 +55,28 @@ Rectangle {
     width: parent.width - Theme.spacing.huge * 2
     implicitHeight: middle.implicitHeight
 
+    // ---- Cover, fetched by the daemon and shown from its file
+    Image {
+      id: cover
+      readonly property string path: root.track && root.track.art_path ? root.track.art_path : ""
+      visible: path !== ""
+      anchors.verticalCenter: parent.verticalCenter
+      width: visible ? Theme.space(46) : 0
+      height: Theme.space(46)
+      source: path !== "" ? "file://" + path : ""
+      sourceSize.width: Theme.space(92)
+      sourceSize.height: Theme.space(92)
+      fillMode: Image.PreserveAspectCrop
+      asynchronous: true
+    }
+
     // ---- The track's creature
     Organism {
       id: creature
       visible: root.visuals && root.track !== null
       anchors.verticalCenter: parent.verticalCenter
+      anchors.left: cover.right
+      anchors.leftMargin: cover.visible ? Theme.spacing.lg : 0
       width: visible ? Theme.space(46) : 0
       height: Theme.space(46)
       seed: root.track ? root.track.id : ""
@@ -75,7 +92,7 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       anchors.left: creature.right
       anchors.leftMargin: creature.visible ? Theme.spacing.xl : 0
-      width: parent.width * 0.28 - creature.width - anchors.leftMargin
+      width: parent.width * 0.28 - creature.width - cover.width - anchors.leftMargin - creature.anchors.leftMargin
       spacing: Theme.spacing.xs
 
       Text {

@@ -106,10 +106,15 @@ in the app (`/`). Spotify-wide search works too, without a client id,
 through Spotify's GraphQL search service (`search` op, on
 `feature/app-views`); the `searchview` endpoints tried first never did.
 
-Not done: playlist lists and the playlist index are memory-only (the app
-cannot open offline yet), stale-while-revalidate frames, save/unsave, album
-and artist views, batched metadata lookups, indexing of playlists that were
-never opened.
+Added on `feature/library-polish`: playlist folders in the sidebar; the
+sidebar and every loaded list saved to disk, so the library opens offline;
+background indexing of every playlist; cover art fetched and cached by the
+daemon, shown for the playing track and on album and artist pages.
+
+Not done: stale-while-revalidate frames, batched metadata lookups, covers in
+lists and search results, eviction of the cover cache, a devices view, and
+telling the user when another device takes over playback (both of the last
+two need information librespot does not hand out).
 
 Original scope:
 

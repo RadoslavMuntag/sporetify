@@ -55,15 +55,30 @@ pub struct AlbumHeader {
     /// "album", "single", "ep" or "compilation".
     pub kind: String,
     pub tracks: usize,
+    /// Address of the cover; `art.get` turns it into a local file.
+    pub art_url: Option<String>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 struct List {
     name: String,
     uris: Vec<String>,
 }
 
+/// What is kept on disk so the library can be shown without a connection:
+/// the sidebar as last seen, and every list that has been loaded.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct LibraryFile {
+    sidebar: Vec<Value>,
+    lists: HashMap<String, List>,
+}
+
 pub struct Catalog {
     lists: Mutex<HashMap<String, Arc<List>>>,
+    /// The playlists response as last fetched, for showing it offline.
+    sidebar: Mutex<Vec<Value>>,
+    library_unsaved: AtomicBool,
     tracks: Mutex<HashMap<String, TrackRow>>,
     albums: Mutex<HashMap<String, AlbumHeader>>,
     /// Tracks fetched since the cache file was last written.
@@ -75,8 +90,11 @@ pub struct Catalog {
 
 impl Default for Catalog {
     fn default() -> Self {
+        let library = load_library();
         Self {
-            lists: Mutex::default(),
+            lists: Mutex::new(library.lists.into_iter().map(|(uri, list)| (uri, Arc::new(list))).collect()),
+            sidebar: Mutex::new(library.sidebar),
+            library_unsaved: AtomicBool::new(false),
             tracks: Mutex::new(load_tracks()),
             albums: Mutex::default(),
             unsaved: AtomicBool::new(false),
@@ -93,6 +111,75 @@ fn tracks_path() -> Option<PathBuf> {
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
     // v2: rows carry artist and album uris.
     Some(base.join("sporetify/tracks.v2.json"))
+}
+
+fn library_path() -> Option<PathBuf> {
+    tracks_path().map(|path| path.with_file_name("library.json"))
+}
+
+fn load_library() -> LibraryFile {
+    library_path()
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Write `bytes` beside `path` and rename, so a crash never leaves half a file.
+fn write_atomically(path: &std::path::Path, bytes: &[u8]) {
+    let Some(dir) = path.parent() else { return };
+    let temporary = path.with_extension("json.tmp");
+    if std::fs::create_dir_all(dir).is_ok() && std::fs::write(&temporary, bytes).is_ok() {
+        let _ = std::fs::rename(&temporary, path);
+    }
+}
+
+/// The sidebar from the rootlist's entries, in order. Playlists carry the
+/// depth of the folders they sit in; a folder is an entry of its own.
+/// `entries` are (uri, name, length).
+fn sidebar_entries(liked_uri: &str, entries: &[(String, String, Option<i32>)]) -> Vec<Value> {
+    let mut items = vec![json!({ "uri": liked_uri, "name": "Liked Songs", "length": null, "depth": 0 })];
+    let mut depth = 0usize;
+    for (uri, name, length) in entries {
+        if let Some(rest) = uri.strip_prefix("spotify:start-group:") {
+            // spotify:start-group:<id>:<name, url-encoded with + for spaces>
+            let (id, raw) = rest.split_once(':').unwrap_or((rest, ""));
+            items.push(json!({ "kind": "folder", "id": id, "name": percent_decode(raw), "depth": depth }));
+            depth += 1;
+        } else if uri.starts_with("spotify:end-group:") {
+            depth = depth.saturating_sub(1);
+        } else if uri.starts_with("spotify:playlist:") {
+            items.push(json!({
+                "uri": uri,
+                "name": if name.is_empty() { "Untitled playlist" } else { name },
+                "length": length,
+                "depth": depth,
+            }));
+        }
+    }
+    items
+}
+
+fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let escaped = (bytes[i] == b'%' && i + 2 < bytes.len() + 1)
+            .then(|| bytes.get(i + 1..i + 3))
+            .flatten()
+            .and_then(|hex| std::str::from_utf8(hex).ok())
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        match (bytes[i], escaped) {
+            (_, Some(byte)) => {
+                out.push(byte);
+                i += 2;
+            }
+            (b'+', _) => out.push(b' '),
+            (other, _) => out.push(other),
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn load_tracks() -> HashMap<String, TrackRow> {
@@ -112,41 +199,88 @@ pub fn liked_songs_uri(session: &Session) -> String {
 
 impl Catalog {
     /// Liked Songs followed by the user's playlists, in their own order.
-    pub async fn playlists(&self, session: &Session) -> OpResult {
+    pub async fn playlists(&self, session: Option<&Session>) -> OpResult {
+        let fetched = match session {
+            Some(session) => self.fetch_sidebar(session).await,
+            None => Err(OpError::new(ErrorCode::Offline, "not connected to Spotify")),
+        };
+        match fetched {
+            Ok(items) => {
+                *self.sidebar.lock().expect("sidebar lock") = items.clone();
+                self.library_unsaved.store(true, Ordering::Relaxed);
+                self.flush();
+                Ok(json!({ "items": items, "stale": false }))
+            }
+            // Without Spotify, show the sidebar as it was last seen.
+            Err(error) => {
+                let saved = self.sidebar.lock().expect("sidebar lock").clone();
+                if saved.is_empty() {
+                    Err(error)
+                } else {
+                    Ok(json!({ "items": saved, "stale": true }))
+                }
+            }
+        }
+    }
+
+    async fn fetch_sidebar(&self, session: &Session) -> Result<Vec<Value>, OpError> {
         let bytes = session
             .spclient()
             .get_rootlist(0, Some(1000))
             .await
             .map_err(|e| upstream("your playlists", e))?;
         let root = SelectedListContent::parse_from_bytes(&bytes).map_err(|e| upstream("your playlists", e))?;
-
-        let mut items = vec![json!({ "uri": liked_songs_uri(session), "name": "Liked Songs", "length": null })];
         let contents = root.contents.as_ref();
         let uris = contents.map(|c| c.items.as_slice()).unwrap_or_default();
         let metas = contents.map(|c| c.meta_items.as_slice()).unwrap_or_default();
-        for (index, item) in uris.iter().enumerate() {
-            // Folders appear as start-group / end-group markers.
-            if !item.uri().starts_with("spotify:playlist:") {
-                continue;
-            }
-            let meta = metas.get(index);
-            let name = meta.map(|m| m.attributes.name().to_owned()).unwrap_or_default();
-            items.push(json!({
-                "uri": item.uri(),
-                "name": if name.is_empty() { "Untitled playlist" } else { &name },
-                "length": meta.and_then(|m| m.length),
-            }));
-        }
-        Ok(json!({ "items": items }))
+        let entries: Vec<(String, String, Option<i32>)> = uris
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let meta = metas.get(index);
+                (
+                    item.uri().to_owned(),
+                    meta.map(|m| m.attributes.name().to_owned()).unwrap_or_default(),
+                    meta.and_then(|m| m.length),
+                )
+            })
+            .collect();
+        Ok(sidebar_entries(&liked_songs_uri(session), &entries))
     }
 
     /// One page of a playlist's (or Liked Songs') tracks, with metadata.
-    pub async fn tracks(&self, session: &Session, uri: &str, offset: usize, limit: usize, refresh: bool) -> OpResult {
-        let list = self.list(session, uri, refresh).await?;
+    pub async fn tracks(
+        &self,
+        session: Option<&Session>,
+        uri: &str,
+        offset: usize,
+        limit: usize,
+        refresh: bool,
+    ) -> OpResult {
         let limit = limit.clamp(1, MAX_PAGE);
-        let page: Vec<String> = list.uris.iter().skip(offset).take(limit).cloned().collect();
-
-        let rows = self.rows(session, page, LOOKUPS_IN_FLIGHT).await;
+        let (list, rows) = match session {
+            Some(session) => {
+                let list = self.list(session, uri, refresh).await?;
+                let page = list.uris.iter().skip(offset).take(limit).cloned().collect();
+                let rows = self.rows(session, page, LOOKUPS_IN_FLIGHT).await;
+                (list, rows)
+            }
+            // Offline: whatever was saved, with placeholders for the rest.
+            None => {
+                let list = self.lists.lock().expect("lists lock").get(uri).cloned().ok_or_else(|| {
+                    OpError::new(ErrorCode::Offline, "this list was not saved before going offline")
+                })?;
+                let tracks = self.tracks.lock().expect("tracks lock");
+                let rows = list
+                    .uris
+                    .iter()
+                    .skip(offset)
+                    .take(limit)
+                    .map(|uri| tracks.get(uri).cloned().unwrap_or_else(|| unavailable_row(uri.clone())))
+                    .collect();
+                (list, rows)
+            }
+        };
 
         Ok(json!({
             "uri": uri,
@@ -198,60 +332,92 @@ impl Catalog {
 
     /// Write the track cache if it has grown. Losing it only costs refetching.
     fn flush(&self) {
-        if !self.unsaved.swap(false, Ordering::Relaxed) {
-            return;
-        }
-        let Some(path) = tracks_path() else { return };
-        let Some(dir) = path.parent() else { return };
-        let bytes = {
-            let tracks = self.tracks.lock().expect("tracks lock");
-            match serde_json::to_vec(&*tracks) {
-                Ok(bytes) => bytes,
-                Err(_) => return,
+        if self.unsaved.swap(false, Ordering::Relaxed) {
+            let bytes = serde_json::to_vec(&*self.tracks.lock().expect("tracks lock"));
+            if let (Some(path), Ok(bytes)) = (tracks_path(), bytes) {
+                write_atomically(&path, &bytes);
             }
-        };
-        let temporary = path.with_extension("json.tmp");
-        if std::fs::create_dir_all(dir).is_ok() && std::fs::write(&temporary, bytes).is_ok() {
-            let _ = std::fs::rename(&temporary, &path);
+        }
+        if self.library_unsaved.swap(false, Ordering::Relaxed) {
+            let file = LibraryFile {
+                sidebar: self.sidebar.lock().expect("sidebar lock").clone(),
+                lists: self
+                    .lists
+                    .lock()
+                    .expect("lists lock")
+                    .iter()
+                    .map(|(uri, list)| (uri.clone(), (**list).clone()))
+                    .collect(),
+            };
+            if let (Some(path), Ok(bytes)) = (library_path(), serde_json::to_vec(&file)) {
+                write_atomically(&path, &bytes);
+            }
         }
     }
 
-    /// Fetch metadata for every liked song, once, in the background, so that
-    /// search covers the whole collection and not just the pages looked at.
+    /// Fetch every list in the library and its tracks' metadata, once, in
+    /// the background: Liked Songs first, then each playlist. Afterwards
+    /// search covers the whole library, and all of it can be shown offline.
     pub fn index_in_background(self: &Arc<Self>, session: &Session) {
         if self.indexed.load(Ordering::Relaxed) || self.indexing.swap(true, Ordering::Relaxed) {
             return;
         }
         let (this, session) = (self.clone(), session.clone());
         tokio::spawn(async move {
-            let uri = liked_songs_uri(&session);
-            if let Ok(list) = this.list(&session, &uri, false).await {
-                // Gentle: this is a convenience, not something the user is
-                // waiting on, and Spotify throttles bursts of lookups.
-                let mut missing = 0;
-                for chunk in list.uris.chunks(20) {
-                    let mut failed = usize::MAX;
-                    for attempt in 0..4u64 {
-                        let rows = this.rows(&session, chunk.to_vec(), 3).await;
-                        failed = rows.iter().filter(|row| !row.available).count();
-                        if failed == 0 {
-                            break;
-                        }
-                        // Cached rows come back at once, so a retry only
-                        // repeats the lookups that failed.
-                        tokio::time::sleep(std::time::Duration::from_secs(2 + attempt * 4)).await;
-                    }
-                    missing += failed;
-                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                }
-                if missing > 0 {
-                    eprintln!("sporetifyd: library index is missing {missing} tracks; will retry later");
-                }
-                // An incomplete index is retried the next time the library is opened.
-                this.indexed.store(missing == 0, Ordering::Relaxed);
+            // Liked Songs must be complete; a playlist may hold entries that
+            // can never be looked up (episodes, local files, removed tracks),
+            // so those get fewer retries and do not hold the index open.
+            let liked = liked_songs_uri(&session);
+            let missing = this.index_list(&session, &liked, 4).await;
+            if missing.unwrap_or(1) > 0 {
+                eprintln!("sporetifyd: liked songs are not fully indexed yet; will retry later");
             }
+
+            let playlists: Vec<String> = this
+                .sidebar
+                .lock()
+                .expect("sidebar lock")
+                .iter()
+                .filter_map(|item| item["uri"].as_str())
+                .filter(|uri| uri.starts_with("spotify:playlist:"))
+                .map(str::to_owned)
+                .collect();
+            for uri in playlists {
+                let _ = this.index_list(&session, &uri, 2).await;
+            }
+
+            this.flush();
+            // An incomplete index is retried the next time the library is opened.
+            this.indexed.store(missing == Some(0), Ordering::Relaxed);
             this.indexing.store(false, Ordering::Relaxed);
         });
+    }
+
+    /// Load one list and all of its rows, gently. Returns how many rows
+    /// could not be fetched, or `None` if the list itself could not be.
+    async fn index_list(&self, session: &Session, uri: &str, attempts: u64) -> Option<usize> {
+        let list = self.list(session, uri, false).await.ok()?;
+        let mut missing = 0;
+        // Small chunks with pauses: nobody is waiting on this, and Spotify
+        // throttles bursts of lookups.
+        for chunk in list.uris.chunks(20) {
+            let mut failed = usize::MAX;
+            for attempt in 0..attempts {
+                let rows = self.rows(session, chunk.to_vec(), 3).await;
+                failed = rows.iter().filter(|row| !row.available).count();
+                if failed == 0 {
+                    break;
+                }
+                // Cached rows come back at once, so a retry only repeats the
+                // lookups that failed.
+                if attempt + 1 < attempts {
+                    tokio::time::sleep(std::time::Duration::from_secs(2 + attempt * 4)).await;
+                }
+            }
+            missing += failed;
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        }
+        Some(missing)
     }
 
     /// Tracks in the user's library whose title, artists or album contain
@@ -324,6 +490,7 @@ impl Catalog {
         };
         let list = Arc::new(list);
         self.lists.lock().expect("lists lock").insert(uri.to_owned(), list.clone());
+        self.library_unsaved.store(true, Ordering::Relaxed);
         Ok(list)
     }
 
@@ -338,6 +505,7 @@ impl Catalog {
             year: album.date.as_utc().year(),
             kind: format!("{:?}", album.album_type).to_lowercase(),
             tracks: uris.len(),
+            art_url: image_url(&album.covers),
         };
         self.albums.lock().expect("albums lock").insert(uri.to_owned(), header.clone());
         Ok((header, uris))
@@ -388,7 +556,7 @@ impl Catalog {
         let rows = self.rows(session, top, LOOKUPS_IN_FLIGHT).await;
 
         Ok(json!({
-            "artist": { "uri": uri, "name": artist.name },
+            "artist": { "uri": uri, "name": artist.name, "art_url": image_url(&artist.portrait_group).or_else(|| image_url(&artist.portraits)) },
             "top_tracks": self.decorate(rows),
             "albums": albums,
             "singles": singles,
@@ -622,16 +790,7 @@ impl Catalog {
                 row
             }
             // Not cached: a failed lookup may succeed next time.
-            None => TrackRow {
-                uri,
-                title: "Unavailable".to_owned(),
-                artists: Vec::new(),
-                album: String::new(),
-                duration_ms: 0,
-                available: false,
-                artist_uris: Vec::new(),
-                album_uri: String::new(),
-            },
+            None => unavailable_row(uri),
         }
     }
 }
@@ -690,6 +849,25 @@ fn collection_write(username: &str, uri: &str, now_secs: u64, remove: bool) -> V
     request
 }
 
+/// The address of the largest of `images`.
+fn image_url(images: &librespot_metadata::image::Images) -> Option<String> {
+    let image = images.iter().max_by_key(|image| image.width)?;
+    Some(format!("https://i.scdn.co/image/{}", image.id.to_base16().ok()?))
+}
+
+fn unavailable_row(uri: String) -> TrackRow {
+    TrackRow {
+        uri,
+        title: "Unavailable".to_owned(),
+        artists: Vec::new(),
+        album: String::new(),
+        duration_ms: 0,
+        available: false,
+        artist_uris: Vec::new(),
+        album_uri: String::new(),
+    }
+}
+
 /// Albums and singles listed per artist.
 const MAX_RELEASES: usize = 30;
 const TOP_TRACKS: usize = 10;
@@ -737,6 +915,48 @@ mod tests {
         assert_eq!(super::percent_encode("a-Z_0.~"), "a-Z_0.~");
         assert_eq!(super::percent_encode("{\"q\":\"a b&c\"}"), "%7B%22q%22%3A%22a%20b%26c%22%7D");
         assert_eq!(super::percent_encode("é"), "%C3%A9");
+    }
+
+    #[test]
+    fn sidebar_keeps_folders_and_depth() {
+        let entry = |uri: &str, name: &str| (uri.to_owned(), name.to_owned(), Some(3));
+        let items = super::sidebar_entries(
+            "spotify:user:u:collection",
+            &[
+                entry("spotify:playlist:a", "Top"),
+                entry("spotify:start-group:f1:Road+trips%21", ""),
+                entry("spotify:playlist:b", ""),
+                entry("spotify:start-group:f2:Inner", ""),
+                entry("spotify:playlist:c", "Deep"),
+                entry("spotify:end-group:f2", ""),
+                entry("spotify:end-group:f1", ""),
+                entry("spotify:playlist:d", "After"),
+                entry("spotify:end-group:stray", ""),
+            ],
+        );
+        let brief: Vec<(String, u64)> = items
+            .iter()
+            .map(|item| (item["name"].as_str().unwrap_or("").to_owned(), item["depth"].as_u64().unwrap_or(99)))
+            .collect();
+        assert_eq!(
+            brief,
+            [
+                ("Liked Songs", 0), ("Top", 0), ("Road trips!", 0), ("Untitled playlist", 1),
+                ("Inner", 1), ("Deep", 2), ("After", 0),
+            ]
+            .map(|(name, depth)| (name.to_owned(), depth))
+        );
+        assert_eq!(items[2]["kind"], "folder");
+        assert_eq!(items[2]["id"], "f1");
+        assert!(items[1]["kind"].is_null());
+    }
+
+    #[test]
+    fn percent_decode_handles_plus_escapes_and_stray_percent() {
+        assert_eq!(super::percent_decode("a+b%20c"), "a b c");
+        assert_eq!(super::percent_decode("caf%C3%A9"), "café");
+        assert_eq!(super::percent_decode("100%"), "100%");
+        assert_eq!(super::percent_decode("%zz"), "%zz");
     }
 
     #[test]

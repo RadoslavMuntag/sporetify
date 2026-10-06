@@ -7,7 +7,8 @@ client ID is required.
 
 Status: early. Playback, your playlists, Liked Songs, library search, artist
 and album pages, likes, add to queue, an up-next list and search across all
-of Spotify work. Artwork does not exist yet.
+of Spotify work, with cover art, playlist folders, and a library that still
+opens when you are offline.
 
 ## Install (development)
 

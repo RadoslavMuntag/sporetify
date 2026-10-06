@@ -34,7 +34,7 @@ KeyboardPanel {
     if (service.lastError !== "") return service.lastError
     switch (service.phase) {
     case "signed_out": return "Sign in to Spotify to start listening"
-    case "offline": return "Can't reach Spotify. Retrying…"
+    case "offline": return "Offline. Playback resumes when Spotify is reachable"
     case "no_premium": return "Spotify Premium is required to play"
     case "unavailable": return "The Sporetify daemon is not reachable"
     case "incompatible": return "Daemon and plugin versions differ. Rebuild the daemon"
@@ -127,6 +127,21 @@ KeyboardPanel {
         width: parent.width
         spacing: Style.spacing.xl
 
+        // Cover, fetched by the daemon and shown from its file.
+        Image {
+          id: cover
+          readonly property string path: panel.track && panel.track.art_path ? panel.track.art_path : ""
+          visible: path !== ""
+          anchors.verticalCenter: parent.verticalCenter
+          width: visible ? Style.space(56) : 0
+          height: Style.space(56)
+          source: path !== "" ? "file://" + path : ""
+          sourceSize.width: Style.space(112)
+          sourceSize.height: Style.space(112)
+          fillMode: Image.PreserveAspectCrop
+          asynchronous: true
+        }
+
         Organism {
           id: creature
           visible: panel.creatures && panel.track !== null
@@ -144,6 +159,7 @@ KeyboardPanel {
         Column {
           anchors.verticalCenter: parent.verticalCenter
           width: parent.width - (creature.visible ? creature.width + parent.spacing : 0)
+            - (cover.visible ? cover.width + parent.spacing : 0)
           spacing: Style.spacing.labelGap
 
           Text {

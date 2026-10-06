@@ -131,7 +131,15 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Leaving:** `Ctrl C` quits the app, as does closing the window. `Esc` and
   `q` do not: in the app `Esc` only cancels a search. (In the mini-player,
   a popup, `Esc` and `q` still close it.)
-- **Now-playing bar:** creature, title, artist, shuffle and repeat (lit when
+- **Sidebar:** Liked Songs, then playlists and folders. A folder folds and
+  unfolds with `Enter`; which ones are folded is kept in the preferences.
+- **Offline:** not a fault. The sidebar says it is showing what was saved,
+  playlists and library search work from the daemon's files, and anything
+  that needs Spotify says why it failed in a toast.
+- **Covers:** shown from files the daemon fetched: the playing track's in
+  the now-playing bar and mini-player, and the album's or artist's beside
+  the title of its page.
+- **Now-playing bar:** cover, creature, title, artist, shuffle and repeat (lit when
   on), transport, seek, volume.
 - **Help:** `?` shows every key valid right now; the footer shows only the
   ones marked `primary` in the keymap. Any key closes the overlay.
@@ -148,7 +156,8 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Faults:** signed out, offline or no daemon replaces the list with a
   one-line explanation and the key that fixes it.
 
-Planned: a devices view, artwork, playlist folders, reordering the queue.
+Planned: a devices view, reordering the queue, covers in lists and search
+results.
 
 ## Keymap scopes
 

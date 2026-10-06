@@ -112,11 +112,12 @@ Built:
 | `player.volume_step` | `delta` | `{}` |
 | `player.shuffle` `player.repeat` | `on` | `{}` |
 | `player.play_context` | `uri`, optional `track_uri` | `{}` |
-| `library.playlists` | | `{items:[{uri, name, length}]}`, Liked Songs first |
+| `library.playlists` | | `{items, stale}`: the sidebar, Liked Songs first. An item is `{uri, name, length, depth}` or a folder `{kind:"folder", id, name, depth}` |
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
 | `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}`; cached library only, never the network |
 | `search` | `query`, optional `limit` per section (max 50) | `{query, tracks, artists, albums, playlists}`; all of Spotify |
 | `library.track` | `uri` | `{track}`: one track row |
+| `art.get` | `url` (a Spotify image address) | `{path}`: the cover as a local file |
 | `library.save` `library.unsave` | `uri` | `{uri, liked}`; writes to Liked Songs |
 | `library.is_saved` | `uri` | `{uri, liked}`, from the cached Liked Songs list |
 | `player.queue_add` | `uri` | `{}`; puts the track at the front of the queue |
@@ -132,6 +133,13 @@ A track row is `{uri, title, artists, artist_uris, album, album_uri,
 duration_ms, available, liked}`; search results add `context_uri` and
 `context_name`, the list the track was found in. `player.play_context`
 accepts playlist, collection, album and artist uris.
+
+The player state's `track` carries `art_url` and, once the daemon has the
+file, `art_path`. Album and artist answers carry `art_url`. Frontends never
+load covers from the network; they show the file.
+
+`library.playlists` and `library.tracks` keep working without a connection,
+from what was saved (`stale: true`).
 
 `player.up_next` lists first the tracks queued from Sporetify that have not
 played yet (rows with `queued: true`), then what follows the current track in

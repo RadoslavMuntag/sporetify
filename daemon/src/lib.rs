@@ -1,6 +1,7 @@
 //! Sporetify daemon library. `main.rs` wires these modules to a socket;
 //! integration tests drive them directly.
 
+pub mod art;
 pub mod auth;
 pub mod catalog;
 pub mod ipc;

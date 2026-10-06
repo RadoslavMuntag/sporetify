@@ -14,7 +14,26 @@ Rectangle {
 
   color: Theme.sunken
 
-  readonly property var items: Loadable.hasData(library.playlists) ? library.playlists.data : []
+  // Folder ids that are folded shut: { id: true }.
+  property var collapsed: ({})
+  property bool offline: false
+  signal folderToggled(string id)
+
+  readonly property var all: Loadable.hasData(library.playlists) ? library.playlists.data : []
+  // What is listed: everything except the contents of folded folders.
+  readonly property var items: {
+    var out = []
+    var hiddenBelow = -1   // depth of the folded folder we are inside, or -1
+    for (var i = 0; i < all.length; i++) {
+      var item = all[i]
+      var depth = item.depth || 0
+      if (hiddenBelow >= 0 && depth > hiddenBelow) continue
+      hiddenBelow = -1
+      out.push(item)
+      if (item.kind === "folder" && collapsed[item.id] === true) hiddenBelow = depth
+    }
+    return out
+  }
 
   function itemAt(index) {
     return index >= 0 && index < items.length ? items[index] : null
@@ -32,8 +51,8 @@ Rectangle {
     x: Theme.spacing.xxl
     y: Theme.spacing.xl
     textFormat: Text.PlainText
-    text: "LIBRARY"
-    color: Theme.muted
+    text: root.offline ? "LIBRARY · OFFLINE, SHOWING WHAT WAS SAVED" : "LIBRARY"
+    color: root.offline ? Theme.urgent : Theme.muted
     font.family: Theme.font.family
     font.pixelSize: Theme.font.caption
     font.letterSpacing: 1
@@ -71,7 +90,10 @@ Rectangle {
       id: row
       required property int index
       readonly property var item: root.itemAt(index)
-      readonly property bool open: item && root.library.kind === "playlist" && item.uri === root.library.uri
+      readonly property bool folder: !!item && item.kind === "folder"
+      readonly property real indent: Theme.spacing.xxl + (item ? (item.depth || 0) : 0) * Theme.spacing.xl
+      readonly property bool open: !!item && !folder && root.library.kind === "playlist"
+        && item.uri === root.library.uri
       readonly property bool cursor: ListView.isCurrentItem && root.focused
 
       width: list.width
@@ -86,12 +108,14 @@ Rectangle {
       }
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        x: Theme.spacing.xxl
-        width: parent.width - Theme.spacing.xxl * 2
+        x: row.indent
+        width: parent.width - row.indent - Theme.spacing.xxl
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        text: row.item ? row.item.name : ""
-        color: row.open ? Theme.accent : Theme.foreground
+        // A folder shows whether it is folded.
+        text: !row.item ? "" : (row.folder
+          ? (root.collapsed[row.item.id] === true ? "▸ " : "▾ ") + row.item.name : row.item.name)
+        color: row.open ? Theme.accent : (row.folder ? Theme.muted : Theme.foreground)
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
       }

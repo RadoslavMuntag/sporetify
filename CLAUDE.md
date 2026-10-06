@@ -337,7 +337,8 @@ Things that bite:
   Request handlers run under `tokio::spawn`, where `spawn_local` panics; use
   `tokio::spawn` from them.
 - Run a second daemon for experiments with
-  `sporetifyd --socket /tmp/x.sock --debug-ops` (stop the service first).
+  `sporetifyd --socket /tmp/x.sock --debug-ops`. Add `--no-connect` to test
+  offline behaviour.
   `debug.mercury` and `debug.spclient` make raw internal-API calls.
 - Never `pkill -f` a pattern that also appears in your own command line.
 - **Tests that write to the Spotify account need care.** Like, unlike and

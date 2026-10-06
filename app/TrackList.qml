@@ -46,35 +46,55 @@ Item {
     }
   }
 
-  Column {
+  Row {
     id: header
     x: Theme.spacing.huge
     y: Theme.spacing.xl
     width: parent.width - Theme.spacing.huge * 2
-    spacing: Theme.spacing.xs
+    spacing: Theme.spacing.xxl
 
-    Text {
-      width: parent.width
-      elide: Text.ElideRight
-      textFormat: Text.PlainText
-      text: root.library.name
-      color: Theme.foreground
-      font.family: Theme.font.family
-      font.pixelSize: Theme.font.heading
-      font.bold: true
+    // Album cover or artist portrait, when the place has one.
+    Image {
+      id: art
+      visible: root.library.artPath !== ""
+      anchors.verticalCenter: parent.verticalCenter
+      width: visible ? Theme.space(72) : 0
+      height: Theme.space(72)
+      source: root.library.artPath !== "" ? "file://" + root.library.artPath : ""
+      sourceSize.width: Theme.space(144)
+      sourceSize.height: Theme.space(144)
+      fillMode: Image.PreserveAspectCrop
+      asynchronous: true
     }
-    Text {
-      textFormat: Text.PlainText
-      text: {
-        if (root.library.kind === "") return "Pick a playlist on the left, or press / to search"
-        if (root.library.collection.state === "error")
-          return root.library.collection.error.message + " · press R to retry"
-        if (root.library.collection.state === "loading" && root.library.subtitle === "") return "Loading…"
-        return root.library.subtitle
+
+    Column {
+      anchors.verticalCenter: parent.verticalCenter
+      width: parent.width - (art.visible ? art.width + parent.spacing : 0)
+      spacing: Theme.spacing.xs
+
+      Text {
+        width: parent.width
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        text: root.library.name
+        color: Theme.foreground
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.heading
+        font.bold: true
       }
-      color: root.library.collection.state === "error" ? Theme.urgent : Theme.muted
-      font.family: Theme.font.family
-      font.pixelSize: Theme.font.bodySmall
+      Text {
+        textFormat: Text.PlainText
+        text: {
+          if (root.library.kind === "") return "Pick a playlist on the left, or press / to search"
+          if (root.library.collection.state === "error")
+            return root.library.collection.error.message + " · press R to retry"
+          if (root.library.collection.state === "loading" && root.library.subtitle === "") return "Loading…"
+          return root.library.subtitle
+        }
+        color: root.library.collection.state === "error" ? Theme.urgent : Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.bodySmall
+      }
     }
   }
 
