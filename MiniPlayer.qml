@@ -79,7 +79,7 @@ KeyboardPanel {
     Item {
       anchors.horizontalCenter: parent.horizontalCenter
       implicitWidth: button.implicitWidth
-      implicitHeight: Style.spacing.controlHeight + Style.spacing.lg
+      implicitHeight: Style.spacing.controlHeight
 
       Button {
         id: button
@@ -120,27 +120,32 @@ KeyboardPanel {
     Column {
       id: column
       width: parent.width
-      spacing: Style.spacing.xxl
+      spacing: Style.spacing.lg
 
-      // ---- What is playing, with the track's creature
+      // ---- What is playing. With a cover, it becomes a backdrop that runs
+      //      from the top of the card down to the seek bar, dissolving
+      //      upward so the creature and title stay readable over it.
+      Item {
+        id: hero
+        readonly property string coverPath: panel.track && panel.track.art_path ? panel.track.art_path : ""
+        readonly property bool backdrop: coverPath !== ""
+        width: parent.width
+        height: backdrop ? Style.space(176) : titleRow.implicitHeight
+
+        CoverBackdrop {
+          visible: hero.backdrop
+          // Out to the card's edges at the top and sides.
+          anchors.fill: parent
+          anchors.topMargin: -panel.padding
+          anchors.leftMargin: -panel.padding
+          anchors.rightMargin: -panel.padding
+          source: hero.backdrop ? "file://" + hero.coverPath : ""
+        }
+
       Row {
+        id: titleRow
         width: parent.width
         spacing: Style.spacing.xl
-
-        // Cover, fetched by the daemon and shown from its file.
-        Image {
-          id: cover
-          readonly property string path: panel.track && panel.track.art_path ? panel.track.art_path : ""
-          visible: path !== ""
-          anchors.verticalCenter: parent.verticalCenter
-          width: visible ? Style.space(56) : 0
-          height: Style.space(56)
-          source: path !== "" ? "file://" + path : ""
-          sourceSize.width: Style.space(112)
-          sourceSize.height: Style.space(112)
-          fillMode: Image.PreserveAspectCrop
-          asynchronous: true
-        }
 
         Organism {
           id: creature
@@ -159,7 +164,6 @@ KeyboardPanel {
         Column {
           anchors.verticalCenter: parent.verticalCenter
           width: parent.width - (creature.visible ? creature.width + parent.spacing : 0)
-            - (cover.visible ? cover.width + parent.spacing : 0)
           spacing: Style.spacing.labelGap
 
           Text {
@@ -171,6 +175,9 @@ KeyboardPanel {
             font.family: panel.family
             font.pixelSize: Style.font.subtitle
             font.bold: true
+            // An outline in the card's colour keeps it legible over a cover.
+            style: hero.backdrop ? Text.Outline : Text.Normal
+            styleColor: Color.popups.background
           }
           Text {
             width: parent.width
@@ -178,11 +185,14 @@ KeyboardPanel {
             textFormat: Text.PlainText
             elide: Text.ElideRight
             text: panel.track ? panel.track.artists.join(", ") : ""
-            color: Color.muted
+            color: hero.backdrop ? panel.fg : Color.muted
             font.family: panel.family
             font.pixelSize: Style.font.bodySmall
+            style: hero.backdrop ? Text.Outline : Text.Normal
+            styleColor: Color.popups.background
           }
         }
+      }
       }
 
       // ---- Why nothing can happen right now, if so
