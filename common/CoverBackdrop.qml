@@ -1,8 +1,8 @@
 import QtQuick
 
-// A cover used as a backdrop that dissolves upward: sharp and solid at the
-// bottom, and towards the top both fainter and coarser, like pixel art
-// losing resolution. Text placed over the upper part stays readable.
+// A cover used as a backdrop whose upper part dissolves: the lower part is
+// shown as it is, and above that it gets both fainter and coarser towards
+// the top, like pixel art losing resolution. Text placed over the upper part stays readable.
 //
 // Experimental. It is built from horizontal bands, each showing its slice of
 // the same picture decoded at a lower resolution and drawn without
@@ -12,6 +12,9 @@ Item {
 
   // Local file url of the cover, or "".
   property string source: ""
+  // How much of the height, from the top, the dissolve covers. Below that
+  // the cover is shown as it is.
+  property real span: 0.5
   // How many steps the dissolve has.
   property int bands: 12
   // Pixel size of the coarsest (top) band, in screen pixels.
@@ -28,18 +31,21 @@ Item {
   readonly property real offsetX: (width - side) / 2
   readonly property real offsetY: (height - side) / 2
 
+  // The dissolve's bands share the top `span` of the height; one more band
+  // below them holds the untouched rest.
   function bandTop(index) {
-    return Math.round(index * height / bands)
+    if (index > bands) return Math.round(height)
+    return Math.round(index * height * span / bands)
   }
 
   Repeater {
-    model: root.source !== "" ? root.bands : 0
+    model: root.source !== "" ? root.bands + 1 : 0
 
     Item {
       id: band
       required property int index
-      // 0 at the top, 1 at the bottom.
-      readonly property real t: root.bands > 1 ? index / (root.bands - 1) : 1
+      // 0 at the top, 1 where the dissolve ends and for everything below it.
+      readonly property real t: Math.min(1, index / root.bands)
       // Resolution falls off faster than opacity, so the picture is still
       // recognisable where it has become blocky.
       readonly property int block: Math.max(1, Math.round(root.coarsest * Math.pow(1 - t, 1.6)))
