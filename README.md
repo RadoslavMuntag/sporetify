@@ -48,7 +48,8 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `a` / `d` | Artist / album of a track | `u` | Up next |
 | `f` | Like / unlike | `e` | Add to queue |
 | `Backspace` | Back | `?` | Every shortcut |
-| `←` / `→` | Seek 10 s | `Esc` / `q` | Close |
+| `←` / `→` | Seek 10 s | `Esc` | Cancel search (closes the mini-player) |
+| `Ctrl C` | Quit the app | | |
 
 ## Keybinds
 

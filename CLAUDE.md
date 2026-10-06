@@ -157,8 +157,9 @@ Measure before claiming an improvement, and say what was measured.
   the current context (`Space Play  n Next  / Search  ? Help`); holding a
   modifier shows keycap badges on the matching controls; `?` opens the full
   list. Hints can be turned off in settings, shortcuts keep working.
-- Every action reachable by mouse is reachable by keyboard. `Esc` always backs
-  out one level and finally closes. Focus is always visible.
+- Every action reachable by mouse is reachable by keyboard. `Esc` backs out
+  (cancels a search, closes a popup) but never quits the app; `Ctrl C` does.
+  Focus is always visible.
 - Surfaces handle keys with one `Keys.onPressed` that asks
   `Keymap.actionFor(key, text, scope)` and passes the action to
   `Service.run()`. Do not use `PanelKeyCatcher` from `qs.Ui`: it hard-codes
@@ -173,7 +174,8 @@ Default keys (app and mini-player):
 | `+` / `-` | Volume ±5 % | `Enter` | Play / open |
 | `m` | Mute | `Tab` | Next pane |
 | `←` / `→` | Seek ±10 s | `?` | Shortcut help |
-| `s` / `r` | Shuffle / repeat | `Esc` / `q` | Back / close |
+| `s` / `r` | Shuffle / repeat | `Esc` | Cancel search (app), close (mini-player) |
+| `Ctrl C` | Quit the app | | |
 
 Global control goes through the plugin's IPC target so Hyprland binds work
 without any window open:

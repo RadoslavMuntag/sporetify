@@ -125,6 +125,34 @@ Item {
     }
   }
 
+  // Leave a search: back to the last place that was not a search, or to an
+  // empty window if searching was the first thing done.
+  function leaveSearch(cursor) {
+    if (kind !== "search") return
+    // Past every search on the way back, so one Esc leaves both the Spotify
+    // and the library search.
+    for (var i = historyIndex - 1; i >= 0; i--) {
+      if (history[i].kind !== "search") {
+        history[historyIndex].cursor = cursor
+        historyIndex = i
+        show(history[i], false)
+        return
+      }
+    }
+    leaveCurrent()
+    history = []
+    historyIndex = -1
+    kind = ""
+    uri = ""
+    name = ""
+    subtitle = ""
+    query = ""
+    rows = []
+    total = 0
+    revision++
+    collection = Loadable.ready(null)
+  }
+
   // Show only one kind of result. Results already fetched are re-used.
   function setSearchFilter(filter) {
     if (searchFilters.indexOf(filter) === -1) return

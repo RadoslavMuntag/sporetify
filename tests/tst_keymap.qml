@@ -13,7 +13,9 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_Plus, "+", "player"), "volumeUp")
     compare(Keymap.actionFor(Qt.Key_Equal, "=", "player"), "volumeUp")
     compare(Keymap.actionFor(Qt.Key_Left, "", "player"), "seekBack")
-    compare(Keymap.actionFor(Qt.Key_Escape, "", "player"), "close")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", ["player", "popup"]), "close")
+    // Outside a popup Esc is not "close".
+    compare(Keymap.actionFor(Qt.Key_Escape, "", "player"), null)
   }
 
   function test_scope_limits_actions() {
@@ -21,7 +23,7 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_Return, "", "signedOut"), "signIn")
     compare(Keymap.actionFor(Qt.Key_Return, "", "fault"), "retry")
     compare(Keymap.actionFor(Qt.Key_Return, "", "player"), null)
-    compare(Keymap.actionFor(Qt.Key_Escape, "", "signedOut"), "close")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", ["signedOut", "popup"]), "close")
   }
 
   function test_scope_lists_resolve_most_specific_first() {
@@ -29,14 +31,19 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_J, "j", scopes), "down")
     compare(Keymap.actionFor(Qt.Key_Return, "", scopes), "activate")
     compare(Keymap.actionFor(Qt.Key_Space, " ", scopes), "playPause")
-    compare(Keymap.actionFor(Qt.Key_Q, "q", scopes), "close")
+    // In the app Esc cancels a search and only Ctrl+C quits.
+    var app = ["browse", "player", "app"]
+    compare(Keymap.actionFor(Qt.Key_Escape, "", app), "cancel")
+    compare(Keymap.actionFor(Qt.Key_Q, "q", app), null)
+    compare(Keymap.actionFor(Qt.Key_C, "\u0003", app, Qt.ControlModifier), "quit")
+    compare(Keymap.actionFor(Qt.Key_C, "c", app, Qt.NoModifier), null)
     compare(Keymap.actionFor(Qt.Key_PageDown, "", scopes), "pageDown")
     // Signed out, Return signs in rather than activating a row.
     compare(Keymap.actionFor(Qt.Key_Return, "", ["signedOut", "browse"]), "signIn")
   }
 
   function test_scopes_shown_together_share_no_key() {
-    var together = [["browse", "player"], ["mini", "player"]]
+    var together = [["browse", "player", "app"], ["mini", "player", "popup"]]
     for (var t = 0; t < together.length; t++) {
       var seen = {}
       for (var i = 0; i < Keymap.actions.length; i++) {
@@ -51,10 +58,13 @@ TestCase {
   }
 
   function test_primary_hints_are_a_subset() {
-    var all = Keymap.hints(["browse", "player"], false)
-    var primary = Keymap.hints(["browse", "player"], true)
+    var all = Keymap.hints(["browse", "player", "app"], false)
+    var primary = Keymap.hints(["browse", "player", "app"], true)
     verify(primary.length > 0 && primary.length < all.length)
-    compare(primary[primary.length - 1].label, "Close")
+    // The app's footer ends with how to leave, and never offers "Close".
+    compare(primary[primary.length - 1].label, "Quit")
+    compare(primary[primary.length - 1].key, "Ctrl C")
+    for (var i = 0; i < all.length; i++) verify(all[i].label !== "Close")
     compare(Keymap.actionFor(Qt.Key_Backspace, "", ["browse", "player"]), "back")
     compare(Keymap.actionFor(Qt.Key_Question, "?", ["browse", "player"]), "help")
     compare(Keymap.actionFor(Qt.Key_F, "f", ["browse", "player"]), "like")
@@ -92,7 +102,7 @@ TestCase {
   }
 
   function test_hints_come_from_the_same_table() {
-    var hints = Keymap.hints("player")
+    var hints = Keymap.hints(["player", "popup"])
     compare(hints[0].key, "␣")
     compare(hints[0].label, "Play/Pause")
     compare(hints[hints.length - 1].label, "Close")
