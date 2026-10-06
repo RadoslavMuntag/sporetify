@@ -71,6 +71,12 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             ctx.catalog.index_in_background(&session);
             return ctx.catalog.playlists(&session).await;
         }
+        "search" => {
+            let query = text(&args, "query")?;
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(20).clamp(1, 50) as usize;
+            ctx.playback.settle().await;
+            return ctx.catalog.search_spotify(&ctx.playback.connected_session()?, &query, limit).await;
+        }
         "library.search" => {
             let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(200) as usize;
             let query = args.get("query").and_then(Value::as_str).unwrap_or("");
@@ -167,6 +173,36 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             let response = request.await.map_err(|e| OpError::new(crate::proto::ErrorCode::Internal, e.to_string()))?;
             let body = response.payload.first().map(|part| String::from_utf8_lossy(part).into_owned());
             return Ok(json!({ "status": response.status_code, "body": body }));
+        }
+        // An arbitrary request carrying the session's own credentials, with
+        // the status and the start of the body returned whatever the outcome.
+        "debug.http" if ctx.debug_ops => {
+            use http_body_util::BodyExt;
+            let session = ctx.playback.connected_session()?;
+            let internal = |e: String| OpError::new(crate::proto::ErrorCode::Internal, e);
+            let token = session.login5().auth_token().await.map_err(|e| internal(e.to_string()))?;
+            let client_token = session.spclient().client_token().await.map_err(|e| internal(e.to_string()))?;
+            let method = args.get("method").and_then(Value::as_str).unwrap_or("GET");
+            let body = args.get("body").map(|b| if b.is_string() { b.as_str().unwrap_or("").to_owned() } else { b.to_string() });
+            let mut request = http::Request::builder()
+                .method(method)
+                .uri(text(&args, "url")?)
+                .header("Authorization", format!("Bearer {}", token.access_token))
+                .header("client-token", client_token)
+                .header("Accept", "application/json")
+                .header("app-platform", "WebPlayer");
+            if body.is_some() {
+                request = request.header("Content-Type", "application/json;charset=UTF-8");
+            }
+            let request = request
+                .body(bytes::Bytes::from(body.unwrap_or_default()))
+                .map_err(|e| internal(e.to_string()))?;
+            let response = session.http_client().request(request).await.map_err(|e| internal(e.to_string()))?;
+            let status = response.status().as_u16();
+            let bytes = response.into_body().collect().await.map_err(|e| internal(e.to_string()))?.to_bytes();
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(600) as usize;
+            let shown: String = String::from_utf8_lossy(&bytes).chars().take(limit).collect();
+            return Ok(json!({ "status": status, "length": bytes.len(), "body": shown }));
         }
         "debug.spclient" if ctx.debug_ops => {
             let session = ctx.playback.connected_session()?;

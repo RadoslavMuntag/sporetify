@@ -102,9 +102,9 @@ every control reachable by keyboard with a visible hint.
 
 Done: track metadata cached on disk for good; Liked Songs indexed in the
 background with retries; `library.search` over the cache, with a search box
-in the app (`/`). Spotify-wide search was probed again and stays unsolved:
-`/searchview/km/v4/search` and `/searchview/v1/search` answer 400 to every
-parameter set tried, the mercury equivalents 404.
+in the app (`/`). Spotify-wide search works too, without a client id,
+through Spotify's GraphQL search service (`search` op, on
+`feature/app-views`); the `searchview` endpoints tried first never did.
 
 Not done: playlist lists and the playlist index are memory-only (the app
 cannot open offline yet), stale-while-revalidate frames, save/unsave, album

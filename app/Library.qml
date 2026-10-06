@@ -171,19 +171,110 @@ Item {
     return n + " " + (n === 1 ? one : many)
   }
 
+  // ---- Search: the library answers at once, Spotify a moment later.
+  property var searchLocal: []
+  property var searchRemote: null
+  property string searchRemoteError: ""
+  property bool searchIndexing: false
+  property int searchLocalTotal: 0
+
+  // Spotify is asked only once typing pauses; the library on every key.
+  Timer {
+    id: remoteSearchTimer
+    interval: 280
+    property string text: ""
+    property int forGeneration: 0
+    onTriggered: root.fetchSpotifySearch(text, forGeneration)
+  }
+
   function fetchSearch(text) {
-    name = text.trim() === "" ? "Search your library" : "Results for “" + text.trim() + "”"
-    load("library.search", { query: text, limit: 300 }, 3000, function(data) {
-      rows = data.items
-      total = data.items.length
-      if (text.trim() === "") {
-        subtitle = "Searches your liked songs and everything you have opened"
-      } else {
-        subtitle = count(data.total, "match", "matches")
-          + (data.total > total ? ", showing " + total : "")
-          + (data.indexing ? " · still indexing your liked songs" : "")
+    var term = text.trim()
+    name = term === "" ? "Search" : "Results for \u201C" + term + "\u201D"
+    searchLocal = []
+    searchRemote = null
+    searchRemoteError = ""
+    remoteSearchTimer.stop()
+
+    load("library.search", { query: text, limit: 50 }, 3000, function(data) {
+      searchLocal = data.items
+      searchLocalTotal = data.total
+      searchIndexing = data.indexing
+      composeSearch(term)
+    })
+    if (term.length >= 2) {
+      remoteSearchTimer.text = term
+      remoteSearchTimer.forGeneration = generation
+      remoteSearchTimer.restart()
+    }
+  }
+
+  function fetchSpotifySearch(term, forGeneration) {
+    if (forGeneration !== generation) return
+    var handle = player.request("search", { query: term, limit: 20 }, {
+      deadline: 8000,
+      onDone: function(result) {
+        if (forGeneration !== root.generation) return
+        if (result.ok) root.searchRemote = result.data
+        else if (result.error.code !== "cancelled") root.searchRemoteError = result.error.message
+        root.composeSearch(term)
+        root.revision++
       }
     })
+    inFlight.push(handle)
+  }
+
+  // One list: what the library has, then Spotify's songs, artists, albums
+  // and playlists, each under a heading.
+  function composeSearch(term) {
+    var out = []
+    var i
+    if (searchLocal.length > 0) {
+      out.push({ kind: "heading", title: "In your library" })
+      for (i = 0; i < searchLocal.length; i++) out.push(searchLocal[i])
+    }
+    var remote = searchRemote
+    if (remote) {
+      // Songs already listed from the library are not repeated.
+      var have = {}
+      for (i = 0; i < searchLocal.length; i++) have[searchLocal[i].uri] = true
+      var songs = remote.tracks.filter(function(t) { return !have[t.uri] })
+      if (songs.length > 0) {
+        out.push({ kind: "heading", title: "Songs" })
+        for (i = 0; i < songs.length; i++) out.push(songs[i])
+      }
+      if (remote.artists.length > 0) {
+        out.push({ kind: "heading", title: "Artists" })
+        for (i = 0; i < remote.artists.length; i++)
+          out.push({ kind: "artist", uri: remote.artists[i].uri, title: remote.artists[i].name })
+      }
+      if (remote.albums.length > 0) {
+        out.push({ kind: "heading", title: "Albums" })
+        for (i = 0; i < remote.albums.length; i++) {
+          var album = remote.albums[i]
+          out.push({ kind: "album", uri: album.uri, title: album.name, year: album.year, by: album.artists.join(", ") })
+        }
+      }
+      if (remote.playlists.length > 0) {
+        out.push({ kind: "heading", title: "Playlists" })
+        for (i = 0; i < remote.playlists.length; i++) {
+          var playlist = remote.playlists[i]
+          out.push({ kind: "playlist", uri: playlist.uri, title: playlist.name, by: playlist.owner })
+        }
+      }
+    }
+    rows = out
+    total = out.length
+
+    if (term === "") {
+      subtitle = "Type to search your library and all of Spotify"
+    } else if (searchRemoteError !== "") {
+      subtitle = count(searchLocalTotal, "match", "matches") + " in your library · Spotify search failed: " + searchRemoteError
+    } else if (!remote && term.length >= 2) {
+      subtitle = count(searchLocalTotal, "match", "matches") + " in your library · searching Spotify…"
+    } else {
+      subtitle = count(searchLocalTotal, "match", "matches") + " in your library"
+        + (searchIndexing ? " (still indexing)" : "")
+    }
   }
 
   function fetchAlbum(albumUri) {
@@ -301,12 +392,14 @@ Item {
   function activate(index) {
     var row = rowAt(index)
     if (!row) return
-    if (row.kind === "album") {
-      go({ kind: "album", uri: row.uri, name: row.title }, index)
+    if (row.kind === "album" || row.kind === "artist" || row.kind === "playlist") {
+      go({ kind: row.kind, uri: row.uri, name: row.title }, index)
     } else if (isTrack(row) && row.available) {
-      // A search result plays inside the list it was found in; everything
-      // else plays inside the place on screen.
-      player.playContext(kind === "search" ? row.context_uri : uri, row.uri)
+      // A search result plays inside the list it was found in, or inside
+      // its album when it came from Spotify; everything else plays inside
+      // the place on screen.
+      var context = kind === "search" ? (row.context_uri || row.album_uri) : uri
+      player.playContext(context, row.uri)
     }
   }
 

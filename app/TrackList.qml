@@ -144,7 +144,16 @@ Item {
         textFormat: Text.PlainText
         visible: row.kind !== "heading"
         // nf-md-volume_high marks the playing row, nf-md-album an album.
-        text: row.isPlaying ? "󰕾" : (row.kind === "album" ? "󰀥" : String(row.index + 1))
+        text: {
+          if (row.isPlaying) return "󰕾"
+          switch (row.kind) {
+          case "album": return "󰀥"
+          // nf-md-account_music, nf-md-playlist_music
+          case "artist": return "󰠃"
+          case "playlist": return "󰲸"
+          }
+          return String(row.index + 1)
+        }
         color: row.isPlaying ? Theme.accent : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
@@ -180,8 +189,16 @@ Item {
         width: row.flexible * 0.3
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        text: !row.track ? "" : (row.kind === "album" ? String(row.track.year)
-          : (row.kind === "" ? row.track.artists.join(", ") : ""))
+        text: {
+          if (!row.track) return ""
+          switch (row.kind) {
+          case "": return row.track.artists.join(", ")
+          case "album": return row.track.by !== undefined ? row.track.by : String(row.track.year)
+          case "artist": return "Artist"
+          case "playlist": return row.track.by ? "by " + row.track.by : "Playlist"
+          }
+          return ""
+        }
         color: Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
@@ -193,9 +210,14 @@ Item {
         width: row.flexible * 0.25 - Theme.space(22)
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        text: !row.track ? "" : (row.kind === "album"
-          ? row.track.tracks + (row.track.tracks === 1 ? " track" : " tracks")
-          : (row.kind === "" ? row.track.album : ""))
+        text: {
+          if (!row.track) return ""
+          if (row.kind === "") return row.track.album
+          if (row.kind !== "album") return ""
+          if (row.track.tracks !== undefined)
+            return row.track.tracks + (row.track.tracks === 1 ? " track" : " tracks")
+          return row.track.year ? String(row.track.year) : ""
+        }
         color: Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body

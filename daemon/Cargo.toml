@@ -6,8 +6,10 @@ description = "Sporetify daemon: playback, Spotify API, cache and the frontend s
 publish = false
 
 [dependencies]
+bytes = "1"
 futures-util = "0.3"
 http = "1"
+http-body-util = "0.1"
 libc = "0.2"
 librespot-connect = "0.8"
 librespot-core = "0.8"

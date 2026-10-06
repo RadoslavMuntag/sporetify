@@ -26,7 +26,7 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | D9 | Frontends hold the socket only while needed (surface open, request in flight, 10 s linger) | A permanently connected bar would keep the daemon from ever idling out |
 | D10 | A request sent on a connection that drops fails `offline` at once; unsent ones wait for reconnect until their deadline | Fast failure beats silently replaying a command the user may no longer want |
 | D11 | Library, metadata and playback go through the librespot session's internal API; the public Web API is optional and only used with a user-supplied client id | Probe showed the Web API is 429 for the built-in id, while the session API works with no id |
-| D12 | Search means the user's library, over cached metadata | Spotify-wide search is unreachable without a client id; library search is instant and works offline once cached |
+| D12 | Search shows the user's library first (cached, instant), then all of Spotify through the search service Spotify's own apps use | The library part works offline and never fails; the Spotify part needs no client id but depends on a query hash Spotify may retire |
 | D13 | Caches are plain JSON files written atomically | Small data, one writer; simpler than a database and enough so far |
 | D14 | In-app actions must feel instant; app launch time is not a goal | Owner's call on 2026-10-06: playing, browsing and searching matter, a second to open the window does not |
 | D15 | Plugin id stays `namelessnovice.sporetify`; licence is MIT | Owner's call on 2026-10-06 |
@@ -45,9 +45,9 @@ Resolve these before or during the milestone noted; record the answer above.
    - Spotify's internal API through the session works with no client id:
      the user's playlists (rootlist), liked songs (collection context) and
      track metadata all returned data.
-   - Internal search does not work: `/searchview/km/v4/search` and
-     `/searchview/v1/search` answer `400` to every parameter set tried, the
-     mercury equivalents `404`. See D12.
+   - The `searchview` endpoints do not work (`400` to every parameter set
+     tried, `404` over mercury), but Spotify's GraphQL search does: found on
+     2026-10-06, see D12.
 
    Consequence: playback and library are built on the session, not the Web
    API. A user-supplied client id is optional and only ever adds things

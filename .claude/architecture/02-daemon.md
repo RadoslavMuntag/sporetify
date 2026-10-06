@@ -101,8 +101,16 @@ Lines longer than 64 KiB end the connection.
   `$XDG_CACHE_HOME/sporetify/tracks.json`, written atomically.
 - Indexing: the first library request starts a background pass over Liked
   Songs (20 at a time, 3 in flight, retries with backoff) so search covers them.
-- Search: `library.search` matches every word of the query against title,
-  artists and album of cached tracks in known lists. It never hits the network.
+- Library search: `library.search` matches every word of the query against
+  title, artists and album of cached tracks in known lists. It never hits
+  the network.
+- Spotify search: `search` sends the `searchDesktop` persisted GraphQL query
+  to `api-partner.spotify.com` with the session's login5 token and client
+  token, and maps the answer to track rows, artists, albums and playlists.
+  The query is named by a hash (`SEARCH_QUERY_HASH`, overridable with
+  `SPORETIFY_SEARCH_HASH`) that Spotify can retire.
+- Likes: `library.save` / `unsave` write to the collection service; every
+  track row carries `liked`, taken from the cached Liked Songs list.
 
 ## Persistence
 
