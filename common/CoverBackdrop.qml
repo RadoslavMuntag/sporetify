@@ -16,7 +16,7 @@ Item {
   property string source: ""
   // How much of the height, from the top, the dissolve covers. Below that
   // the cover is shown as it is.
-  property real span: 0.7
+  property real span: 0.5
   // Size of the biggest pixels, at the very top.
   property real coarsest: 20
   // Each row's pixels are this much smaller than the row above; closer to 1
