@@ -18,7 +18,7 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | --- | --- | --- |
 | D1 | One Rust daemon owns audio, network, auth and cache; QML only renders | Keeps slow work off every UI thread; one place enforces deadlines |
 | D2 | Full app is its own Quickshell process, not a shell `panel` | A heavy view cannot stall the bar, notifications or lock screen |
-| D3 | Daemon will expose MPRIS for media keys and other desktop tools; the plugin itself drives transport over the socket | The socket ops were needed anyway and give optimistic state in one place; MPRIS is the compatibility surface (not built yet) |
+| D3 | Frontends drive transport over the socket; the daemon also serves MPRIS for media keys and other desktop tools | The socket ops were needed anyway and give optimistic state in one place; MPRIS is the compatibility surface |
 | D4 | Daemon is systemd socket-activated and exits when idle | No lifecycle code in QML, nothing running when not in use |
 | D5 | Protocol is newline-delimited JSON over a Unix socket | Trivial to speak from QML (`Quickshell.Io.Socket`) and to debug with `socat` |
 | D6 | One keymap table drives handlers, hints and help | Hints can never drift from behaviour |
@@ -26,6 +26,10 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | D9 | Frontends hold the socket only while needed (surface open, request in flight, 10 s linger) | A permanently connected bar would keep the daemon from ever idling out |
 | D10 | A request sent on a connection that drops fails `offline` at once; unsent ones wait for reconnect until their deadline | Fast failure beats silently replaying a command the user may no longer want |
 | D11 | Library, metadata and playback go through the librespot session's internal API; the public Web API is optional and only used with a user-supplied client id | Probe showed the Web API is 429 for the built-in id, while the session API works with no id |
+| D12 | Search means the user's library, over cached metadata | Spotify-wide search is unreachable without a client id; library search is instant and works offline once cached |
+| D13 | Caches are plain JSON files written atomically | Small data, one writer; simpler than a database and enough so far |
+| D14 | In-app actions must feel instant; app launch time is not a goal | Owner's call on 2026-10-06: playing, browsing and searching matter, a second to open the window does not |
+| D15 | Plugin id stays `namelessnovice.sporetify`; licence is MIT | Owner's call on 2026-10-06 |
 | D8 | Audio-reactive data comes from the daemon's own audio path | No dependency on cava or a PipeWire monitor; zero cost when nobody subscribes |
 
 ## Open questions
@@ -41,8 +45,9 @@ Resolve these before or during the milestone noted; record the answer above.
    - Spotify's internal API through the session works with no client id:
      the user's playlists (rootlist), liked songs (collection context) and
      track metadata all returned data.
-   - Internal search is unverified: two guessed `searchview` endpoints
-     returned `400`. Needs a correct endpoint or another route.
+   - Internal search does not work: `/searchview/km/v4/search` and
+     `/searchview/v1/search` answer `400` to every parameter set tried, the
+     mercury equivalents `404`. See D12.
 
    Consequence: playback and library are built on the session, not the Web
    API. A user-supplied client id is optional and only ever adds things
@@ -53,14 +58,10 @@ Resolve these before or during the milestone noted; record the answer above.
    repo root, started with `qs -p <repo>/App.qml`, which makes the repo root
    the config folder so `app/` and `common/` both resolve. Singletons
    (`pragma Singleton` + `Singleton {}`) work from either folder.
-3. **App cold start (M2).** Does a fresh `qs -p app` meet the 300 ms budget? If
-   not, keep the app process alive with its window hidden after first launch.
-4. **Cache store (M3).** SQLite (`rusqlite`) versus plain JSON pages on disk.
-   Start with whichever is simpler to make atomic; measure before switching.
-5. **Web API coverage (M3).** Which library, search and artist endpoints are
-   available to a new developer-mode app today. Verify each one before
-   building a view on it.
-6. **Plugin id.** `namelessnovice.sporetify` is a placeholder. Pick the final
-   namespace before the first public install.
+3. **App cold start (M2).** Closed: measured at about 970 ms to a mapped
+   window. Not pursued, see D14.
+4. **Cache store (M3).** Answered: JSON files, see D13.
+5. **Web API coverage (M3).** Moot without a client id of our own, see D11.
+6. **Plugin id.** Answered: it stays, see D15.
 7. **Galaxy view scale (M4).** How many stars can be drawn as one shader pass
    before it costs more than the list it sits beside.

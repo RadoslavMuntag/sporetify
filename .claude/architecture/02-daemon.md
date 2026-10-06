@@ -1,110 +1,152 @@
 # 02 · Daemon (`sporetifyd`)
 
-Rust, single binary, runs as a systemd user service. Tokio runtime; control
-logic on a current-thread executor, audio decoding on librespot's own threads.
+Rust, single binary, systemd user service started by socket activation.
+Tokio current-thread runtime on a `LocalSet` (MPRIS callbacks are not `Send`);
+audio decoding runs on librespot's own threads.
 
 ## Modules
 
+Built:
+
 | Module | Responsibility |
 | --- | --- |
-| `main` | Take the listening socket from systemd, wire modules, signal handling, idle exit |
-| `config` | Paths (XDG), settings pushed by frontends, defaults |
-| `auth` | OAuth authorisation-code + PKCE with a loopback redirect, token refresh, keyring storage |
-| `catalog` | Library, playlists and metadata through the librespot session's internal API (the default data path; needs no client id) |
-| `api` | Optional public Web API client, only with a user-supplied client id: deadlines, in-flight dedupe, retry/backoff, `429 Retry-After`, ETags |
-| `cache` | Disk cache of entities and pages, artwork files, eviction |
-| `player` | librespot session, local playback, Spotify Connect device, volume |
-| `remote` | Player state when another Connect device is the active one |
-| `state` | The single authoritative `PlayerState` and its change stream |
-| `mpris` | MPRIS server mirroring `state` and translating method calls into commands |
-| `ipc` | Socket server: framing, request dispatch, cancellation, subscriptions |
-| `viz` | Band energies and beat pulses taken from the playback path, for subscribers only |
+| `main` | Take the listening socket from systemd (or bind one), wire modules, signals, idle exit |
+| `proto` | Wire types, error codes, frame builders, protocol limits |
+| `ipc` | Socket server: line framing, request supervision, cancellation, event delivery |
+| `ops` | One function mapping op names to handlers; `debug.*` ops behind `--debug-ops` |
+| `state` | The single authoritative `PlayerState` and status, and their change stream |
+| `auth` | Sign-in through librespot's OAuth; refresh token in the desktop keyring |
+| `player` | librespot session, Spotify Connect device, commands, player events to state |
+| `catalog` | Playlists, track lists, track metadata, library search (session internal API) |
+| `persist` | Volume and resume point on disk |
+| `mpris` | MPRIS server mirroring `state`, calling the same commands as the socket |
 
-Dependency direction: `ipc` and `mpris` depend on `state`, `player`, `api`,
-`cache`. Nothing depends on `ipc` or `mpris`. `api` and `player` do not know
-about each other; `state` is the only meeting point.
+Planned, not built:
+
+| Module | Responsibility |
+| --- | --- |
+| `artwork` | Fetch and cache cover images as files, extract a dominant colour |
+| `viz` | Band energies and beat pulses from the playback path, for subscribers only |
+| `remote` | Player state when another Connect device is the active one |
+| `api` | Optional public Web API client, only with a user-supplied client id |
+
+Dependency direction: `ipc` → `ops` → `player`, `catalog`, `state`. `mpris`
+→ `player`, `state`. Nothing depends on `ipc` or `mpris`. `state` is the only
+place `player` and the frontends meet.
 
 ## State
 
-One `PlayerState` struct (track, context, position + timestamp, playing,
-volume, shuffle, repeat, active device, queue head). All mutations go through
-one function that bumps a sequence number and broadcasts the diff. MPRIS and
-socket subscribers both read from that broadcast, so they cannot disagree.
+One `PlayerState` (track, playing, position as a point in time, volume,
+shuffle, repeat, device) plus a `Status` (`starting`, `ready`, `offline`,
+`signed_out`, `no_premium`). All changes go through `Shared::update_player`
+or `set_status`, which bump `seq` and broadcast. Subscribers get the **whole**
+player state on every change, not a diff: it is small, and a client can never
+apply a diff to the wrong base.
 
-Commands are applied optimistically inside the daemon too: `state` updates
-first, then the backend call runs; on failure the state reverts and an error
-event carries the reason.
+Commands are optimistic inside the daemon too: `Playback::command` hands the
+command to librespot's queue, updates state at once, and returns. librespot's
+player events then confirm or correct it.
 
 ## Requests and deadlines
 
-Every socket request becomes a task with:
+Every socket request becomes a supervised task with a deadline (client-supplied,
+clamped to 30 s), a cancel channel (fired by `cancel` or by the client
+disconnecting), and exactly one terminal frame: `ok`, or `error` with a code.
+A handler that panics still produces `error: internal`. Requests run
+concurrently; a slow one never queues a fast one.
 
-- a deadline (client-supplied, clamped to a server maximum),
-- a cancellation token (fired by `cancel`, by client disconnect, or by the
-  deadline),
-- exactly one terminal frame: `ok`, or `error` with a code.
+Ops that need Spotify call `Playback::settle()` first, which waits out a
+connection attempt in progress (bounded by the request deadline). That is what
+lets a command sent to a just-started daemon land instead of failing.
 
-A task that panics still produces a terminal `error: internal` frame. There is
-a test that fires every op against a black-holed network and asserts a
-terminal frame arrives within the deadline.
+A client that stops reading is disconnected once 256 lines are queued for it.
+Lines longer than 64 KiB end the connection.
 
-## Web API client
+## Sign-in
 
-- One shared HTTPS client with connect and total timeouts below the request
-  deadline.
-- Identical GETs in flight are merged into one upstream call.
-- Retries: idempotent requests only, exponential backoff with jitter, capped
-  by the remaining deadline.
-- `429`: obey `Retry-After`, pause the whole client (not just one request),
-  and report `rate_limited` with `retry_after_ms` to callers that cannot wait.
-- `401`: refresh the token once and replay; a second `401` becomes
-  `unauthorized` and an auth event.
+- No client id of our own. `auth` uses the `librespot-oauth` flow with the id
+  librespot ships (Spotify's desktop client), redirect `127.0.0.1:8898`.
+- Only the refresh token is kept, in the desktop keyring through
+  `secret-tool` (attributes `service=sporetify account=spotify`). It is passed
+  on stdin, never on a command line.
+- At start the refresh token is exchanged for an access token. A refusal from
+  Spotify signs the user out; any other failure means `offline` and a retry
+  with backoff (2 s doubling to 60 s).
+- The sign-in URL is printed to the journal by the OAuth library. It holds a
+  PKCE challenge, not a token.
 
-## Cache
+## Playback
 
-- Location: `$XDG_CACHE_HOME/sporetify/`.
-- Entities (track, album, artist, playlist header) keyed by Spotify id.
-- Pages (playlist tracks, saved albums, search results) keyed by request
-  signature, storing ids plus fetch time and ETag.
-- Artwork as files, addressed by URL hash, with a size cap and LRU eviction.
-- Read path is always cache first. Freshness decides only whether a background
-  revalidation is started, never whether the caller waits.
-- Writes are atomic (transaction or write-then-rename) so a kill mid-write
-  cannot corrupt the cache.
+- One librespot `Session`, `Player` (PulseAudio backend, soft volume) and
+  `Spirc`. The device is named "Sporetify".
+- A Connect device ignores everything except activate until it is active, and
+  activation resets its volume. So "play" with nothing loaded activates,
+  re-applies the volume, then loads; `Playback::loaded` tracks whether a track
+  is really loaded as opposed to merely remembered.
+- With nothing loaded, play resumes the remembered track at its position in
+  its remembered context, or starts Liked Songs.
+- When the session ends the loop reconnects; a sign-out ends it for good.
 
-## Auth and secrets
+## Library
 
-- Browser-based login via `xdg-open`; the daemon listens on a loopback port for
-  the redirect, with PKCE and a state nonce.
-- Tokens are stored in the desktop keyring (Secret Service). Never written to
-  the cache directory, logs, socket events or `shell.json`.
-- Socket file mode `0600` in `$XDG_RUNTIME_DIR`; the daemon accepts only
-  connections from the same uid.
-- Logs redact anything that looks like a token.
+- Everything goes through the session's internal API (`spclient` and
+  `librespot-metadata`). The public Web API answers 429 for the built-in
+  client id and is not used.
+- Playlists: the rootlist, with Liked Songs added in front. Folder markers
+  are skipped, so folders are flattened.
+- Track lists: playlist contents, or the collection context for Liked Songs.
+  Held in memory for the daemon's lifetime.
+- Track metadata: one lookup per track, bounded concurrency (8 for a page a
+  view asked for), cached on disk for good in
+  `$XDG_CACHE_HOME/sporetify/tracks.json`, written atomically.
+- Indexing: the first library request starts a background pass over Liked
+  Songs (20 at a time, 3 in flight, retries with backoff) so search covers them.
+- Search: `library.search` matches every word of the query against title,
+  artists and album of cached tracks in known lists. It never hits the network.
 
-## Visualisation tap
+## Persistence
 
-- Taps PCM just before the audio sink, computes a small FFT, reduces it to a
-  handful of band energies plus a beat pulse, at about 30 Hz.
-- Does no work at all unless a client holds a `viz` subscription.
-- Frames are tiny and lossy by design: if a client is slow, drop frames, never
-  queue.
+`$XDG_STATE_HOME/sporetify/state.json`: volume, last context, last track,
+position. Written on track change, pause, seek, volume change, session end
+and daemon exit; write-then-rename so a crash cannot leave half a file.
+
+## MPRIS
+
+Bus name suffix `sporetify`, identity "Sporetify". Play, pause, play/pause,
+next, previous, seek, set position, volume and shuffle map to the same
+`Playback::command` the socket uses. Metadata, status, volume and shuffle are
+pushed on change; `Seeked` is emitted when the position moves without a track
+or play-state change; the Position property is refreshed once a second while
+playing. MPRIS exists only while the daemon runs, so media keys cannot wake a
+daemon that has idled out.
+
+## Idle exit
+
+The daemon exits after `--idle-secs` (default 900) with no socket clients,
+unless something is playing. systemd restarts it on the next connection.
 
 ## Failure behaviour
 
 | Situation | Daemon behaviour |
 | --- | --- |
-| No network | `status: offline`, serve cache, fail writes fast with `offline` |
-| Token expired and refresh fails | `status: signed_out`, keep cache readable |
-| Account without Premium | `status: no_premium`; browsing works, playback ops return `no_premium` |
-| Audio device missing | Playback ops return `no_audio`; state stays paused |
-| Another device takes over | Switch to `remote` mode and keep emitting state |
-| Client stops reading | Drop its events past a small buffer, then disconnect it |
+| No network at start | `status: offline`, retry with backoff |
+| Stored sign-in rejected | Token removed, `status: signed_out` |
+| Account without Premium | `status: no_premium`; playback ops return `no_premium` |
+| Session drops | State reset to the remembered track, `offline`, reconnect |
+| Command while signed out or offline | Fails at once with `unauthorized` / `offline` |
+| Library lookup fails | Row comes back `available: false` and is not cached |
+| Client stops reading | Disconnected past a small buffer |
+| No session bus | MPRIS disabled, socket unaffected |
+
+Not handled yet: another device taking over is not reported to clients.
 
 ## Testing
 
-- Unit tests per module; `api` against a local mock server that can delay,
-  drop, 429 and 401.
-- Protocol conformance tests driven over a real socket.
-- A soak test: random ops with random cancellation and a flaky mock network,
-  asserting no request is left without a terminal frame and memory stays flat.
+- `daemon/tests/protocol.rs`: 16 tests over a real Unix socket (hello,
+  deadlines, cancel, panics, malformed input, concurrency, events, argument
+  validation, fail-fast when signed out).
+- No automated tests yet for `auth`, `player`, `catalog`, `persist` or
+  `mpris`; they were verified by hand against a real account. Pure parts worth
+  testing first: `persist` round trip, `catalog` search matching, `player`
+  state transitions from events.
+- Run a second daemon for experiments with `--socket <path> --debug-ops`.

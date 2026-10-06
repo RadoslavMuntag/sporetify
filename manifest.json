@@ -51,5 +51,6 @@
         "description": "Width in pixels after which the title is cut short."
       }
     ]
-  }
+  },
+  "license": "MIT"
 }

@@ -24,7 +24,8 @@ decision changes, update both in the same change.
 
 1. **Responsiveness.** No interaction ever waits on the network. Nothing can
    load forever.
-2. **Performance.** Low idle CPU, low memory, instant open.
+2. **Performance.** Low idle CPU, low memory, instant response to every
+   action inside the app.
 3. **Keyboard first.** Every action has a shortcut and a visible hint.
 4. **Native to Omarchy.** Follows the active theme live, behaves like a
    first-party shell plugin.
@@ -132,9 +133,14 @@ These are hard rules. A change that breaks one is a bug even if it "works".
 | --- | --- |
 | Input to visible feedback | ≤ 1 frame (16 ms), never more than 50 ms |
 | Mini-player open | ≤ 100 ms |
-| Full app, launch to usable (cached) | ≤ 300 ms |
+| Open a playlist already seen, search, move the cursor | ≤ 1 frame, from cache |
+| First page of a playlist never seen | ≤ 1 s, with placeholder rows meanwhile |
 | Idle CPU with every surface hidden | ~0 %, no running timers or animations |
 | Memory, plugin + daemon while playing | ≤ 80 MB |
+
+App launch time is deliberately not a budget (about one second today). What
+has to feel instant is everything done inside the app: playing, browsing,
+searching.
 
 Measure before claiming an improvement, and say what was measured.
 
@@ -193,7 +199,7 @@ from code or an install script. Media keys already work through MPRIS.
   Settings live inline in `~/.config/omarchy/shell.json`; do not invent a
   second config file.
 - Build on `qs.Ui` components (`BarWidget`, `PopupCard`, `PanelSlider`,
-  `Button`, `PanelToolTip`, `PanelKeyCatcher`) before writing custom ones.
+  `Button`, `KeyboardPanel`, `PanelSeparator`) before writing custom ones.
 - Must survive hot reload: saving a file reloads the plugin, so no state that
   cannot be rebuilt from the daemon.
 - Works with the bar on any edge (`vertical` bars get the icon-only form).

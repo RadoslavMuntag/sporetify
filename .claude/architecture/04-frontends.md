@@ -1,125 +1,139 @@
 # 04 · Frontends
 
-Two QML frontends share one small library in `common/`. Neither holds state
-that cannot be rebuilt from the daemon.
+Two QML frontends share one library in `common/`. Neither holds state that
+cannot be rebuilt from the daemon.
 
 ## `common/` (shared)
 
 | File | Role |
 | --- | --- |
-| `DaemonClient.qml` | `Quickshell.Io.Socket` wrapper: line framing, request table, deadlines, generations, reconnect with backoff, event signals |
-| `Loadable.js` | The only loading-state type: `loading`, `ready`, `stale`, `error` (+ retry). Views bind to it and nothing else |
-| `Coalescer.js` | First value now, then at most one per interval, last value always sent (volume, seek) |
-| `Keymap.js` | The key table and lookup: `{ id, keys, label, scope }` |
-| `KeyHint.qml` | Keycap badge drawn next to a control, fed from `Keymap` |
-| `HintBar.qml` | Footer strip listing actions valid in the current scope |
-| `Position.js` | Interpolates playback position from `{position_ms, at_ms, rate}` |
-| `Organism.js` | Pure function: track id → organism parameters (see 05) |
-| `Organism.qml`, `Helix.qml` | Shader-backed visuals used by both frontends |
+| `ClientCore.js` | Protocol state machine with no I/O: request table, deadlines, scopes, hello check. Unit tested |
+| `DaemonClient.qml` | Owns the socket and timers around `ClientCore`: connect on demand, reconnect with backoff, linger |
+| `Player.qml` | A frontend's view of the daemon: `phase`, `scope`, track, optimistic `playing` and `volume`, and `run(action)` |
+| `Loadable.js` | The only loading-state type: `loading`, `stale`, `ready`, `error` |
+| `Pages.js` | Which pages of a long list still need fetching for the rows on screen |
+| `Keymap.js` | The key table and lookups: `actionFor`, `keyLabel`, `hints` |
+| `Position.js` | Interpolates playback position; formats `m:ss` |
+| `KeyCap.qml` | Keycap badge shown beside a control |
+| `HintBar.qml` | Footer listing the actions valid in the current scopes |
 
-Rules for `common/`: no colour or size literals (tokens are passed in or read
-from the theme object the host provides), no network, no host-specific imports
-(`qs.Commons` is plugin-only), and every `.js` file is unit tested.
+Rules for `common/`: no host-specific imports (`qs.Commons` is plugin-only;
+`Theme` is app-only), so colours and sizes are passed in as properties; no
+network; every `.js` file has tests in `tests/`.
 
-`DaemonClient` contract:
+Planned here: `Organism.js` and the shader components from
+[05-visuals.md](05-visuals.md).
 
-- `request(op, args, { deadline, scope })` returns a handle with `onFrame`,
-  `onDone`, `cancel()`.
-- A new request in the same `scope` cancels the previous one automatically
-  (search-as-you-type, view changes).
-- If the socket is down, the request still resolves: with `offline` once its
-  deadline passes, or normally if the reconnect wins. A request already sent
-  on a connection that then drops fails `offline` immediately.
+### `DaemonClient` and `ClientCore`
+
+- `request(op, args, { deadline, scope, onFrame, onDone })` returns a handle
+  with `cancel()`. `deadline` is required. `onDone` is called exactly once.
+- A new request in the same `scope` cancels the previous one.
+- Not connected: the request waits and is sent on `hello` with the remaining
+  deadline, or ends `offline` when its deadline passes.
+- A request already sent on a connection that drops ends `offline` at once.
+- Sent requests get 200 ms past their deadline for the daemon's own answer,
+  then end `timeout` and a `cancel` is sent.
 - The connection is demand-driven: open while `active`, while a request is in
-  flight, and for a 10 s linger afterwards; otherwise closed (`link: asleep`).
-- A client-side timer mirrors every deadline, so a dead daemon cannot leave a
-  request open either.
+  flight, and for a 10 s linger afterwards; otherwise `link: asleep`.
+- A Quickshell `Socket` does not reconnect after a failed attempt, so each
+  attempt creates a new one. A connection with no `hello` within 2 s is
+  treated as down.
+- `link` is `asleep | connecting | up | down | incompatible`.
+
+### `Player`
+
+- `phase`: `asleep | starting | ready | signed_out | offline | no_premium |
+  unavailable | incompatible`, derived from the link and the daemon status.
+- `scope`: which shortcuts apply: `player`, `signedOut` or `fault`.
+- `run(action)` executes a Keymap action. Play/pause and volume show the
+  intent immediately (`playingIntent`, `volumeIntent`) and drop it when the
+  daemon has answered or volume changes have settled.
+- `request()` passes through to the connection for library calls.
 
 ## Shell plugin
 
 ```
-manifest.json     kinds: service + bar-widget
-Service.qml       MPRIS player lookup, DaemonClient, IpcHandler "sporetify"
-BarWidget.qml     icon/organism + optional track text; click or key opens MiniPlayer
-MiniPlayer.qml    PopupCard: artwork/organism, title, transport, seek, volume, hint bar
+manifest.json     kinds: service + bar-widget; settings: showTrackTitle, maxTitleWidth
+Service.qml       Player + IPC target "sporetify" + MPRIS watch + openApp()
+BarWidget.qml     icon and track title; owns the mini-player
+MiniPlayer.qml    KeyboardPanel: title, seek, transport, volume, keycaps, hint bar
 ```
 
-- **Transport path:** `Quickshell.Services.Mpris`, filtered to the daemon's
-  player. Volume writes go through `Coalescer`.
-- **Socket path:** only for `status` (signed out, offline), opening the app,
-  and the `viz` subscription while the mini-player is visible.
+- **Bar widget:** left click toggles the mini-player, middle click plays or
+  pauses, the wheel changes volume. The tooltip names the state and, on a
+  fault, the reason. On a vertical bar only the icon is shown.
+- **Service:** connected while the mini-player is open or music plays. It
+  also watches MPRIS for the "Sporetify" player, so playback started by media
+  keys or the app wakes the connection.
 - **IPC target `sporetify`:** `playPause`, `next`, `previous`, `volumeUp`,
-  `volumeDown`, `toggleMini`, `toggleApp`. Each returns a short string
-  (`ok`, `starting`, `unavailable`) immediately; none waits on the network.
-- **Bar states:** hidden-text icon (nothing loaded), playing, paused,
-  starting, offline, signed out, error. Every state has a tooltip that names
-  it and the key to fix it.
-- **Settings** (manifest `schema`): show track text, max text width, show
-  organism in bar, visuals on/off, shortcut hints on/off, volume step.
-- **Keyboard:** `PanelKeyCatcher` wraps the mini-player; arrows move between
-  controls, the default key table applies, `o` opens the full app, `Esc`
-  closes.
-- Uses `qs.Ui` components and `qs.Commons` tokens exclusively.
+  `volumeDown`, `mute`, `toggleMini`, `toggleApp`, `signIn`, `status`,
+  `nowPlaying`, `wake`. All return at once.
+- **Mini-player:** one `Keys.onPressed` asks `Keymap.actionFor` with scopes
+  `["mini", "player"]`. `o` opens the full app. Built on `KeyboardPanel`,
+  `Button`, `PanelSlider` and `PanelSeparator` from `qs.Ui`.
+- With several monitors a bar exists per monitor; `toggleMini` opens the
+  popup on the first one only.
+- The shell does not reliably hot-reload this plugin; use
+  `omarchy restart shell` after changing its QML.
 
 ## Full app
 
 ```
+App.qml              entry point at the repo root (so app/ and common/ are in the config folder)
 app/
-  shell.qml          window, single-instance IPC target, wiring
+  Main.qml           window, panes, the one key handler, search bar
   Theme.qml          singleton: Omarchy theme tokens, live reload
-  Router.qml         view stack with back/forward and generation scopes
-  views/
-    Library.qml      playlists, saved albums, artists, liked songs
-    Collection.qml   playlist or album: header + virtualised track list
-    Artist.qml
-    Search.qml
-    Queue.qml
-    Devices.qml
-    Settings.qml
-    NowPlaying.qml   the tide-pool scene (05)
-    Galaxy.qml       optional spatial library view (05)
-  parts/
-    Sidebar.qml  NowPlayingBar.qml  TrackRow.qml  PagedList.qml
-    Toast.qml    HelpOverlay.qml    StatusBadge.qml
+  Library.qml        model: playlists, the open collection's rows, search
+  Sidebar.qml        Liked Songs and playlists
+  TrackList.qml      header and the virtualised track list
+  NowPlayingBar.qml  track, transport, seek, volume
+  IconButton.qml  Slider.qml
+bin/sporetify        focus the window if it exists, otherwise start the app
 ```
 
-- **Window:** one regular toplevel that Hyprland tiles and decorates. No
-  client-side decorations. Closing the window hides it if playback is local
-  and active; `bin/sporetify` shows it again.
-- **Layout:** sidebar, content, now-playing bar, hint bar. `Tab` cycles panes.
-- **Router:** each view owns a request scope; leaving a view cancels its
-  requests. Back restores scroll position and selection from memory, not from
-  a refetch.
-- **Lists:** `PagedList` wraps `ListView` with fixed-height delegates,
-  fetch-ahead by page, and placeholder rows sized exactly like real ones so
-  nothing jumps when data lands.
-- **Search:** results update as the daemon answers; each keystroke supersedes
-  the previous request. Local cache hits appear before network results.
-- **Theme:** `Theme.qml` watches
-  `~/.local/state/omarchy/current/theme/colors.toml`, that theme's
-  `shell.toml`, and `~/.config/omarchy/shell.toml`, and exposes the same token
-  names the shell uses (`foreground`, `background`, `accent`, `urgent`,
-  `muted`, spacing and font scales) plus the named palette colours for
-  visuals. Parsing happens once per change, not per binding.
-- **Single instance:** the app registers an IPC target; `bin/sporetify` calls
-  `show` on it and only starts a new process if that fails.
+- **Window:** one `FloatingWindow` with app id `sporetify`; Hyprland tiles and
+  decorates it. Closing it quits the app; playback continues in the daemon.
+- **Panes:** `sidebar` and `list`; `Tab` switches. Each has its own cursor.
+- **Lists:** `TrackList` has a row for every track as soon as the total is
+  known. A row is a placeholder until its page arrives, at the same height,
+  so nothing moves when data lands. `Library.ensure` claims pages for the
+  visible rows plus one screen ahead through `Pages.js`.
+- **Search:** `/` opens a field above the list. Every keystroke calls
+  `library.search`, superseding the previous request. Results replace the
+  list; a result plays inside the list it was found in. `Enter` or `Down`
+  moves to the results, `Esc` leaves the field.
+- **Theme:** `Theme.qml` watches the active theme's `colors.toml` and the
+  user's `shell.toml` (for the font base size) and exposes `foreground`,
+  `background`, `accent`, `muted`, `urgent`, fills, spacing and a type scale.
+  The font family is `monospace`, which fontconfig resolves to the Omarchy
+  font. Not read yet: the theme's own `shell.toml` overrides.
+- **Faults:** signed out, offline or no daemon replaces the list with a
+  one-line explanation and the key that fixes it.
+
+Planned: a router with back/forward, album and artist views, queue and
+devices views, a help overlay, artwork, playlist folders.
 
 ## Keymap scopes
 
-`global` (transport, volume, help, search focus) → `pane` (sidebar, list,
-player) → `view` (view-specific actions) → `overlay` (help, menus, dialogs).
-Lookup walks from the innermost scope outwards; an overlay blocks everything
-beneath it except `global` transport keys. Text fields suspend single-letter
-keys while focused.
+| Scope | Used by | Keys |
+| --- | --- | --- |
+| `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
+| `mini` | mini-player | `o` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `R` |
+| `signedOut` | signed out | `Enter` signs in |
+| `fault` | offline / no daemon | `Enter` retries |
+| `any` | always | `Esc` `q` close |
 
-Hints follow the same walk, so the hint bar always shows exactly what the next
-keypress would do.
+A surface passes a list of scopes, most specific first; `actionFor` returns
+the first match and falls back to `any`. The hint bar is generated from the
+same list, so it shows exactly what a keypress would do. A test checks that
+scopes used together never bind the same key twice.
 
 ## Tests
 
-- `tests/tst_*.qml` with `qmltestrunner` for every `.js` library and for
-  `DaemonClient` against a fake socket (delays, drops, half-written lines).
-- A lint script: no hex colours, no bare pixel literals, no key names outside
-  `Keymap.js`, no `XMLHttpRequest`.
-- Manual checklist per surface: keyboard-only walkthrough, dark and light
-  theme, daemon killed mid-use, network off.
+- `tests/tst_client_core.qml`, `tst_loadable.qml`, `tst_keymap.qml`,
+  `tst_pages.qml`: 39 tests, run with the Qt 6 `qmltestrunner`.
+- `tests/lint.sh`: no colour literals, no network calls in QML, valid manifest.
+- UI checks are manual: drive with `wtype`, capture with `grim`.
+- Not automated: `DaemonClient.qml` against a real socket, and any view.

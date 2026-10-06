@@ -11,7 +11,7 @@ systemd socket activation), `common/ClientCore.js`, `common/Loadable.js`,
 `common/DaemonClient.qml`, `Service.qml`, `BarWidget.qml`, `manifest.json`,
 systemd units, dev scripts, 14 protocol tests and 22 QML tests.
 
-Not done from the list below: a licence file (owner's choice). The daemon
+The licence (MIT) was added later. The daemon
 reports `signed_out` because there is no sign-in yet, and the widget is a plain
 glyph that shows state and wakes the daemon on click.
 
@@ -73,8 +73,8 @@ with seek and volume, hint bar, whole-window keyboard handling from Keymap);
 and app share moved to `common/Player.qml`.
 
 Still to do: Queue and Devices views, help overlay, router with back/forward,
-launch-time measurement against the 300 ms budget, light-theme check, playlist
-folders (currently flattened), artwork.
+light-theme check, playlist folders (currently flattened), artwork. Launch
+time was measured at about 970 ms and is no longer a goal (decision D14).
 
 Original scope:
 

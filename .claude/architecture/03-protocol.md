@@ -31,18 +31,22 @@ state and sends nothing.
 
 ## Responses
 
-Every request gets one or two frames carrying its `id`:
+Every request gets frames carrying its `id`, exactly one of them final:
+
+```json
+{"id":17,"ok":true,"stale":false,"final":true,"data":{...}}
+```
+
+The protocol also allows an early frame from cache before the final one:
 
 ```json
 {"id":17,"ok":true,"stale":true,"final":false,"data":{...}}
 {"id":17,"ok":true,"stale":false,"final":true,"data":{...}}
 ```
 
-- A cached answer may arrive first with `final:false`; the fresh one follows
-  with `final:true`. If cache and network agree the final frame may carry
-  `"unchanged":true` and no `data`.
-- With nothing cached there is just the one final frame.
-- Exactly one frame per request has `final:true`. After it, the id is dead.
+Clients handle both (`ClientCore.js` is tested for it), but the daemon does
+not send early frames yet: library answers come from its memory cache when it
+has one, and from Spotify otherwise. After the final frame the id is dead.
 
 Errors are always final:
 
@@ -74,38 +78,60 @@ Closing the connection cancels everything it had in flight.
 
 ## Events
 
-Unsolicited frames have `ev` instead of `id`:
+Unsolicited frames have `ev` instead of `id`. Sent today:
 
-| Event | Sent when | Notes |
+| Event | Sent when | Shape |
 | --- | --- | --- |
-| `player` | Any `PlayerState` change | Diff plus `seq`; position is `{position_ms, at_ms, rate}` for local interpolation |
-| `queue` | Queue contents change | Subscribe first |
-| `status` | `ready / offline / signed_out / no_premium / starting` changes | Always sent |
-| `devices` | Connect device list changes | Subscribe first |
-| `invalidate` | A cached page a client may be showing has changed | Carries the request signature |
-| `viz` | About 30 Hz while subscribed | `{bands:[...], beat:0..1}`; lossy |
+| `hello` | Once, first frame of a connection | `{protocol, daemon, status, player}` |
+| `player` | Any `PlayerState` change | `{player}`: the whole state, with `seq` |
+| `status` | The status changes | `{status}` |
+| `auth` | A browser sign-in ended without signing in | `{ok:false, message}` |
 
-`player` and `status` are always delivered. Others need
-`{"id":n,"op":"subscribe","args":{"topics":["queue","viz"]},"deadline_ms":1000}`
-and stop on `unsubscribe` or disconnect.
+`player.position` is `{position_ms, at_ms, rate}`; clients interpolate
+locally and never poll. All of the above reach every client without
+subscribing. `subscribe` / `unsubscribe` exist and track topics per
+connection, for the planned events:
 
-A client that detects a gap in `seq` asks for `player.get` to resync.
-
-## Operations (initial set)
-
-| Group | Ops |
+| Planned event | Purpose |
 | --- | --- |
-| `player.*` | `get`, `play`, `pause`, `toggle`, `next`, `previous`, `seek`, `volume`, `shuffle`, `repeat`, `play_context`, `play_tracks`, `transfer` |
-| `queue.*` | `get`, `add`, `remove`, `move`, `clear` |
-| `library.*` | `playlists`, `playlist`, `saved_tracks`, `saved_albums`, `followed_artists`, `save`, `unsave` |
-| `browse.*` | `album`, `artist`, `artist_albums`, `artist_top_tracks` |
-| `search` | One op; `args.types` selects tracks, albums, artists, playlists |
-| `devices.*` | `list` |
-| `auth.*` | `status`, `begin`, `sign_out` |
-| `settings.*` | `get`, `set` (daemon-side only: device name, idle time, quality) |
-| `subscribe`, `unsubscribe`, `cancel` | As above |
+| `queue` | Queue contents changed |
+| `devices` | Connect device list changed |
+| `invalidate` | A cached page a client may be showing has changed |
+| `viz` | Band energies and beat, about 30 Hz, lossy |
 
-Paged ops take `offset` and `limit` and return `{items, total, next_offset}`.
+## Operations
+
+Built:
+
+| Op | Args | Result |
+| --- | --- | --- |
+| `player.get` | | `{status, player}` |
+| `player.play` `pause` `toggle` `next` `previous` | | `{}` |
+| `player.seek` | `position_ms` | `{}` |
+| `player.volume` | `value` 0..1 | `{}` |
+| `player.volume_step` | `delta` | `{}` |
+| `player.shuffle` `player.repeat` | `on` | `{}` |
+| `player.play_context` | `uri`, optional `track_uri` | `{}` |
+| `library.playlists` | | `{items:[{uri, name, length}]}`, Liked Songs first |
+| `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
+| `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}` |
+| `auth.begin` | | `{started}`; opens the browser, outcome arrives as events |
+| `auth.sign_out` `auth.retry` | | `{}` |
+| `subscribe` `unsubscribe` | `topics` | `{topics}` |
+| `cancel` | `target` (no `id`) | none |
+
+A track row is `{uri, title, artists, album, duration_ms, available}`; search
+results add `context_uri` and `context_name`, the list the track was found in.
+
+Player ops return as soon as the command is queued; the effect arrives as a
+`player` event. With nothing loaded, `player.play` resumes the remembered
+track or starts Liked Songs.
+
+With `--debug-ops` only: `debug.sleep {ms}`, `debug.panic`,
+`debug.mercury {uri}`, `debug.spclient {endpoint}`.
+
+Planned: `queue.*`, `devices.list`, `player.transfer`, `player.play_tracks`,
+`library.save` / `unsave`, `browse.album`, `browse.artist`, `settings.*`.
 
 ## Compatibility rules (from v1 on)
 

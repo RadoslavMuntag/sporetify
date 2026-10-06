@@ -58,6 +58,12 @@ o.bind("SUPER + ALT + M", "Sporetify mini-player", "omarchy shell -q sporetify t
 Other commands the same way: `playPause`, `next`, `previous`, `volumeUp`,
 `volumeDown`, `mute`.
 
+## Licence
+
+MIT, see `LICENSE`. Sporetify is not affiliated with Spotify. It signs in
+through librespot and uses Spotify's internal API, which is unofficial and can
+stop working at any time.
+
 ## Development
 
 See `CLAUDE.md` for the rules and `.claude/architecture/` for the design.
