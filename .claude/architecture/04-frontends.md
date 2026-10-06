@@ -137,8 +137,16 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   playlists and library search work from the daemon's files, and anything
   that needs Spotify says why it failed in a toast.
 - **Covers:** shown from files the daemon fetched: the playing track's in
-  the now-playing bar and mini-player, and the album's or artist's beside
-  the title of its page.
+  the now-playing bar and mini-player, the album's or artist's beside the
+  title of its page, and a thumbnail on every row of a list.
+- **Rows:** tall enough for a thumbnail and two lines: the title over the
+  artists (or over what kind of thing the row opens), then the album, a
+  liked or queued mark and the duration. Album pages show no thumbnails,
+  since every row would be the same picture. `c` turns thumbnails off.
+  A row asks for its cover only after staying on screen for 140 ms, four
+  are fetched at a time, and covers still waiting are dropped when the
+  place changes; a cover already on disk comes with the row and costs no
+  request at all.
 - **Now-playing bar:** cover, creature, title, artist, shuffle and repeat (lit when
   on), transport, seek, volume.
 - **Help:** `?` shows every key valid right now; the footer shows only the
@@ -156,8 +164,7 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Faults:** signed out, offline or no daemon replaces the list with a
   one-line explanation and the key that fixes it.
 
-Planned: a devices view, reordering the queue, covers in lists and search
-results.
+Planned: a devices view, reordering the queue.
 
 ## Keymap scopes
 
@@ -165,7 +172,7 @@ results.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `?` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `c` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `popup` | mini-player | `Esc` `q` close |

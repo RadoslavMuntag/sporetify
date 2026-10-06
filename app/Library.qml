@@ -175,6 +175,9 @@ Item {
   function leaveCurrent() {
     for (var i = 0; i < inFlight.length; i++) inFlight[i].cancel()
     inFlight = []
+    // Covers still waiting belong to rows that are about to disappear.
+    for (var q = 0; q < artQueue.length; q++) delete artPaths[artQueue[q]]
+    artQueue = []
     generation++
     pages.reset()
   }
@@ -227,6 +230,55 @@ Item {
       }
     })
     inFlight.push(handle)
+  }
+
+  // ---- Thumbnails for rows
+  // Address -> local file, or "" while it is being fetched or if it failed.
+  property var artPaths: ({})
+  // Bumped when a thumbnail arrives, so rows re-read theirs.
+  property int artRevision: 0
+  property var artQueue: []
+  property int artInFlight: 0
+
+  function artAddress(row) {
+    return row ? (row.art_url || row.thumb_url || "") : ""
+  }
+
+  // The local file of a row's cover, or "" if it is not there (yet).
+  function artFor(row) {
+    if (!row) return ""
+    if (row.art_path) return row.art_path
+    var known = artPaths[artAddress(row)]
+    return known ? known : ""
+  }
+
+  // Ask for a cover. A few are fetched at a time; the rest wait their turn.
+  function wantArt(url) {
+    if (!url || artPaths[url] !== undefined) return
+    artPaths[url] = ""
+    artQueue.push(url)
+    pumpArt()
+  }
+
+  function pumpArt() {
+    while (artInFlight < 4 && artQueue.length > 0) {
+      fetchArt(artQueue.shift())
+    }
+  }
+
+  function fetchArt(url) {
+    artInFlight++
+    player.request("art.get", { url: url }, {
+      deadline: 8000,
+      onDone: function(result) {
+        root.artInFlight--
+        if (result.ok) {
+          root.artPaths[url] = result.data.path
+          root.artRevision++
+        }
+        root.pumpArt()
+      }
+    })
   }
 
   // Ask the daemon for a cover as a local file, for the place on screen.
@@ -365,13 +417,13 @@ Item {
     if (found) {
       section("songs", "Songs", found.tracks, function(t) { return t })
       section("artists", "Artists", found.artists, function(a) {
-        return { kind: "artist", uri: a.uri, title: a.name }
+        return { kind: "artist", uri: a.uri, title: a.name, art_url: a.art_url }
       })
       section("albums", "Albums", found.albums, function(a) {
-        return { kind: "album", uri: a.uri, title: a.name, year: a.year, by: a.artists.join(", ") }
+        return { kind: "album", uri: a.uri, title: a.name, year: a.year, by: a.artists.join(", "), art_url: a.art_url }
       })
       section("playlists", "Playlists", found.playlists, function(p) {
-        return { kind: "playlist", uri: p.uri, title: p.name, by: p.owner }
+        return { kind: "playlist", uri: p.uri, title: p.name, by: p.owner, art_url: p.art_url }
       })
     }
     rows = out
@@ -413,7 +465,10 @@ Item {
       var out = []
       function albumRows(list) {
         for (var i = 0; i < list.length; i++) {
-          out.push({ kind: "album", uri: list[i].uri, title: list[i].name, year: list[i].year, tracks: list[i].tracks })
+          out.push({
+            kind: "album", uri: list[i].uri, title: list[i].name, year: list[i].year,
+            tracks: list[i].tracks, art_url: list[i].thumb_url
+          })
         }
       }
       if (data.top_tracks.length > 0) {
@@ -485,6 +540,7 @@ Item {
         root.rows = rows
         root.total = data.total
         if (data.name) root.name = data.name
+        if (page === 0 && data.art_url && root.artPath === "") root.loadArt(data.art_url)
         root.subtitle = root.count(data.total, "track", "tracks")
         root.pages.done(page)
         root.revision++

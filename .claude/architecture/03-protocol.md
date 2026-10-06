@@ -130,7 +130,8 @@ Built:
 | `cancel` | `target` (no `id`) | none |
 
 A track row is `{uri, title, artists, artist_uris, album, album_uri,
-duration_ms, available, liked}`; search results add `context_uri` and
+duration_ms, available, liked, art_url}`, plus `art_path` when that small
+cover is already on disk; search results add `context_uri` and
 `context_name`, the list the track was found in. `player.play_context`
 accepts playlist, collection, album and artist uris.
 

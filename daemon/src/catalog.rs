@@ -3,7 +3,7 @@
 //! id), so no client id of our own is needed.
 //!
 //! Track metadata never changes, so it is cached on disk for good
-//! (`$XDG_CACHE_HOME/sporetify/tracks.v2.json`) and fetched at most once per
+//! (`$XDG_CACHE_HOME/sporetify/tracks.v3.json`) and fetched at most once per
 //! track, one at a time with bounded concurrency. Lists are cached in memory.
 //!
 //! Search runs over what is cached. Spotify's own search is not reachable
@@ -43,6 +43,9 @@ pub struct TrackRow {
     pub artist_uris: Vec<String>,
     #[serde(default)]
     pub album_uri: String,
+    /// Address of a small cover, for thumbnails.
+    #[serde(default)]
+    pub art_url: Option<String>,
 }
 
 /// What an album row needs: enough to list it without its tracks.
@@ -57,12 +60,17 @@ pub struct AlbumHeader {
     pub tracks: usize,
     /// Address of the cover; `art.get` turns it into a local file.
     pub art_url: Option<String>,
+    /// The same picture, small, for a row in a list.
+    pub thumb_url: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 struct List {
     name: String,
     uris: Vec<String>,
+    /// The list's own picture, if it has one.
+    #[serde(default)]
+    art_url: Option<String>,
 }
 
 /// What is kept on disk so the library can be shown without a connection:
@@ -109,8 +117,8 @@ fn tracks_path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
-    // v2: rows carry artist and album uris.
-    Some(base.join("sporetify/tracks.v2.json"))
+    // v3: rows carry a thumbnail address (v2 added artist and album uris).
+    Some(base.join("sporetify/tracks.v3.json"))
 }
 
 fn library_path() -> Option<PathBuf> {
@@ -287,6 +295,8 @@ impl Catalog {
             "name": list.name,
             "total": list.uris.len(),
             "offset": offset,
+            // The list's own picture, when its owner set one.
+            "art_url": list.art_url,
             "items": self.decorate(rows),
         }))
     }
@@ -307,8 +317,13 @@ impl Catalog {
         rows.into_iter()
             .map(|row| {
                 let is_liked = liked.contains(&row.uri);
+                // A cover that is already on disk costs the client no request.
+                let art_path = row.art_url.as_deref().and_then(crate::art::path_for).filter(|path| path.exists());
                 let mut value = serde_json::to_value(row).unwrap_or(Value::Null);
                 value["liked"] = json!(is_liked);
+                if let Some(path) = art_path {
+                    value["art_path"] = json!(path.to_string_lossy());
+                }
                 value
             })
             .collect()
@@ -479,14 +494,19 @@ impl Catalog {
             self.liked_songs(session, uri).await?
         } else if uri.starts_with("spotify:album:") {
             let (album, uris) = self.fetch_album(session, uri).await?;
-            List { name: album.name, uris }
+            List { name: album.name, uris, art_url: album.thumb_url }
         } else if uri.starts_with("spotify:artist:") {
             let artist = fetch_artist(session, uri).await?;
-            List { name: artist.name.clone(), uris: top_tracks(session, &artist) }
+            List { name: artist.name.clone(), uris: top_tracks(session, &artist), art_url: None }
         } else {
             let id = SpotifyUri::from_uri(uri).map_err(|_| OpError::bad_request(format!("not a playlist: '{uri}'")))?;
             let playlist = Playlist::get(session, &id).await.map_err(|e| upstream("the playlist", e))?;
-            List { name: playlist.name().to_owned(), uris: playlist.tracks().filter_map(|t| t.to_uri().ok()).collect() }
+            List {
+                name: playlist.name().to_owned(),
+                uris: playlist.tracks().filter_map(|t| t.to_uri().ok()).collect(),
+                // A picture the owner set; most playlists have none.
+                art_url: playlist.attributes.picture_sizes.first().map(|picture| picture.url.clone()),
+            }
         };
         let list = Arc::new(list);
         self.lists.lock().expect("lists lock").insert(uri.to_owned(), list.clone());
@@ -506,6 +526,7 @@ impl Catalog {
             kind: format!("{:?}", album.album_type).to_lowercase(),
             tracks: uris.len(),
             art_url: image_url(&album.covers),
+            thumb_url: thumbnail_url(&album.covers),
         };
         self.albums.lock().expect("albums lock").insert(uri.to_owned(), header.clone());
         Ok((header, uris))
@@ -517,7 +538,7 @@ impl Catalog {
         self.lists
             .lock()
             .expect("lists lock")
-            .insert(uri.to_owned(), Arc::new(List { name: header.name.clone(), uris: uris.clone() }));
+            .insert(uri.to_owned(), Arc::new(List { name: header.name.clone(), uris: uris.clone(), art_url: header.thumb_url.clone() }));
         let rows = self.rows(session, uris, LOOKUPS_IN_FLIGHT).await;
         Ok(json!({ "album": header, "items": self.decorate(rows) }))
     }
@@ -536,7 +557,7 @@ impl Catalog {
         self.lists
             .lock()
             .expect("lists lock")
-            .insert(uri.to_owned(), Arc::new(List { name: artist.name.clone(), uris: top.clone() }));
+            .insert(uri.to_owned(), Arc::new(List { name: artist.name.clone(), uris: top.clone(), art_url: None }));
 
         let releases = |uris: Vec<String>| async move {
             let mut headers: Vec<AlbumHeader> = stream::iter(uris)
@@ -623,6 +644,12 @@ impl Catalog {
                 .unwrap_or_default()
         };
         let each = |section: &str| found[section]["items"].as_array().cloned().unwrap_or_default();
+        // The smallest of a picture's sizes, for a row thumbnail.
+        let smallest = |sources: &Value| -> Option<String> {
+            let sources = sources.as_array()?;
+            let pick = sources.iter().min_by_key(|source| source["width"].as_u64().unwrap_or(u64::MAX))?;
+            pick["url"].as_str().map(str::to_owned)
+        };
 
         let mut rows = Vec::new();
         for item in each("tracks") {
@@ -640,6 +667,7 @@ impl Catalog {
                 album_uri: text(&track["album"]["uri"]),
                 duration_ms: track["duration"]["totalMilliseconds"].as_u64().unwrap_or(0),
                 available: track["playability"]["playable"].as_bool().unwrap_or(true),
+                art_url: smallest(&track["album"]["coverArt"]["sources"]),
             };
             if row.available {
                 self.tracks.lock().expect("tracks lock").entry(uri).or_insert_with(|| row.clone());
@@ -652,7 +680,11 @@ impl Catalog {
         let artists: Vec<Value> = each("artists")
             .iter()
             .filter(|artist| artist["uri"].is_string())
-            .map(|artist| json!({ "uri": artist["uri"], "name": artist["profile"]["name"] }))
+            .map(|artist| json!({
+                "uri": artist["uri"],
+                "name": artist["profile"]["name"],
+                "art_url": smallest(&artist["visuals"]["avatarImage"]["sources"]),
+            }))
             .collect();
         let albums: Vec<Value> = each("albums")
             .iter()
@@ -663,6 +695,7 @@ impl Catalog {
                 "artists": names(&album["artists"], "name"),
                 "year": album["date"]["year"],
                 "kind": text(&album["type"]).to_lowercase(),
+                "art_url": smallest(&album["coverArt"]["sources"]),
             }))
             .collect();
         let playlists: Vec<Value> = each("playlists")
@@ -670,6 +703,7 @@ impl Catalog {
             .filter(|playlist| playlist["uri"].is_string())
             .map(|playlist| json!({
                 "uri": playlist["uri"], "name": playlist["name"], "owner": playlist["owner"]["name"],
+                "art_url": smallest(&playlist["images"]["items"][0]["sources"]),
             }))
             .collect();
 
@@ -709,7 +743,7 @@ impl Catalog {
             if liked {
                 uris.insert(0, uri.to_owned());
             }
-            lists.insert(key, Arc::new(List { name: list.name.clone(), uris }));
+            lists.insert(key, Arc::new(List { name: list.name.clone(), uris, art_url: None }));
         }
         Ok(json!({ "uri": uri, "liked": liked }))
     }
@@ -752,7 +786,7 @@ impl Catalog {
             .map(|track| track.uri().to_owned())
             .filter(|uri| !uri.is_empty())
             .collect();
-        Ok(List { name: "Liked Songs".to_owned(), uris })
+        Ok(List { name: "Liked Songs".to_owned(), uris, art_url: None })
     }
 
     async fn track(&self, session: &Session, uri: String) -> TrackRow {
@@ -780,6 +814,7 @@ impl Catalog {
                     artists: track.artists.iter().map(|a| a.name.clone()).collect(),
                     artist_uris: track.artists.iter().filter_map(|a| a.id.to_uri().ok()).collect(),
                     album_uri: track.album.id.to_uri().unwrap_or_default(),
+                    art_url: thumbnail_url(&track.album.covers),
                     album: track.album.name,
                     duration_ms: u64::try_from(track.duration).unwrap_or(0),
                     available: true,
@@ -849,6 +884,12 @@ fn collection_write(username: &str, uri: &str, now_secs: u64, remove: bool) -> V
     request
 }
 
+/// The address of the smallest of `images`, for thumbnails.
+fn thumbnail_url(images: &librespot_metadata::image::Images) -> Option<String> {
+    let image = images.iter().filter(|image| image.width > 0).min_by_key(|image| image.width).or(images.first())?;
+    Some(format!("https://i.scdn.co/image/{}", image.id.to_base16().ok()?))
+}
+
 /// The address of the largest of `images`.
 fn image_url(images: &librespot_metadata::image::Images) -> Option<String> {
     let image = images.iter().max_by_key(|image| image.width)?;
@@ -865,6 +906,7 @@ fn unavailable_row(uri: String) -> TrackRow {
         available: false,
         artist_uris: Vec::new(),
         album_uri: String::new(),
+        art_url: None,
     }
 }
 

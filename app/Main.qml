@@ -73,6 +73,8 @@ FloatingWindow {
       id: prefs
       // Draw each track's creature.
       property bool creatures: true
+      // Show covers on the rows of lists.
+      property bool covers: true
       // Ids of sidebar folders that are folded shut, comma separated.
       property string foldedFolders: ""
     }
@@ -167,6 +169,7 @@ FloatingWindow {
       pane = "list"
       return
     case "creatures": prefs.creatures = !prefs.creatures; return
+    case "covers": prefs.covers = !prefs.covers; return
     case "quit": Qt.quit(); return
     case "cancel": cancelSearch(); return
     case "paneNext": pane = pane === "sidebar" ? "list" : "sidebar"; return
@@ -394,6 +397,7 @@ FloatingWindow {
       visible: player.scope === "player"
       library: library
       player: player
+      covers: prefs.covers
       focused: window.pane === "list"
       onActivated: function(index) {
         window.pane = "list"

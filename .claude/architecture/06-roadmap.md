@@ -111,8 +111,11 @@ sidebar and every loaded list saved to disk, so the library opens offline;
 background indexing of every playlist; cover art fetched and cached by the
 daemon, shown for the playing track and on album and artist pages.
 
-Not done: stale-while-revalidate frames, batched metadata lookups, covers in
-lists and search results, eviction of the cover cache, a devices view, and
+Also there: taller two-line rows with a cover thumbnail on every row of a
+list and of search results (track cache moved to `tracks.v3.json`).
+
+Not done: stale-while-revalidate frames, batched metadata lookups, eviction
+of the cover cache, a devices view, and
 telling the user when another device takes over playback (both of the last
 two need information librespot does not hand out).
 

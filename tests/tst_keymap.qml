@@ -36,7 +36,8 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_Escape, "", app), "cancel")
     compare(Keymap.actionFor(Qt.Key_Q, "q", app), null)
     compare(Keymap.actionFor(Qt.Key_C, "\u0003", app, Qt.ControlModifier), "quit")
-    compare(Keymap.actionFor(Qt.Key_C, "c", app, Qt.NoModifier), null)
+    // Plain c is a different key from Ctrl+C.
+    compare(Keymap.actionFor(Qt.Key_C, "c", app, Qt.NoModifier), "covers")
     compare(Keymap.actionFor(Qt.Key_PageDown, "", scopes), "pageDown")
     // Signed out, Return signs in rather than activating a row.
     compare(Keymap.actionFor(Qt.Key_Return, "", ["signedOut", "browse"]), "signIn")
