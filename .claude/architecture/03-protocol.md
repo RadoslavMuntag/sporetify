@@ -115,13 +115,25 @@ Built:
 | `library.playlists` | | `{items:[{uri, name, length}]}`, Liked Songs first |
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
 | `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}` |
+| `library.track` | `uri` | `{track}`: one track row |
+| `browse.album` | `uri` | `{album: {uri, name, artists, year, kind, tracks}, items}` |
+| `browse.artist` | `uri` | `{artist: {uri, name}, top_tracks, albums, singles}` |
+| `player.up_next` | optional `limit` (max 200) | `{context_uri, context_name, position, total, shuffle, items}` |
 | `auth.begin` | | `{started}`; opens the browser, outcome arrives as events |
 | `auth.sign_out` `auth.retry` | | `{}` |
 | `subscribe` `unsubscribe` | `topics` | `{topics}` |
 | `cancel` | `target` (no `id`) | none |
 
-A track row is `{uri, title, artists, album, duration_ms, available}`; search
-results add `context_uri` and `context_name`, the list the track was found in.
+A track row is `{uri, title, artists, artist_uris, album, album_uri,
+duration_ms, available}`; search results add `context_uri` and
+`context_name`, the list the track was found in. `player.play_context`
+accepts playlist, collection, album and artist uris.
+
+`player.up_next` lists what follows the current track in the list it was
+started from, in that list's own order. It is not Spotify's queue: librespot
+does not expose the queue, so tracks cannot be added to it, the context is
+only known when playback was started from Sporetify, and with shuffle on the
+real order differs (`shuffle` says so).
 
 Player ops return as soon as the command is queued; the effect arrives as a
 `player` event. With nothing loaded, `player.play` resumes the remembered
@@ -130,8 +142,9 @@ track or starts Liked Songs.
 With `--debug-ops` only: `debug.sleep {ms}`, `debug.panic`,
 `debug.mercury {uri}`, `debug.spclient {endpoint}`.
 
-Planned: `queue.*`, `devices.list`, `player.transfer`, `player.play_tracks`,
-`library.save` / `unsave`, `browse.album`, `browse.artist`, `settings.*`.
+Planned: `devices.list`, `player.transfer`, `player.play_tracks`,
+`library.save` / `unsave`, `settings.*`. A real queue (`queue.*`) needs
+support librespot does not offer yet.
 
 ## Compatibility rules (from v1 on)
 

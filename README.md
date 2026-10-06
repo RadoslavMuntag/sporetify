@@ -5,8 +5,9 @@ transport and volume in the bar, a mini-player under it, and a full app
 window for your library. Needs Spotify Premium. No Spotify developer app or
 client ID is required.
 
-Status: early. Playback, your playlists, Liked Songs and library search work.
-Spotify-wide search, album and artist pages, queue and artwork do not exist yet.
+Status: early. Playback, your playlists, Liked Songs, library search, artist
+and album pages and an up-next list work. Spotify-wide search, a real queue
+and artwork do not exist yet.
 
 ## Install (development)
 
@@ -43,6 +44,8 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `n` / `p` | Next / previous | `j` `k` / arrows | Move |
 | `+` / `-` | Volume | `Enter` | Play / open |
 | `m` | Mute | `Tab` | Switch pane |
+| `a` / `d` | Artist / album of a track | `u` | Up next |
+| `Backspace` | Back | `?` | Every shortcut |
 | `←` / `→` | Seek 10 s | `Esc` / `q` | Close |
 
 ## Keybinds

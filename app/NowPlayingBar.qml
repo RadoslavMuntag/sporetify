@@ -13,6 +13,9 @@ Rectangle {
   property bool live: true
   // Whether creatures are drawn at all.
   property bool visuals: true
+  // The user clicked the title (album) or the artist line.
+  signal albumRequested()
+  signal artistRequested()
 
   readonly property var track: player.track
   property real nowMs: Date.now()
@@ -81,6 +84,13 @@ Rectangle {
         font.family: Theme.font.family
         font.pixelSize: Theme.font.subtitle
         font.bold: true
+
+        MouseArea {
+          anchors.fill: parent
+          enabled: root.track !== null
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.albumRequested()
+        }
       }
       Text {
         width: parent.width
@@ -90,6 +100,13 @@ Rectangle {
         color: root.track ? Theme.muted : Theme.urgent
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
+
+        MouseArea {
+          anchors.fill: parent
+          enabled: root.track !== null
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.artistRequested()
+        }
       }
     }
 
@@ -104,6 +121,12 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Theme.spacing.lg
 
+        // nf-md-shuffle_variant; lit when on.
+        IconButton {
+          icon: "󰒟"
+          tint: root.player.player && root.player.player.shuffle ? Theme.accent : Theme.muted
+          onClicked: root.player.run("shuffle")
+        }
         Cap { anchors.verticalCenter: parent.verticalCenter; label: Keymap.keyLabel("previous") }
         // nf-md-skip_previous, nf-md-pause / nf-md-play, nf-md-skip_next
         IconButton { icon: "󰒮"; enabled: root.track !== null; onClicked: root.player.run("previous") }
@@ -114,6 +137,12 @@ Rectangle {
         }
         IconButton { icon: "󰒭"; enabled: root.track !== null; onClicked: root.player.run("next") }
         Cap { anchors.verticalCenter: parent.verticalCenter; label: Keymap.keyLabel("next") }
+        // nf-md-repeat; lit when on.
+        IconButton {
+          icon: "󰑖"
+          tint: root.player.player && root.player.player.repeat ? Theme.accent : Theme.muted
+          onClicked: root.player.run("repeat")
+        }
       }
 
       Row {

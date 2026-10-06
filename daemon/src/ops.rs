@@ -76,6 +76,30 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             let query = args.get("query").and_then(Value::as_str).unwrap_or("");
             return ctx.catalog.search(query, limit.clamp(1, 500));
         }
+        "library.track" => {
+            ctx.playback.settle().await;
+            return ctx.catalog.track_row(&ctx.playback.connected_session()?, &text(&args, "uri")?).await;
+        }
+        "browse.album" => {
+            ctx.playback.settle().await;
+            return ctx.catalog.album(&ctx.playback.connected_session()?, &text(&args, "uri")?).await;
+        }
+        "browse.artist" => {
+            ctx.playback.settle().await;
+            return ctx.catalog.artist(&ctx.playback.connected_session()?, &text(&args, "uri")?).await;
+        }
+        "player.up_next" => {
+            ctx.playback.settle().await;
+            let session = ctx.playback.connected_session()?;
+            let (_, player) = ctx.shared.snapshot();
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50).clamp(1, 200) as usize;
+            let (Some(context), Some(track)) = (ctx.playback.context_uri(), player.track) else {
+                return Ok(json!({ "context_uri": null, "items": [], "total": 0, "shuffle": player.shuffle }));
+            };
+            let mut next = ctx.catalog.up_next(&session, &context, &track.id, limit).await?;
+            next["shuffle"] = json!(player.shuffle);
+            return Ok(next);
+        }
         "library.tracks" => {
             let uri = text(&args, "uri")?;
             let (offset, limit) = catalog::page_args(&args);

@@ -71,7 +71,7 @@ Rectangle {
       id: row
       required property int index
       readonly property var item: root.itemAt(index)
-      readonly property bool open: item && item.uri === root.library.uri
+      readonly property bool open: item && root.library.kind === "playlist" && item.uri === root.library.uri
       readonly property bool cursor: ListView.isCurrentItem && root.focused
 
       width: list.width

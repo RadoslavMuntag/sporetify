@@ -3,8 +3,14 @@ import QtQuick
 import "../common/Loadable.js" as Loadable
 import "../common/Pages.js" as Pages
 
-// What the app is showing: the playlist list and the open collection's
-// rows. Rows arrive a page at a time, for whatever is on screen.
+// What the app is showing, and how it got there.
+//
+// One "place" is on screen at a time: a playlist, search results, an album,
+// an artist or the up-next list. Every place ends up as a flat list of rows
+// for TrackList. Places form a history that can be walked back and forward.
+//
+// A place is { kind, uri, name, query }; kind is one of
+// "playlist" | "search" | "album" | "artist" | "queue".
 Item {
   id: root
 
@@ -16,27 +22,34 @@ Item {
   // Loadable holding [{ uri, name, length }].
   property var playlists: Loadable.loading(null)
 
-  // The open collection.
+  // ---- The place on screen
+  property string kind: ""
   property string uri: ""
   property string name: ""
+  property string query: ""
+  // Line under the title: counts, or whatever explains the place.
+  property string subtitle: ""
   property int total: 0
-  // Sparse: rows[i] is a track row once its page has arrived.
+  // rows[i] is a row once it is known. A row is a track, or has a `kind`:
+  // "heading" (a section label) or "album" (opens that album).
   property var rows: []
   // Bumped whenever rows change, so delegates re-read their row.
   property int revision: 0
-  // Loadable for the collection as a whole (its first page).
+  // Loadable for the place as a whole.
   property var collection: Loadable.ready(null)
+  readonly property bool searching: kind === "search"
 
-  // True while the rows are search results rather than a collection.
-  property bool searching: false
-  property string query: ""
-  // Matches in the whole library; `total` is how many of them are listed.
-  property int matches: 0
-  // The daemon is still fetching metadata, so results may be incomplete.
-  property bool indexing: false
+  // ---- History
+  property var history: []
+  property int historyIndex: -1
+  readonly property bool canGoBack: historyIndex > 0
+  readonly property bool canGoForward: historyIndex >= 0 && historyIndex < history.length - 1
+  // Where the cursor should land once rows arrive (set when walking history).
+  property int restoreCursor: -1
+  signal cursorRestoreRequested(int index)
 
   property var pages: Pages.create(pageSize)
-  // Requests of the open collection, cancelled when another one opens.
+  // Requests of the current place, cancelled when another one opens.
   property var inFlight: []
   property int generation: 0
 
@@ -54,62 +67,178 @@ Item {
     })
   }
 
+  // ---- Navigation
+
+  // Go somewhere new. `cursor` is where the cursor is now, remembered so
+  // that coming back lands on the same row.
+  function go(place, cursor) {
+    if (historyIndex >= 0 && cursor !== undefined) history[historyIndex].cursor = cursor
+    var next = history.slice(0, historyIndex + 1)
+    next.push({ kind: place.kind, uri: place.uri || "", name: place.name || "", query: place.query || "", cursor: 0 })
+    history = next
+    historyIndex = next.length - 1
+    show(next[historyIndex], false)
+  }
+
+  function back(cursor) {
+    if (!canGoBack) return
+    history[historyIndex].cursor = cursor
+    historyIndex--
+    show(history[historyIndex], false)
+  }
+
+  function forward(cursor) {
+    if (!canGoForward) return
+    history[historyIndex].cursor = cursor
+    historyIndex++
+    show(history[historyIndex], false)
+  }
+
+  function reload() {
+    if (historyIndex >= 0) show(history[historyIndex], true)
+    loadPlaylists()
+  }
+
+  // Search as the user types: the first keystroke opens a search place,
+  // later ones update it instead of piling up history.
+  function search(text, cursor) {
+    if (kind === "search" && historyIndex >= 0) {
+      history[historyIndex].query = text
+      show(history[historyIndex], false)
+    } else {
+      go({ kind: "search", query: text }, cursor)
+    }
+  }
+
   function leaveCurrent() {
     for (var i = 0; i < inFlight.length; i++) inFlight[i].cancel()
     inFlight = []
     generation++
+    pages.reset()
   }
 
-  // Search the library as the user types. Each call supersedes the last.
-  function search(text) {
+  function show(place, refresh) {
     leaveCurrent()
+    kind = place.kind
+    uri = place.uri
+    query = place.query
+    name = place.name
+    subtitle = ""
+    total = 0
+    rows = []
+    revision++
+    restoreCursor = place.cursor || 0
+    collection = Loadable.loading(null)
+
+    switch (place.kind) {
+    case "playlist": fetchPage(0, refresh === true); break
+    case "search": fetchSearch(place.query); break
+    case "album": fetchAlbum(place.uri); break
+    case "artist": fetchArtist(place.uri); break
+    case "queue": fetchQueue(); break
+    }
+  }
+
+  // Runs `apply(data)` when `op` answers, unless the place has changed.
+  function load(op, args, deadline, apply) {
     var forGeneration = generation
-    query = text
-    searching = true
-    uri = "search:"
-    name = text.trim() === "" ? "Search your library" : "Results for “" + text.trim() + "”"
-    pages.reset()
-    player.request("library.search", { query: text, limit: 300 }, {
-      deadline: 3000,
-      scope: "search",
+    var handle = player.request(op, args, {
+      deadline: deadline,
       onDone: function(result) {
         if (forGeneration !== root.generation) return
         if (!result.ok) {
           if (result.error.code !== "cancelled") root.collection = Loadable.withResult(root.collection, result)
           return
         }
-        root.rows = result.data.items
-        root.total = result.data.items.length
-        root.matches = result.data.total
-        root.indexing = result.data.indexing
+        apply(result.data)
         root.revision++
         root.collection = Loadable.ready(true)
+        if (root.restoreCursor >= 0) {
+          root.cursorRestoreRequested(root.restoreCursor)
+          root.restoreCursor = -1
+        }
+      }
+    })
+    inFlight.push(handle)
+  }
+
+  function count(n, one, many) {
+    return n + " " + (n === 1 ? one : many)
+  }
+
+  function fetchSearch(text) {
+    name = text.trim() === "" ? "Search your library" : "Results for “" + text.trim() + "”"
+    load("library.search", { query: text, limit: 300 }, 3000, function(data) {
+      rows = data.items
+      total = data.items.length
+      if (text.trim() === "") {
+        subtitle = "Searches your liked songs and everything you have opened"
+      } else {
+        subtitle = count(data.total, "match", "matches")
+          + (data.total > total ? ", showing " + total : "")
+          + (data.indexing ? " · still indexing your liked songs" : "")
       }
     })
   }
 
-  function open(uri, name, refresh) {
-    leaveCurrent()
-    searching = false
-    root.uri = uri
-    root.name = name
-    root.total = 0
-    root.rows = []
-    root.revision++
-    pages.reset()
-    collection = Loadable.loading(null)
-    fetchPage(0, refresh === true)
+  function fetchAlbum(albumUri) {
+    load("browse.album", { uri: albumUri }, 8000, function(data) {
+      name = data.album.name
+      rows = data.items
+      total = rows.length
+      subtitle = (data.album.kind === "album" ? "Album" : data.album.kind.toUpperCase().charAt(0) + data.album.kind.slice(1))
+        + " · " + data.album.artists.join(", ") + " · " + data.album.year + " · " + count(total, "track", "tracks")
+    })
   }
 
-  function reload() {
-    if (searching) search(query)
-    else if (uri !== "") open(uri, name, true)
-    loadPlaylists()
+  function fetchArtist(artistUri) {
+    load("browse.artist", { uri: artistUri }, 10000, function(data) {
+      name = data.artist.name
+      var out = []
+      function albumRows(list) {
+        for (var i = 0; i < list.length; i++) {
+          out.push({ kind: "album", uri: list[i].uri, title: list[i].name, year: list[i].year, tracks: list[i].tracks })
+        }
+      }
+      if (data.top_tracks.length > 0) {
+        out.push({ kind: "heading", title: "Popular" })
+        for (var i = 0; i < data.top_tracks.length; i++) out.push(data.top_tracks[i])
+      }
+      if (data.albums.length > 0) {
+        out.push({ kind: "heading", title: "Albums" })
+        albumRows(data.albums)
+      }
+      if (data.singles.length > 0) {
+        out.push({ kind: "heading", title: "Singles and EPs" })
+        albumRows(data.singles)
+      }
+      rows = out
+      total = out.length
+      subtitle = "Artist · " + count(data.albums.length, "album", "albums")
+        + " · " + count(data.singles.length, "single", "singles")
+    })
   }
 
-  // Make sure the pages covering rows first..last are loaded or on their way.
+  function fetchQueue() {
+    name = "Up next"
+    load("player.up_next", { limit: 100 }, 8000, function(data) {
+      rows = data.items
+      total = rows.length
+      if (!data.context_uri) {
+        subtitle = "Nothing has been played from this app yet"
+      } else {
+        // Remembered so a row here plays inside the same list.
+        uri = data.context_uri
+        subtitle = "From " + data.context_name
+          + (data.shuffle ? " · shuffle is on, so the real order will differ" : "")
+          + (total === 0 ? " · this is the last track" : "")
+      }
+    })
+  }
+
+  // Playlists arrive a page at a time, for whatever is on screen.
   function ensure(first, last) {
-    if (searching || uri === "" || total === 0) return
+    if (kind !== "playlist" || total === 0) return
     var wanted = pages.claim(first, last, total)
     for (var i = 0; i < wanted.length; i++) fetchPage(wanted[i], false)
   }
@@ -122,11 +251,12 @@ Item {
     }, {
       deadline: 8000,
       onDone: function(result) {
-        // An answer for a collection that is no longer open is dropped.
+        // An answer for a place that is no longer on screen is dropped.
         if (forGeneration !== root.generation) return
         if (!result.ok) {
           root.pages.failed(page)
-          if (page === 0) root.collection = Loadable.withResult(root.collection, result)
+          if (page === 0 && result.error.code !== "cancelled")
+            root.collection = Loadable.withResult(root.collection, result)
           return
         }
         var data = result.data
@@ -139,9 +269,16 @@ Item {
         root.rows = rows
         root.total = data.total
         if (data.name) root.name = data.name
+        root.subtitle = root.count(data.total, "track", "tracks")
         root.pages.done(page)
         root.revision++
-        if (page === 0) root.collection = Loadable.ready(true)
+        if (page === 0) {
+          root.collection = Loadable.ready(true)
+          if (root.restoreCursor >= 0) {
+            root.cursorRestoreRequested(root.restoreCursor)
+            root.restoreCursor = -1
+          }
+        }
       }
     })
     inFlight.push(handle)
@@ -151,9 +288,59 @@ Item {
     return index >= 0 && index < rows.length ? (rows[index] || null) : null
   }
 
-  function play(index) {
+  function isTrack(row) {
+    return row !== null && row.kind === undefined
+  }
+
+  // Enter on a row: play a track where it was found, or open an album.
+  function activate(index) {
     var row = rowAt(index)
-    // A search result plays inside the list it was found in.
-    if (row && row.available) player.playContext(searching ? row.context_uri : uri, row.uri)
+    if (!row) return
+    if (row.kind === "album") {
+      go({ kind: "album", uri: row.uri, name: row.title }, index)
+    } else if (isTrack(row) && row.available) {
+      // A search result plays inside the list it was found in; everything
+      // else plays inside the place on screen.
+      player.playContext(kind === "search" ? row.context_uri : uri, row.uri)
+    }
+  }
+
+  // Open the artist or album of the row under the cursor, or of the
+  // playing track when the cursor is not on a track.
+  function openRelated(what, index) {
+    var row = rowAt(index)
+    if (isTrack(row)) {
+      openFromRow(what, row, index)
+      return
+    }
+    if (!player.track) return
+    var cursor = index
+    player.request("library.track", { uri: player.track.id }, {
+      deadline: 5000,
+      scope: "related",
+      onDone: function(result) {
+        if (result.ok) root.openFromRow(what, result.data.track, cursor)
+      }
+    })
+  }
+
+  function openFromRow(what, row, cursor) {
+    if (what === "artist" && row.artist_uris && row.artist_uris.length > 0)
+      go({ kind: "artist", uri: row.artist_uris[0], name: row.artists[0] }, cursor)
+    else if (what === "album" && row.album_uri)
+      go({ kind: "album", uri: row.album_uri, name: row.album }, cursor)
+  }
+
+  // Up next follows the music. The track object is replaced on every player
+  // event, so compare ids rather than reacting to each one.
+  property string lastTrackId: ""
+  Connections {
+    target: root.player
+    function onTrackChanged() {
+      var id = root.player.track ? root.player.track.id : ""
+      if (id === root.lastTrackId) return
+      root.lastTrackId = id
+      if (root.kind === "queue" && root.historyIndex >= 0) root.show(root.history[root.historyIndex], false)
+    }
   }
 }

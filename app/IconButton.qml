@@ -8,6 +8,7 @@ Item {
   property real iconSize: Theme.font.icon
   property string hint: ""
   property bool enabled: true
+  property color tint: Theme.foreground
   signal clicked()
 
   implicitWidth: Math.max(Theme.spacing.controlHeight, glyph.implicitWidth + Theme.spacing.lg * 2)
@@ -28,7 +29,7 @@ Item {
     anchors.centerIn: parent
     textFormat: Text.PlainText
     text: root.icon
-    color: Theme.foreground
+    color: root.tint
     font.family: Theme.font.family
     font.pixelSize: root.iconSize
   }
