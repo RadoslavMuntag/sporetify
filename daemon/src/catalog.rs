@@ -395,6 +395,125 @@ impl Catalog {
         }))
     }
 
+    /// Search all of Spotify, through the search service its own apps use
+    /// (a persisted GraphQL query), with the session's credentials. Needs no
+    /// client id. Tracks found are cached like any other.
+    pub async fn search_spotify(&self, session: &Session, query: &str, limit: usize) -> OpResult {
+        use http_body_util::BodyExt;
+
+        let unreachable = |e: String| upstream("search results", e);
+        let token = session.login5().auth_token().await.map_err(|e| unreachable(e.to_string()))?;
+        let client_token = session.spclient().client_token().await.map_err(|e| unreachable(e.to_string()))?;
+
+        let variables = json!({
+            "searchTerm": query, "offset": 0, "limit": limit, "numberOfTopResults": 5,
+            "includeAudiobooks": false,
+        });
+        let hash = std::env::var("SPORETIFY_SEARCH_HASH").unwrap_or_else(|_| SEARCH_QUERY_HASH.to_owned());
+        let extensions = json!({ "persistedQuery": { "version": 1, "sha256Hash": hash } });
+        let url = format!(
+            "https://api-partner.spotify.com/pathfinder/v1/query?operationName=searchDesktop&variables={}&extensions={}",
+            percent_encode(&variables.to_string()),
+            percent_encode(&extensions.to_string()),
+        );
+        let request = http::Request::builder()
+            .method(http::Method::GET)
+            .uri(url)
+            .header(http::header::AUTHORIZATION, format!("Bearer {}", token.access_token))
+            .header("client-token", client_token)
+            .header(http::header::ACCEPT, "application/json")
+            .header("app-platform", "WebPlayer")
+            .body(bytes::Bytes::new())
+            .map_err(|e| unreachable(e.to_string()))?;
+        let response = session.http_client().request(request).await.map_err(|e| unreachable(e.to_string()))?;
+        let status = response.status();
+        let body = response.into_body().collect().await.map_err(|e| unreachable(e.to_string()))?.to_bytes();
+
+        if status == http::StatusCode::TOO_MANY_REQUESTS {
+            return Err(OpError::new(ErrorCode::RateLimited, "Spotify asked us to slow down"));
+        }
+        let parsed: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+        let found = &parsed["data"]["search"];
+        if !status.is_success() || !found.is_object() {
+            // Most likely Spotify retired this version of its search query.
+            return Err(OpError::new(
+                ErrorCode::Internal,
+                format!("Spotify's search did not answer as expected (HTTP {})", status.as_u16()),
+            ));
+        }
+
+        let text = |value: &Value| value.as_str().unwrap_or_default().to_owned();
+        let names = |artists: &Value, field: &str| -> Vec<String> {
+            artists["items"]
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|artist| if field == "uri" { text(&artist["uri"]) } else { text(&artist["profile"]["name"]) })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let each = |section: &str| found[section]["items"].as_array().cloned().unwrap_or_default();
+
+        let mut rows = Vec::new();
+        for item in each("tracks") {
+            let track = &item["track"];
+            let uri = text(&track["uri"]);
+            if uri.is_empty() {
+                continue;
+            }
+            let row = TrackRow {
+                uri: uri.clone(),
+                title: text(&track["name"]),
+                artists: names(&track["artists"], "name"),
+                artist_uris: names(&track["artists"], "uri"),
+                album: text(&track["album"]["name"]),
+                album_uri: text(&track["album"]["uri"]),
+                duration_ms: track["duration"]["totalMilliseconds"].as_u64().unwrap_or(0),
+                available: track["playability"]["playable"].as_bool().unwrap_or(true),
+            };
+            if row.available {
+                self.tracks.lock().expect("tracks lock").entry(uri).or_insert_with(|| row.clone());
+                self.unsaved.store(true, Ordering::Relaxed);
+            }
+            rows.push(row);
+        }
+        self.flush();
+
+        let artists: Vec<Value> = each("artists")
+            .iter()
+            .filter(|artist| artist["uri"].is_string())
+            .map(|artist| json!({ "uri": artist["uri"], "name": artist["profile"]["name"] }))
+            .collect();
+        let albums: Vec<Value> = each("albums")
+            .iter()
+            .filter(|album| album["uri"].is_string())
+            .map(|album| json!({
+                "uri": album["uri"],
+                "name": album["name"],
+                "artists": names(&album["artists"], "name"),
+                "year": album["date"]["year"],
+                "kind": text(&album["type"]).to_lowercase(),
+            }))
+            .collect();
+        let playlists: Vec<Value> = each("playlists")
+            .iter()
+            .filter(|playlist| playlist["uri"].is_string())
+            .map(|playlist| json!({
+                "uri": playlist["uri"], "name": playlist["name"], "owner": playlist["owner"]["name"],
+            }))
+            .collect();
+
+        Ok(json!({
+            "query": query,
+            "tracks": self.decorate(rows),
+            "artists": artists,
+            "albums": albums,
+            "playlists": playlists,
+        }))
+    }
+
     /// Add a track to Liked Songs or remove it, through the collection
     /// service the official clients use. Needs no client id.
     pub async fn set_liked(&self, session: &Session, uri: &str, liked: bool) -> OpResult {
@@ -517,6 +636,23 @@ impl Catalog {
     }
 }
 
+/// Identifies the `searchDesktop` query on Spotify's side. Spotify replaces
+/// these from time to time; when search starts failing with an HTTP error,
+/// this is the first thing to check. `SPORETIFY_SEARCH_HASH` overrides it.
+const SEARCH_QUERY_HASH: &str = "75bbf6bfcfdf85b8fc828417bfad92b7cd66bf7f556d85670f4da8292373ebec";
+
+/// Percent-encoding for a URL query value.
+fn percent_encode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() * 3);
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
 /// A `spotify.collection.proto.v2.WriteRequest` for one item. librespot does
 /// not compile this message, and it is small enough to encode by hand:
 ///
@@ -594,6 +730,13 @@ mod tests {
         ]
         .concat();
         assert_eq!(body, expected);
+    }
+
+    #[test]
+    fn percent_encode_keeps_unreserved_and_escapes_the_rest() {
+        assert_eq!(super::percent_encode("a-Z_0.~"), "a-Z_0.~");
+        assert_eq!(super::percent_encode("{\"q\":\"a b&c\"}"), "%7B%22q%22%3A%22a%20b%26c%22%7D");
+        assert_eq!(super::percent_encode("é"), "%C3%A9");
     }
 
     #[test]

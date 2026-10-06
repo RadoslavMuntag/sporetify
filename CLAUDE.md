@@ -66,10 +66,14 @@ When two of these conflict, the lower number wins.
   MPRIS** (`daemon/src/mpris.rs`) so media keys and `playerctl` work. Both
   paths end in `Playback::command`. The plugin watches MPRIS only to notice
   playback that started while it was disconnected.
-- **Search is library search.** Spotify's own search is not reachable without
-  a client id (the internal endpoints answer 400), so `library.search` runs
-  over cached metadata: Liked Songs, indexed in the background, plus any
-  playlist that has been opened.
+- **Search has two sources.** `library.search` runs over cached metadata
+  (Liked Songs, indexed in the background, plus anything opened) and answers
+  at once. `search` asks the service Spotify's own apps use (a persisted
+  GraphQL query on `api-partner.spotify.com`, with the session's token) and
+  covers all of Spotify. That query is identified by a hash Spotify can
+  retire at any time: when Spotify-wide search starts failing, check
+  `SEARCH_QUERY_HASH` in `daemon/src/catalog.rs` first. Library search keeps
+  working regardless.
 
 ### Layout
 

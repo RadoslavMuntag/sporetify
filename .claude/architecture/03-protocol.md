@@ -114,7 +114,8 @@ Built:
 | `player.play_context` | `uri`, optional `track_uri` | `{}` |
 | `library.playlists` | | `{items:[{uri, name, length}]}`, Liked Songs first |
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
-| `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}` |
+| `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}`; cached library only, never the network |
+| `search` | `query`, optional `limit` per section (max 50) | `{query, tracks, artists, albums, playlists}`; all of Spotify |
 | `library.track` | `uri` | `{track}`: one track row |
 | `library.save` `library.unsave` | `uri` | `{uri, liked}`; writes to Liked Songs |
 | `library.is_saved` | `uri` | `{uri, liked}`, from the cached Liked Songs list |
@@ -138,6 +139,11 @@ the list it was started from, in that list's own order. Spotify's queue
 cannot be read back, so anything queued from another device is missing, the
 context is only known when playback was started from Sporetify, and with
 shuffle on the real order differs (`shuffle` says so).
+
+`search` returns track rows like any other, artists as `{uri, name}`, albums
+as `{uri, name, artists, year, kind}` and playlists as `{uri, name, owner}`.
+It fails with `internal` if Spotify stops accepting the query, and
+`rate_limited` on a 429; clients should keep showing library results.
 
 How the two writes work without a client id:
 

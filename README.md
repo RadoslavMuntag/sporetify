@@ -6,8 +6,8 @@ window for your library. Needs Spotify Premium. No Spotify developer app or
 client ID is required.
 
 Status: early. Playback, your playlists, Liked Songs, library search, artist
-and album pages, likes, add to queue and an up-next list work. Spotify-wide
-search and artwork do not exist yet.
+and album pages, likes, add to queue, an up-next list and search across all
+of Spotify work. Artwork does not exist yet.
 
 ## Install (development)
 
@@ -40,7 +40,7 @@ Every surface lists its shortcuts in a footer. The main ones:
 
 | Key | Action | Key | Action |
 | --- | --- | --- | --- |
-| `Space` | Play / pause | `/` | Search your library |
+| `Space` | Play / pause | `/` | Search your library and Spotify |
 | `n` / `p` | Next / previous | `j` `k` / arrows | Move |
 | `+` / `-` | Volume | `Enter` | Play / open |
 | `m` | Mute | `Tab` | Switch pane |

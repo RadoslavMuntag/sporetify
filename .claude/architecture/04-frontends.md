@@ -115,8 +115,12 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   `Library.ensure` claims pages for the visible rows plus one screen ahead
   through `Pages.js`. Other places arrive whole.
 - **Search:** `/` opens a field above the list. The first keystroke opens a
-  search place; later ones update it without adding history. A result plays
-  inside the list it was found in.
+  search place; later ones update it without adding history. Library matches
+  appear on every key; Spotify is asked once typing pauses (280 ms) and its
+  songs, artists, albums and playlists are appended under headings. A
+  library result plays inside the list it was found in, a Spotify result
+  inside its album. If Spotify's search fails, the library results stay and
+  the subtitle says why.
 - **Now-playing bar:** creature, title, artist, shuffle and repeat (lit when
   on), transport, seek, volume.
 - **Help:** `?` shows every key valid right now; the footer shows only the

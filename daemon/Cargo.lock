@@ -2480,8 +2480,10 @@ dependencies = [
 name = "sporetifyd"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "futures-util",
  "http",
+ "http-body-util",
  "libc",
  "librespot-connect",
  "librespot-core",
