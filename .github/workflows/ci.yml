@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Arch, like the Omarchy machines this runs on: same Rust, same Qt 6, and
+    # the same paths scripts/test.sh expects.
+    container: archlinux:latest
+    env:
+      # Outside the checkout, so build output never lands in the plugin folder
+      # and the lint does not walk through dependency sources.
+      CARGO_HOME: /tmp/ci/cargo
+      CARGO_TARGET_DIR: /tmp/ci/target
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Install toolchain and libraries
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git jq rust openssl libpulse qt6-declarative
+
+      - uses: actions/checkout@v4
+
+      - name: Restore Cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/ci/cargo/registry
+            /tmp/ci/cargo/git
+            /tmp/ci/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('daemon/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      # clippy, daemon tests, QML tests and lint: the same script used locally.
+      - name: Run all checks
+        run: scripts/test.sh
+
+      - name: Build release daemon
+        run: cargo build --release --locked --manifest-path daemon/Cargo.toml

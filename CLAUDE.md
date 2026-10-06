@@ -274,6 +274,10 @@ qs -p App.qml            # run the app from the checkout, logs in the terminal
 socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/sporetify.sock
 ```
 
+CI: `.github/workflows/ci.yml` runs `scripts/test.sh` and a release build in
+an Arch container on every push to `main` and every pull request. Anything a
+check needs must therefore be in `scripts/test.sh`, not only run by hand.
+
 Things that bite:
 
 - **Never build into the checkout.** It is symlinked into
