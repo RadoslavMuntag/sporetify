@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Open the Sporetify app: focus its window if it is already running,
+# otherwise start it.
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+address=$(hyprctl clients -j 2>/dev/null | jq -r '.[] | select(.class == "sporetify") | .address' | head -n1)
+if [[ -n $address ]]; then
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null 2>&1 ||
+    hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1
+  exit 0
+fi
+
+exec setsid qs -p "$ROOT/App.qml" >/dev/null 2>&1

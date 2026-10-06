@@ -1,0 +1,8 @@
+[Unit]
+Description=Sporetify daemon
+Requires=sporetifyd.socket
+
+[Service]
+ExecStart=%h/.local/bin/sporetifyd
+# The daemon exits cleanly when idle; only a crash should bring it back.
+Restart=on-failure

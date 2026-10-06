@@ -1,0 +1,204 @@
+import QtQuick
+
+import "../common/Position.js" as Position
+
+// The open collection's tracks. Rows are fixed height and exist for the
+// whole list from the start; a row shows a placeholder until its page of
+// metadata arrives, so nothing jumps when data lands.
+Item {
+  id: root
+
+  required property var library
+  required property var player
+  property bool focused: false
+  property alias currentIndex: list.currentIndex
+  signal activated(int index)
+
+  readonly property int rowsPerPage: Math.max(1, Math.floor(list.height / Theme.spacing.rowHeight) - 1)
+  readonly property string playingUri: player.track ? player.track.id : ""
+
+  function move(delta) {
+    list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + delta))
+  }
+  function jump(index) {
+    list.currentIndex = Math.max(0, Math.min(list.count - 1, index))
+  }
+
+  // Ask for the pages behind the rows on screen, plus one screen ahead.
+  function ensureVisible() {
+    if (list.count === 0) return
+    var first = Math.max(0, Math.floor(list.contentY / Theme.spacing.rowHeight))
+    var onScreen = Math.ceil(list.height / Theme.spacing.rowHeight)
+    library.ensure(first, first + onScreen * 2)
+  }
+
+  Connections {
+    target: root.library
+    function onUriChanged() {
+      list.currentIndex = 0
+      list.positionViewAtBeginning()
+    }
+    function onTotalChanged() { root.ensureVisible() }
+  }
+
+  Column {
+    id: header
+    x: Theme.spacing.huge
+    y: Theme.spacing.xl
+    width: parent.width - Theme.spacing.huge * 2
+    spacing: Theme.spacing.xs
+
+    Text {
+      width: parent.width
+      elide: Text.ElideRight
+      textFormat: Text.PlainText
+      text: root.library.name
+      color: Theme.foreground
+      font.family: Theme.font.family
+      font.pixelSize: Theme.font.heading
+      font.bold: true
+    }
+    Text {
+      textFormat: Text.PlainText
+      text: {
+        if (root.library.uri === "") return "Pick a playlist on the left, or press / to search"
+        if (root.library.searching) {
+          if (root.library.query.trim() === "") return "Searches your liked songs and the playlists you have opened"
+          var found = root.library.matches + (root.library.matches === 1 ? " match" : " matches")
+          if (root.library.matches > root.library.total) found += ", showing " + root.library.total
+          return found + (root.library.indexing ? " · still indexing your liked songs" : "")
+        }
+        if (root.library.collection.state === "loading") return "Loading…"
+        if (root.library.collection.state === "error")
+          return root.library.collection.error.message + " · press R to retry"
+        return root.library.total + (root.library.total === 1 ? " track" : " tracks")
+      }
+      color: root.library.collection.state === "error" ? Theme.urgent : Theme.muted
+      font.family: Theme.font.family
+      font.pixelSize: Theme.font.bodySmall
+    }
+  }
+
+  Rectangle {
+    id: rule
+    anchors.top: header.bottom
+    anchors.topMargin: Theme.spacing.xl
+    width: parent.width
+    height: 1
+    color: Theme.line
+  }
+
+  ListView {
+    id: list
+    anchors.top: rule.bottom
+    anchors.bottom: parent.bottom
+    width: parent.width
+    clip: true
+    model: root.library.total
+    boundsBehavior: Flickable.StopAtBounds
+    highlightMoveDuration: 0
+    onContentYChanged: root.ensureVisible()
+    onHeightChanged: root.ensureVisible()
+
+    delegate: Rectangle {
+      id: row
+      required property int index
+      readonly property var track: {
+        root.library.revision
+        return root.library.rowAt(index)
+      }
+      readonly property bool isPlaying: track !== null && track.uri === root.playingUri
+      readonly property bool cursor: ListView.isCurrentItem && root.focused
+      readonly property color ink: isPlaying ? Theme.accent
+        : (track && !track.available ? Theme.muted : Theme.foreground)
+
+      width: list.width
+      height: Theme.spacing.rowHeight
+      color: cursor ? Theme.selectedFill : (hover.containsMouse ? Theme.hoverFill : "transparent")
+
+      readonly property real pad: Theme.spacing.huge
+      readonly property real numberWidth: Theme.space(44)
+      readonly property real timeWidth: Theme.space(52)
+      readonly property real flexible: width - pad * 2 - numberWidth - timeWidth - Theme.spacing.xxl * 2
+
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        x: row.pad
+        width: row.numberWidth
+        textFormat: Text.PlainText
+        // nf-md-volume_high marks the playing row.
+        text: row.isPlaying ? "󰕾" : String(row.index + 1)
+        color: row.isPlaying ? Theme.accent : Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.bodySmall
+      }
+
+      // Placeholder until the row's metadata arrives.
+      Rectangle {
+        visible: row.track === null
+        anchors.verticalCenter: parent.verticalCenter
+        x: row.pad + row.numberWidth
+        width: row.flexible * (0.25 + (row.index % 5) * 0.06)
+        height: Theme.space(6)
+        radius: height / 2
+        color: Theme.hoverFill
+      }
+
+      Text {
+        visible: row.track !== null
+        anchors.verticalCenter: parent.verticalCenter
+        x: row.pad + row.numberWidth
+        width: row.flexible * 0.45
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        text: row.track ? row.track.title : ""
+        color: row.ink
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.body
+      }
+      Text {
+        visible: row.track !== null
+        anchors.verticalCenter: parent.verticalCenter
+        x: row.pad + row.numberWidth + row.flexible * 0.45 + Theme.spacing.xxl
+        width: row.flexible * 0.3
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        text: row.track ? row.track.artists.join(", ") : ""
+        color: Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.body
+      }
+      Text {
+        visible: row.track !== null
+        anchors.verticalCenter: parent.verticalCenter
+        x: row.pad + row.numberWidth + row.flexible * 0.75 + Theme.spacing.xxl * 2
+        width: row.flexible * 0.25
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        text: row.track ? row.track.album : ""
+        color: Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.body
+      }
+      Text {
+        visible: row.track !== null && row.track.available
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
+        anchors.rightMargin: row.pad
+        textFormat: Text.PlainText
+        text: row.track ? Position.clock(row.track.duration_ms) : ""
+        color: Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.bodySmall
+      }
+
+      MouseArea {
+        id: hover
+        anchors.fill: parent
+        hoverEnabled: true
+        onClicked: list.currentIndex = row.index
+        onDoubleClicked: root.activated(row.index)
+      }
+    }
+  }
+}

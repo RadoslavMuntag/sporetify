@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "namelessnovice.sporetify",
+  "name": "Sporetify",
+  "version": "0.1.0",
+  "author": "namelessnovice",
+  "description": "Keyboard-first Spotify for Omarchy: transport and volume in the bar, the full player a key away",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Sporetify",
+    "description": "Spotify transport and volume",
+    "category": "Media",
+    "aliases": [
+      "spotify",
+      "music",
+      "player"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {
+      "showTrackTitle": "On",
+      "maxTitleWidth": 220
+    },
+    "schema": [
+      {
+        "key": "showTrackTitle",
+        "type": "enum",
+        "label": "Track title in bar",
+        "options": [
+          "On",
+          "Off"
+        ],
+        "defaultValue": "On",
+        "description": "Show the current track's title next to the icon."
+      },
+      {
+        "key": "maxTitleWidth",
+        "type": "integer",
+        "label": "Longest title",
+        "min": 80,
+        "max": 600,
+        "step": 20,
+        "defaultValue": 220,
+        "description": "Width in pixels after which the title is cut short."
+      }
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+.pragma library
+
+// Which pages of a long list still need fetching for the rows on screen.
+// Pure bookkeeping: the caller does the fetching and reports back.
+
+function create(pageSize) {
+  var loaded = {}
+  var loading = {}
+
+  return {
+    pageSize: pageSize,
+
+    // Pages covering rows first..last (inclusive) that are neither loaded
+    // nor on their way. They are marked as on their way.
+    claim: function(first, last, total) {
+      var out = []
+      if (total <= 0 || last < first) return out
+      var from = Math.floor(Math.max(0, first) / pageSize)
+      var to = Math.floor(Math.min(total - 1, last) / pageSize)
+      for (var page = from; page <= to; page++) {
+        if (loaded[page] || loading[page]) continue
+        loading[page] = true
+        out.push(page)
+      }
+      return out
+    },
+    done: function(page) {
+      delete loading[page]
+      loaded[page] = true
+    },
+    // A failed page may be claimed again.
+    failed: function(page) { delete loading[page] },
+    isLoaded: function(page) { return loaded[page] === true },
+    reset: function() {
+      loaded = {}
+      loading = {}
+    }
+  }
+}

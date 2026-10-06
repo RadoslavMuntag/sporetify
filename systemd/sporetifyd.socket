@@ -1,0 +1,9 @@
+[Unit]
+Description=Sporetify daemon socket
+
+[Socket]
+ListenStream=%t/sporetify.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target
