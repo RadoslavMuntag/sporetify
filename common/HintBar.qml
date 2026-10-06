@@ -9,6 +9,8 @@ Flow {
 
   // One scope name or a list of them; see Keymap.hints.
   property var scope: "player"
+  // Show only the actions marked primary; the rest live in a help overlay.
+  property bool primaryOnly: false
   property color foreground
   property color muted
   property string fontFamily
@@ -18,7 +20,7 @@ Flow {
   spacing: gap * 2
 
   Repeater {
-    model: Keymap.hints(root.scope)
+    model: Keymap.hints(root.scope, root.primaryOnly)
 
     Row {
       required property var modelData

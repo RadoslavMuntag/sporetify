@@ -50,6 +50,15 @@ TestCase {
     }
   }
 
+  function test_primary_hints_are_a_subset() {
+    var all = Keymap.hints(["browse", "player"], false)
+    var primary = Keymap.hints(["browse", "player"], true)
+    verify(primary.length > 0 && primary.length < all.length)
+    compare(primary[primary.length - 1].label, "Close")
+    compare(Keymap.actionFor(Qt.Key_Backspace, "", ["browse", "player"]), "back")
+    compare(Keymap.actionFor(Qt.Key_Question, "?", ["browse", "player"]), "help")
+  }
+
   function test_unknown_keys_do_nothing() {
     compare(Keymap.actionFor(Qt.Key_F5, "", "player"), null)
     compare(Keymap.actionFor(Qt.Key_Z, "z", "player"), null)

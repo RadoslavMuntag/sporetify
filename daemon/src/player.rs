@@ -128,6 +128,8 @@ impl Playback {
                 let context = saved
                     .context_uri
                     .unwrap_or_else(|| format!("spotify:user:{}:collection", active.username));
+                // Remembered so "up next" knows what is playing from where.
+                self.remember(|saved| saved.context_uri = Some(context.clone()));
                 let options = LoadRequestOptions {
                     start_playing: true,
                     seek_to: saved.track.as_ref().map(|_| saved.position_ms as u32).unwrap_or(0),
@@ -207,6 +209,13 @@ impl Playback {
             .set_volume(to_device_volume(player.volume))
             .and_then(|_| spirc.load(LoadRequest::from_context_uri(request.context_uri, options)))
             .map_err(|e| OpError::new(ErrorCode::Internal, format!("the player did not accept the command: {e}")))
+    }
+
+    /// The playlist, album or artist the current track is playing from, as
+    /// far as this daemon knows: it is only known when playback was started
+    /// from here.
+    pub fn context_uri(&self) -> Option<String> {
+        self.saved.lock().expect("saved lock").context_uri.clone()
     }
 
     /// Change the remembered state and write it out.

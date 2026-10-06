@@ -72,7 +72,12 @@ with seek and volume, hint bar, whole-window keyboard handling from Keymap);
 `player.play_context` (`daemon/src/catalog.rs`). The player logic the plugin
 and app share moved to `common/Player.qml`.
 
-Still to do: Queue and Devices views, help overlay, router with back/forward,
+Added on `feature/app-views`: history with back/forward, artist pages
+(popular tracks, albums, singles), album pages, an up-next list, shuffle and
+repeat buttons, a help overlay, and an IPC handle for driving the app.
+Verified over IPC only; the views were not looked at (the screen was off).
+
+Still to do: a devices view, a real queue (librespot does not expose one),
 light-theme check, playlist folders (currently flattened), artwork. Launch
 time was measured at about 970 ms and is no longer a goal (decision D14).
 

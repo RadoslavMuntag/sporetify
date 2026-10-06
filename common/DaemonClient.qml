@@ -15,7 +15,9 @@ Item {
 
   // Set by the host while a surface that shows daemon state is open.
   property bool active: false
-  property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/sporetify.sock"
+  // SPORETIFY_SOCKET points a frontend at another daemon, for development.
+  property string socketPath: Quickshell.env("SPORETIFY_SOCKET")
+    || (Quickshell.env("XDG_RUNTIME_DIR") + "/sporetify.sock")
 
   // asleep | connecting | up | down | incompatible
   property string link: "asleep"

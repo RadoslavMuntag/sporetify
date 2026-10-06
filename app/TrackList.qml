@@ -34,11 +34,16 @@ Item {
 
   Connections {
     target: root.library
-    function onUriChanged() {
+    function onGenerationChanged() {
       list.currentIndex = 0
       list.positionViewAtBeginning()
     }
     function onTotalChanged() { root.ensureVisible() }
+    // Coming back to a place puts the cursor where it was.
+    function onCursorRestoreRequested(index) {
+      list.currentIndex = Math.max(0, Math.min(list.count - 1, index))
+      list.positionViewAtIndex(list.currentIndex, ListView.Contain)
+    }
   }
 
   Column {
@@ -61,17 +66,11 @@ Item {
     Text {
       textFormat: Text.PlainText
       text: {
-        if (root.library.uri === "") return "Pick a playlist on the left, or press / to search"
-        if (root.library.searching) {
-          if (root.library.query.trim() === "") return "Searches your liked songs and the playlists you have opened"
-          var found = root.library.matches + (root.library.matches === 1 ? " match" : " matches")
-          if (root.library.matches > root.library.total) found += ", showing " + root.library.total
-          return found + (root.library.indexing ? " · still indexing your liked songs" : "")
-        }
-        if (root.library.collection.state === "loading") return "Loading…"
+        if (root.library.kind === "") return "Pick a playlist on the left, or press / to search"
         if (root.library.collection.state === "error")
           return root.library.collection.error.message + " · press R to retry"
-        return root.library.total + (root.library.total === 1 ? " track" : " tracks")
+        if (root.library.collection.state === "loading" && root.library.subtitle === "") return "Loading…"
+        return root.library.subtitle
       }
       color: root.library.collection.state === "error" ? Theme.urgent : Theme.muted
       font.family: Theme.font.family
@@ -107,14 +106,31 @@ Item {
         root.library.revision
         return root.library.rowAt(index)
       }
-      readonly property bool isPlaying: track !== null && track.uri === root.playingUri
+      // "" for a track, otherwise "heading" or "album".
+      readonly property string kind: track !== null && track.kind !== undefined ? track.kind : ""
+      readonly property bool isPlaying: track !== null && kind === "" && track.uri === root.playingUri
       readonly property bool cursor: ListView.isCurrentItem && root.focused
       readonly property color ink: isPlaying ? Theme.accent
-        : (track && !track.available ? Theme.muted : Theme.foreground)
+        : (track && kind === "" && !track.available ? Theme.muted : Theme.foreground)
 
       width: list.width
       height: Theme.spacing.rowHeight
-      color: cursor ? Theme.selectedFill : (hover.containsMouse ? Theme.hoverFill : "transparent")
+      color: cursor ? Theme.selectedFill
+        : (hover.containsMouse && kind !== "heading" ? Theme.hoverFill : "transparent")
+
+      // A section label inside an artist page.
+      Text {
+        visible: row.kind === "heading"
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.spacing.md
+        x: row.pad
+        textFormat: Text.PlainText
+        text: row.track ? String(row.track.title).toUpperCase() : ""
+        color: Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.caption
+        font.letterSpacing: 1
+      }
 
       readonly property real pad: Theme.spacing.huge
       readonly property real numberWidth: Theme.space(44)
@@ -126,8 +142,9 @@ Item {
         x: row.pad
         width: row.numberWidth
         textFormat: Text.PlainText
-        // nf-md-volume_high marks the playing row.
-        text: row.isPlaying ? "󰕾" : String(row.index + 1)
+        visible: row.kind !== "heading"
+        // nf-md-volume_high marks the playing row, nf-md-album an album.
+        text: row.isPlaying ? "󰕾" : (row.kind === "album" ? "󰀥" : String(row.index + 1))
         color: row.isPlaying ? Theme.accent : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
@@ -145,7 +162,7 @@ Item {
       }
 
       Text {
-        visible: row.track !== null
+        visible: row.track !== null && row.kind !== "heading"
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth
         width: row.flexible * 0.45
@@ -157,31 +174,34 @@ Item {
         font.pixelSize: Theme.font.body
       }
       Text {
-        visible: row.track !== null
+        visible: row.track !== null && row.kind !== "heading"
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth + row.flexible * 0.45 + Theme.spacing.xxl
         width: row.flexible * 0.3
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        text: row.track ? row.track.artists.join(", ") : ""
+        text: !row.track ? "" : (row.kind === "album" ? String(row.track.year)
+          : (row.kind === "" ? row.track.artists.join(", ") : ""))
         color: Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
       }
       Text {
-        visible: row.track !== null
+        visible: row.track !== null && row.kind !== "heading"
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth + row.flexible * 0.75 + Theme.spacing.xxl * 2
         width: row.flexible * 0.25
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        text: row.track ? row.track.album : ""
+        text: !row.track ? "" : (row.kind === "album"
+          ? row.track.tracks + (row.track.tracks === 1 ? " track" : " tracks")
+          : (row.kind === "" ? row.track.album : ""))
         color: Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
       }
       Text {
-        visible: row.track !== null && row.track.available
+        visible: row.track !== null && row.kind === "" && row.track.available
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: row.pad

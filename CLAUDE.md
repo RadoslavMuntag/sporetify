@@ -309,7 +309,15 @@ Things that bite:
   plugin's files, which only resolve inside omarchy-shell. Harmless.
 - `hyprctl clients` reports logical pixels; multiply by the monitor scale
   before cropping a `grim` screenshot.
-- Drive the UI in tests with `wtype` (`wtype j`, `wtype -k Return`).
+- Drive the app in tests over its IPC target, not with injected keys:
+  `qs ipc --pid <pid> call sporetify.app act <action>` and `... describe`.
+  It needs no focus and works with the screen off. `grim` hangs when the
+  display is off, so check `hyprctl monitors -j | jq '.[].dpmsStatus'` first.
+- To test without touching the installed daemon, run a second one on another
+  socket and start the app with `SPORETIFY_SOCKET=<path> qs -p App.qml`. It
+  is silent as long as nothing is played on it.
+- Quickshell reloads a running app when its QML files change, which resets
+  the app's state.
 - **Plugin hot reload is not reliable for this plugin.** The shell keeps a
   running service across reloads, and edited widget files were observed to
   keep their old contents. After changing any plugin QML, run

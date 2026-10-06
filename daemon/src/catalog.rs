@@ -3,7 +3,7 @@
 //! id), so no client id of our own is needed.
 //!
 //! Track metadata never changes, so it is cached on disk for good
-//! (`$XDG_CACHE_HOME/sporetify/tracks.json`) and fetched at most once per
+//! (`$XDG_CACHE_HOME/sporetify/tracks.v2.json`) and fetched at most once per
 //! track, one at a time with bounded concurrency. Lists are cached in memory.
 //!
 //! Search runs over what is cached. Spotify's own search is not reachable
@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use futures_util::stream::{self, StreamExt};
 use librespot_core::{Session, SpotifyUri};
-use librespot_metadata::{Metadata, Playlist, Track};
+use librespot_metadata::{Album, Artist, Metadata, Playlist, Track};
 use librespot_protocol::playlist4_external::SelectedListContent;
 use protobuf::Message;
 use serde::{Deserialize, Serialize};
@@ -38,6 +38,23 @@ pub struct TrackRow {
     pub duration_ms: u64,
     /// False for entries that cannot be shown or played (removed, regional, not a track).
     pub available: bool,
+    /// Parallel to `artists`, for navigating to an artist.
+    #[serde(default)]
+    pub artist_uris: Vec<String>,
+    #[serde(default)]
+    pub album_uri: String,
+}
+
+/// What an album row needs: enough to list it without its tracks.
+#[derive(Debug, Clone, Serialize)]
+pub struct AlbumHeader {
+    pub uri: String,
+    pub name: String,
+    pub artists: Vec<String>,
+    pub year: i32,
+    /// "album", "single", "ep" or "compilation".
+    pub kind: String,
+    pub tracks: usize,
 }
 
 struct List {
@@ -48,6 +65,7 @@ struct List {
 pub struct Catalog {
     lists: Mutex<HashMap<String, Arc<List>>>,
     tracks: Mutex<HashMap<String, TrackRow>>,
+    albums: Mutex<HashMap<String, AlbumHeader>>,
     /// Tracks fetched since the cache file was last written.
     unsaved: AtomicBool,
     indexing: AtomicBool,
@@ -60,6 +78,7 @@ impl Default for Catalog {
         Self {
             lists: Mutex::default(),
             tracks: Mutex::new(load_tracks()),
+            albums: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -72,7 +91,8 @@ fn tracks_path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
-    Some(base.join("sporetify/tracks.json"))
+    // v2: rows carry artist and album uris.
+    Some(base.join("sporetify/tracks.v2.json"))
 }
 
 fn load_tracks() -> HashMap<String, TrackRow> {
@@ -256,6 +276,12 @@ impl Catalog {
         }
         let list = if uri.ends_with(":collection") {
             self.liked_songs(session, uri).await?
+        } else if uri.starts_with("spotify:album:") {
+            let (album, uris) = self.fetch_album(session, uri).await?;
+            List { name: album.name, uris }
+        } else if uri.starts_with("spotify:artist:") {
+            let artist = fetch_artist(session, uri).await?;
+            List { name: artist.name.clone(), uris: top_tracks(session, &artist) }
         } else {
             let id = SpotifyUri::from_uri(uri).map_err(|_| OpError::bad_request(format!("not a playlist: '{uri}'")))?;
             let playlist = Playlist::get(session, &id).await.map_err(|e| upstream("the playlist", e))?;
@@ -264,6 +290,97 @@ impl Catalog {
         let list = Arc::new(list);
         self.lists.lock().expect("lists lock").insert(uri.to_owned(), list.clone());
         Ok(list)
+    }
+
+    async fn fetch_album(&self, session: &Session, uri: &str) -> Result<(AlbumHeader, Vec<String>), OpError> {
+        let id = SpotifyUri::from_uri(uri).map_err(|_| OpError::bad_request(format!("not an album: '{uri}'")))?;
+        let album = Album::get(session, &id).await.map_err(|e| upstream("the album", e))?;
+        let uris: Vec<String> = album.tracks().filter_map(|t| t.to_uri().ok()).collect();
+        let header = AlbumHeader {
+            uri: uri.to_owned(),
+            name: album.name.clone(),
+            artists: album.artists.iter().map(|a| a.name.clone()).collect(),
+            year: album.date.as_utc().year(),
+            kind: format!("{:?}", album.album_type).to_lowercase(),
+            tracks: uris.len(),
+        };
+        self.albums.lock().expect("albums lock").insert(uri.to_owned(), header.clone());
+        Ok((header, uris))
+    }
+
+    /// An album with all of its tracks.
+    pub async fn album(&self, session: &Session, uri: &str) -> OpResult {
+        let (header, uris) = self.fetch_album(session, uri).await?;
+        self.lists
+            .lock()
+            .expect("lists lock")
+            .insert(uri.to_owned(), Arc::new(List { name: header.name.clone(), uris: uris.clone() }));
+        let rows = self.rows(session, uris, LOOKUPS_IN_FLIGHT).await;
+        Ok(json!({ "album": header, "items": rows }))
+    }
+
+    async fn album_header(&self, session: &Session, uri: String) -> Option<AlbumHeader> {
+        if let Some(header) = self.albums.lock().expect("albums lock").get(&uri) {
+            return Some(header.clone());
+        }
+        self.fetch_album(session, &uri).await.ok().map(|(header, _)| header)
+    }
+
+    /// An artist: their most played tracks and their releases.
+    pub async fn artist(&self, session: &Session, uri: &str) -> OpResult {
+        let artist = fetch_artist(session, uri).await?;
+        let top = top_tracks(session, &artist);
+        self.lists
+            .lock()
+            .expect("lists lock")
+            .insert(uri.to_owned(), Arc::new(List { name: artist.name.clone(), uris: top.clone() }));
+
+        let releases = |uris: Vec<String>| async move {
+            let mut headers: Vec<AlbumHeader> = stream::iter(uris)
+                .map(|album_uri| self.album_header(session, album_uri))
+                .buffered(LOOKUPS_IN_FLIGHT)
+                .filter_map(|header| async move { header })
+                .collect()
+                .await;
+            headers.sort_by(|a, b| b.year.cmp(&a.year).then_with(|| a.name.cmp(&b.name)));
+            headers
+        };
+        let take = |uris: Vec<&SpotifyUri>| -> Vec<String> {
+            uris.into_iter().filter_map(|u| u.to_uri().ok()).take(MAX_RELEASES).collect()
+        };
+        let albums = releases(take(artist.albums_current().collect())).await;
+        let singles = releases(take(artist.singles_current().collect())).await;
+        let rows = self.rows(session, top, LOOKUPS_IN_FLIGHT).await;
+
+        Ok(json!({
+            "artist": { "uri": uri, "name": artist.name },
+            "top_tracks": rows,
+            "albums": albums,
+            "singles": singles,
+        }))
+    }
+
+    /// One track's row, for navigating from a track the view has no row for.
+    pub async fn track_row(&self, session: &Session, uri: &str) -> OpResult {
+        let row = self.track(session, uri.to_owned()).await;
+        self.flush();
+        Ok(json!({ "track": row }))
+    }
+
+    /// What plays after `current` in `context_uri`, in the list's own order.
+    pub async fn up_next(&self, session: &Session, context_uri: &str, current: &str, limit: usize) -> OpResult {
+        let list = self.list(session, context_uri, false).await?;
+        let position = list.uris.iter().position(|uri| uri == current);
+        let start = position.map(|index| index + 1).unwrap_or(0);
+        let upcoming: Vec<String> = list.uris.iter().skip(start).take(limit).cloned().collect();
+        let rows = self.rows(session, upcoming, LOOKUPS_IN_FLIGHT).await;
+        Ok(json!({
+            "context_uri": context_uri,
+            "context_name": list.name,
+            "position": position,
+            "total": list.uris.len(),
+            "items": rows,
+        }))
     }
 
     async fn liked_songs(&self, session: &Session, uri: &str) -> Result<List, OpError> {
@@ -301,6 +418,8 @@ impl Catalog {
                     uri: uri.clone(),
                     title: track.name,
                     artists: track.artists.iter().map(|a| a.name.clone()).collect(),
+                    artist_uris: track.artists.iter().filter_map(|a| a.id.to_uri().ok()).collect(),
+                    album_uri: track.album.id.to_uri().unwrap_or_default(),
                     album: track.album.name,
                     duration_ms: u64::try_from(track.duration).unwrap_or(0),
                     available: true,
@@ -318,9 +437,30 @@ impl Catalog {
                 album: String::new(),
                 duration_ms: 0,
                 available: false,
+                artist_uris: Vec::new(),
+                album_uri: String::new(),
             },
         }
     }
+}
+
+/// Albums and singles listed per artist.
+const MAX_RELEASES: usize = 30;
+const TOP_TRACKS: usize = 10;
+
+async fn fetch_artist(session: &Session, uri: &str) -> Result<Artist, OpError> {
+    let id = SpotifyUri::from_uri(uri).map_err(|_| OpError::bad_request(format!("not an artist: '{uri}'")))?;
+    Artist::get(session, &id).await.map_err(|e| upstream("the artist", e))
+}
+
+fn top_tracks(session: &Session, artist: &Artist) -> Vec<String> {
+    artist
+        .top_tracks
+        .for_country(&session.country())
+        .iter()
+        .filter_map(|track| track.to_uri().ok())
+        .take(TOP_TRACKS)
+        .collect()
 }
 
 pub fn page_args(args: &Value) -> (usize, usize) {

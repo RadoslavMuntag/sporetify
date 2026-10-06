@@ -49,7 +49,7 @@ FloatingWindow {
   function openSelected() {
     var item = sidebar.itemAt(sidebar.currentIndex)
     if (!item) return
-    library.open(item.uri, item.name)
+    library.go({ kind: "playlist", uri: item.uri, name: item.name }, tracks.currentIndex)
     pane = "list"
   }
 
@@ -73,7 +73,7 @@ FloatingWindow {
     searchOpen = true
     searchField.forceActiveFocus()
     searchField.selectAll()
-    if (!library.searching) library.search(searchField.text)
+    if (!library.searching) library.search(searchField.text, tracks.currentIndex)
   }
   // Back to the lists, keeping the results on screen.
   function leaveSearchField(toResults) {
@@ -82,10 +82,22 @@ FloatingWindow {
     keys.forceActiveFocus()
   }
 
+  property bool helpOpen: false
+
   function act(action) {
     var target = pane === "sidebar" ? sidebar : tracks
     switch (action) {
     case "search": openSearch(); return
+    case "help": helpOpen = true; return
+    case "back": library.back(tracks.currentIndex); pane = "list"; return
+    case "forward": library.forward(tracks.currentIndex); pane = "list"; return
+    case "queue": library.go({ kind: "queue" }, tracks.currentIndex); pane = "list"; return
+    case "artist":
+    case "album":
+      // From the sidebar there is no row under the cursor, so it means the playing track.
+      library.openRelated(action, pane === "list" ? tracks.currentIndex : -1)
+      pane = "list"
+      return
     case "creatures": prefs.creatures = !prefs.creatures; return
     case "close": Qt.quit(); return
     case "paneNext": pane = pane === "sidebar" ? "list" : "sidebar"; return
@@ -97,7 +109,7 @@ FloatingWindow {
     case "bottom": target.jump(1e9); return
     case "activate":
       if (pane === "sidebar") openSelected()
-      else library.play(tracks.currentIndex)
+      else library.activate(tracks.currentIndex)
       return
     case "reload":
       loadedOnce = player.phase === "ready"
@@ -107,12 +119,52 @@ FloatingWindow {
     player.run(action)
   }
 
+  // Lets scripts and Hyprland binds drive the app:
+  //   qs ipc -p <repo>/App.qml call sporetify.app act queue
+  IpcHandler {
+    target: "sporetify.app"
+
+    // Run a Keymap action by id, as if its key had been pressed.
+    function act(action: string): string {
+      window.helpOpen = false
+      window.act(action)
+      return "ok"
+    }
+    function searchFor(text: string): string {
+      searchField.text = text
+      window.searchOpen = true
+      library.search(text, tracks.currentIndex)
+      window.pane = "list"
+      return "ok"
+    }
+    // What is on screen, as JSON. For tests.
+    function describe(): string {
+      var rows = []
+      for (var i = 0; i < Math.min(library.rows.length, 14); i++) {
+        var row = library.rows[i]
+        rows.push(!row ? null : (row.kind ? row.kind + ": " + row.title : row.title))
+      }
+      return JSON.stringify({
+        kind: library.kind, name: library.name, subtitle: library.subtitle, total: library.total,
+        state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
+        history: library.historyIndex + 1 + "/" + library.history.length,
+        phase: player.phase, help: window.helpOpen, rows: rows
+      })
+    }
+  }
+
   Item {
     id: keys
     anchors.fill: parent
     focus: true
 
     Keys.onPressed: function(event) {
+      // The help overlay swallows one key: whichever closes it.
+      if (window.helpOpen) {
+        window.helpOpen = false
+        event.accepted = true
+        return
+      }
       var action = Keymap.actionFor(event.key, event.text, window.scopes)
       if (!action) return
       event.accepted = true
@@ -162,7 +214,7 @@ FloatingWindow {
         selectedTextColor: Theme.foreground
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
-        onTextEdited: library.search(text)
+        onTextEdited: library.search(text, tracks.currentIndex)
         Keys.onEscapePressed: window.leaveSearchField(false)
         Keys.onReturnPressed: window.leaveSearchField(true)
         Keys.onDownPressed: window.leaveSearchField(true)
@@ -192,7 +244,7 @@ FloatingWindow {
       focused: window.pane === "list"
       onActivated: function(index) {
         window.pane = "list"
-        library.play(index)
+        library.activate(index)
       }
     }
 
@@ -236,6 +288,8 @@ FloatingWindow {
       player: player
       live: window.visible
       visuals: prefs.creatures
+      onAlbumRequested: { library.openRelated("album", -1); window.pane = "list" }
+      onArtistRequested: { library.openRelated("artist", -1); window.pane = "list" }
     }
 
     Rectangle {
@@ -253,11 +307,85 @@ FloatingWindow {
         x: Theme.spacing.huge
         width: parent.width - Theme.spacing.huge * 2
         scope: window.scopes
+        primaryOnly: true
         foreground: Theme.foreground
         muted: Theme.muted
         fontFamily: Theme.font.family
         fontSize: Theme.font.caption
         gap: Theme.spacing.xs
+      }
+    }
+
+    // ---- Every key, on demand. Any key or click closes it.
+    Rectangle {
+      id: help
+      visible: window.helpOpen
+      anchors.fill: parent
+      color: Theme.alpha(Theme.background, 0.92)
+
+      MouseArea { anchors.fill: parent; onClicked: window.helpOpen = false }
+
+      Column {
+        anchors.centerIn: parent
+        width: Math.min(parent.width - Theme.spacing.huge * 4, Theme.space(620))
+        spacing: Theme.spacing.xxl
+
+        Text {
+          textFormat: Text.PlainText
+          text: "Keyboard"
+          color: Theme.foreground
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.heading
+          font.bold: true
+        }
+
+        Grid {
+          width: parent.width
+          columns: 2
+          columnSpacing: Theme.spacing.huge * 2
+          rowSpacing: Theme.spacing.md
+
+          Repeater {
+            model: window.helpOpen ? Keymap.hints(window.scopes, false) : []
+
+            Row {
+              required property var modelData
+              width: (parent.width - parent.columnSpacing) / 2
+              spacing: Theme.spacing.xl
+
+              Item {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.space(44)
+                height: cap.implicitHeight
+                KeyCap {
+                  id: cap
+                  anchors.right: parent.right
+                  label: parent.parent.modelData.key
+                  foreground: Theme.foreground
+                  fontFamily: Theme.font.family
+                  fontSize: Theme.font.bodySmall
+                  padding: Theme.spacing.sm
+                }
+              }
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: parent.modelData.label
+                color: Theme.foreground
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.body
+              }
+            }
+          }
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          text: "Press any key to close"
+          color: Theme.muted
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.bodySmall
+        }
       }
     }
   }

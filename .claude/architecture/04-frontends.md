@@ -84,7 +84,7 @@ App.qml              entry point at the repo root (so app/ and common/ are in th
 app/
   Main.qml           window, panes, the one key handler, search bar
   Theme.qml          singleton: Omarchy theme tokens, live reload
-  Library.qml        model: playlists, the open collection's rows, search
+  Library.qml        model: playlists, the place on screen, its rows, history
   Sidebar.qml        Liked Songs and playlists
   TrackList.qml      header and the virtualised track list
   NowPlayingBar.qml  track, transport, seek, volume
@@ -95,14 +95,29 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Window:** one `FloatingWindow` with app id `sporetify`; Hyprland tiles and
   decorates it. Closing it quits the app; playback continues in the daemon.
 - **Panes:** `sidebar` and `list`; `Tab` switches. Each has its own cursor.
-- **Lists:** `TrackList` has a row for every track as soon as the total is
-  known. A row is a placeholder until its page arrives, at the same height,
-  so nothing moves when data lands. `Library.ensure` claims pages for the
-  visible rows plus one screen ahead through `Pages.js`.
-- **Search:** `/` opens a field above the list. Every keystroke calls
-  `library.search`, superseding the previous request. Results replace the
-  list; a result plays inside the list it was found in. `Enter` or `Down`
-  moves to the results, `Esc` leaves the field.
+- **Places:** the list shows one place at a time: a playlist, search
+  results, an album, an artist or up next. `Library.qml` turns each into a
+  flat list of rows (tracks, plus `heading` and `album` rows on an artist
+  page) and keeps a history: `Backspace` or `[` goes back, `]` forward, and
+  the cursor returns to where it was.
+- **Getting around:** `a` opens the artist and `d` the album of the row under
+  the cursor, or of the playing track when the cursor is not on a track;
+  clicking the title or artist in the now-playing bar does the same. `u`
+  opens up next. `Enter` on an album row opens it.
+- **Lists:** a playlist has a row for every track as soon as the total is
+  known; a row is a placeholder until its page arrives, at the same height.
+  `Library.ensure` claims pages for the visible rows plus one screen ahead
+  through `Pages.js`. Other places arrive whole.
+- **Search:** `/` opens a field above the list. The first keystroke opens a
+  search place; later ones update it without adding history. A result plays
+  inside the list it was found in.
+- **Now-playing bar:** creature, title, artist, shuffle and repeat (lit when
+  on), transport, seek, volume.
+- **Help:** `?` shows every key valid right now; the footer shows only the
+  ones marked `primary` in the keymap. Any key closes the overlay.
+- **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>` and
+  `describe` (what is on screen, as JSON). Tests drive the app through it,
+  which needs no key injection and works with the screen off.
 - **Theme:** `Theme.qml` watches the active theme's `colors.toml` and the
   user's `shell.toml` (for the font base size) and exposes `foreground`,
   `background`, `accent`, `muted`, `urgent`, fills, spacing and a type scale.
@@ -111,8 +126,8 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Faults:** signed out, offline or no daemon replaces the list with a
   one-line explanation and the key that fixes it.
 
-Planned: a router with back/forward, album and artist views, queue and
-devices views, a help overlay, artwork, playlist folders.
+Planned: a devices view, artwork, playlist folders, saving and removing
+tracks, a real queue.
 
 ## Keymap scopes
 
@@ -120,7 +135,7 @@ devices views, a help overlay, artwork, playlist folders.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `R` `v` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `a` `d` `u` `⌫` `[` `]` `R` `v` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `any` | always | `Esc` `q` close |
