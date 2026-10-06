@@ -74,6 +74,9 @@ pub struct Playback {
     loaded: AtomicBool,
     /// Volume and resume point, mirrored to disk.
     saved: Mutex<Saved>,
+    /// Tracks queued from here that have not started yet. Spotify's queue
+    /// cannot be read back, so this is the only record of it.
+    queued: Mutex<Vec<String>>,
 }
 
 impl Playback {
@@ -88,6 +91,7 @@ impl Playback {
             ready: tokio::sync::watch::Sender::new(false),
             loaded: AtomicBool::new(false),
             saved: Mutex::new(persist::load()),
+            queued: Mutex::new(Vec::new()),
         })
     }
 
@@ -239,6 +243,38 @@ impl Playback {
             saved.position_ms = state.position.position_ms + elapsed;
             saved.track = state.track;
         });
+    }
+
+    /// Ask Spotify to put a track at the front of this device's queue. The
+    /// request goes out the way another device's "add to queue" would, and
+    /// comes back to librespot as a remote command, because librespot has no
+    /// local call for it.
+    pub async fn queue_add(&self, uri: &str) -> Result<(), OpError> {
+        let session = self.connected_session()?;
+        let device = session.device_id().to_owned();
+        let body = serde_json::json!({
+            "command": {
+                "endpoint": "add_to_queue",
+                "track": { "uri": uri, "metadata": { "is_queued": "true" }, "provider": "queue" },
+                "logging_params": { "command_id": format!("{:032x}", now_ms() as u128 * 2_654_435_761) },
+            }
+        })
+        .to_string();
+        let mut headers = http::HeaderMap::new();
+        headers.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/json"));
+        let endpoint = format!("/connect-state/v1/player/command/from/{device}/to/{device}");
+        session
+            .spclient()
+            .request(&http::Method::POST, &endpoint, Some(headers), Some(body.as_bytes()))
+            .await
+            .map_err(|e| OpError::new(ErrorCode::Internal, format!("Spotify did not accept the queue request: {e}")))?;
+        self.queued.lock().expect("queued lock").push(uri.to_owned());
+        Ok(())
+    }
+
+    /// Tracks queued from here that are still waiting, oldest first.
+    pub fn queued(&self) -> Vec<String> {
+        self.queued.lock().expect("queued lock").clone()
     }
 
     fn unavailable(&self) -> OpError {
@@ -402,6 +438,7 @@ impl Playback {
         };
 
         self.remember_position();
+        self.queued.lock().expect("queued lock").clear();
         self.loaded.store(false, Ordering::Relaxed);
         self.ready.send_replace(false);
         if let Some(active) = self.active.lock().expect("active lock").take() {
@@ -414,9 +451,15 @@ impl Playback {
 
     fn apply(&self, event: PlayerEvent) {
         match &event {
-            PlayerEvent::TrackChanged { .. } | PlayerEvent::Loading { .. } => {
+            PlayerEvent::TrackChanged { audio_item } => {
                 self.loaded.store(true, Ordering::Relaxed);
+                // A queued track that starts playing has left the queue.
+                let mut queued = self.queued.lock().expect("queued lock");
+                if let Some(index) = queued.iter().position(|uri| *uri == audio_item.uri) {
+                    queued.remove(index);
+                }
             }
+            PlayerEvent::Loading { .. } => self.loaded.store(true, Ordering::Relaxed),
             // Another device took over, or the context ran out.
             PlayerEvent::Stopped { .. } => self.loaded.store(false, Ordering::Relaxed),
             _ => {}

@@ -13,23 +13,40 @@ use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::watch;
 
 const USAGE: &str = "\
-Usage: sporetifyd [--socket PATH] [--idle-secs N] [--debug-ops]
+Usage: sporetifyd [--socket PATH] [--idle-secs N] [--debug-ops] [--verbose]
 
   --socket PATH   Listen here when not started by systemd socket activation
                   (default: $XDG_RUNTIME_DIR/sporetify.sock)
   --idle-secs N   Exit after N seconds without a client; 0 never exits
                   (default: 900)
   --debug-ops     Enable debug.* ops used by the protocol tests
+  --verbose       Print librespot's debug log to stderr
 ";
 
+/// Prints librespot's own log lines to stderr. Off unless `--verbose`.
+struct StderrLog;
+
+impl log::Log for StderrLog {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.target().starts_with("librespot")
+    }
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            eprintln!("[{} {}] {}", record.level(), record.target(), record.args());
+        }
+    }
+    fn flush(&self) {}
+}
+
 struct Options {
+    verbose: bool,
     socket: Option<PathBuf>,
     idle: Duration,
     debug_ops: bool,
 }
 
 fn parse_args() -> Result<Options, String> {
-    let mut options = Options { socket: None, idle: Duration::from_secs(900), debug_ops: false };
+    let mut options = Options { verbose: false, socket: None, idle: Duration::from_secs(900), debug_ops: false };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -42,6 +59,7 @@ fn parse_args() -> Result<Options, String> {
                 options.idle = Duration::from_secs(secs);
             }
             "--debug-ops" => options.debug_ops = true,
+            "--verbose" => options.verbose = true,
             "--version" => {
                 println!("sporetifyd {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
@@ -114,6 +132,12 @@ async fn idle_exit(mut clients: watch::Receiver<usize>, idle: Duration, shared: 
 }
 
 async fn run(options: Options) -> io::Result<()> {
+    if options.verbose {
+        static LOGGER: StderrLog = StderrLog;
+        if log::set_logger(&LOGGER).is_ok() {
+            log::set_max_level(log::LevelFilter::Debug);
+        }
+    }
     let (listener, owned_path) = match activated_listener()? {
         Some(listener) => (listener, None),
         None => {

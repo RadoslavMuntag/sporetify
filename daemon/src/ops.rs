@@ -76,6 +76,20 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             let query = args.get("query").and_then(Value::as_str).unwrap_or("");
             return ctx.catalog.search(query, limit.clamp(1, 500));
         }
+        "library.save" | "library.unsave" => {
+            ctx.playback.settle().await;
+            let session = ctx.playback.connected_session()?;
+            return ctx.catalog.set_liked(&session, &text(&args, "uri")?, op == "library.save").await;
+        }
+        "library.is_saved" => {
+            ctx.playback.settle().await;
+            return ctx.catalog.is_liked(&ctx.playback.connected_session()?, &text(&args, "uri")?).await;
+        }
+        "player.queue_add" => {
+            ctx.playback.settle().await;
+            ctx.playback.queue_add(&text(&args, "uri")?).await?;
+            return Ok(json!({}));
+        }
         "library.track" => {
             ctx.playback.settle().await;
             return ctx.catalog.track_row(&ctx.playback.connected_session()?, &text(&args, "uri")?).await;
@@ -93,10 +107,26 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             let session = ctx.playback.connected_session()?;
             let (_, player) = ctx.shared.snapshot();
             let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50).clamp(1, 200) as usize;
+            // What was queued from here plays before the rest of the list.
+            let queued: Vec<Value> = ctx
+                .catalog
+                .decorated_rows(&session, ctx.playback.queued())
+                .await
+                .into_iter()
+                .map(|mut row| {
+                    row["queued"] = json!(true);
+                    row
+                })
+                .collect();
             let (Some(context), Some(track)) = (ctx.playback.context_uri(), player.track) else {
-                return Ok(json!({ "context_uri": null, "items": [], "total": 0, "shuffle": player.shuffle }));
+                return Ok(json!({
+                    "context_uri": null, "items": queued, "total": 0, "shuffle": player.shuffle,
+                }));
             };
             let mut next = ctx.catalog.up_next(&session, &context, &track.id, limit).await?;
+            if let Some(items) = next["items"].as_array_mut() {
+                items.splice(0..0, queued);
+            }
             next["shuffle"] = json!(player.shuffle);
             return Ok(next);
         }

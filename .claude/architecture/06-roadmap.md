@@ -77,7 +77,14 @@ Added on `feature/app-views`: history with back/forward, artist pages
 repeat buttons, a help overlay, and an IPC handle for driving the app.
 Verified over IPC only; the views were not looked at (the screen was off).
 
-Still to do: a devices view, a real queue (librespot does not expose one),
+Also added there: like and unlike (`f`, and a heart in the now-playing bar)
+and add to queue (`e`), both without a client id; hearts on liked rows; up
+next lists what was queued from here first. Verified over IPC on a silent
+second device: the like round trip against the real account, and the queue
+request being accepted and handled. Not yet heard: a queued track actually
+playing next.
+
+Still to do: a devices view, reading and reordering the queue,
 light-theme check, playlist folders (currently flattened), artwork. Launch
 time was measured at about 970 ms and is no longer a goal (decision D14).
 

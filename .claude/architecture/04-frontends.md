@@ -104,6 +104,12 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   the cursor, or of the playing track when the cursor is not on a track;
   clicking the title or artist in the now-playing bar does the same. `u`
   opens up next. `Enter` on an album row opens it.
+- **Like and queue:** `f` likes or unlikes and `e` queues the track under
+  the cursor. In the list pane they act only on that row; on a heading or
+  album row they say so instead of acting on something else. From the
+  sidebar pane, and from the heart in the now-playing bar, they act on the
+  playing track. A like shows at once and is put back if Spotify refuses. A
+  one-line toast names the track that was affected.
 - **Lists:** a playlist has a row for every track as soon as the total is
   known; a row is a placeholder until its page arrives, at the same height.
   `Library.ensure` claims pages for the visible rows plus one screen ahead
@@ -116,7 +122,8 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Help:** `?` shows every key valid right now; the footer shows only the
   ones marked `primary` in the keymap. Any key closes the overlay.
 - **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>` and
-  `describe` (what is on screen, as JSON). Tests drive the app through it,
+  `describe` (what is on screen, as JSON, including the `subject` that like
+  and queue would act on). Tests drive the app through it,
   which needs no key injection and works with the screen off.
 - **Theme:** `Theme.qml` watches the active theme's `colors.toml` and the
   user's `shell.toml` (for the font base size) and exposes `foreground`,
@@ -126,8 +133,7 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Faults:** signed out, offline or no daemon replaces the list with a
   one-line explanation and the key that fixes it.
 
-Planned: a devices view, artwork, playlist folders, saving and removing
-tracks, a real queue.
+Planned: a devices view, artwork, playlist folders, reordering the queue.
 
 ## Keymap scopes
 
@@ -135,7 +141,7 @@ tracks, a real queue.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `a` `d` `u` `⌫` `[` `]` `R` `v` `?` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `any` | always | `Esc` `q` close |

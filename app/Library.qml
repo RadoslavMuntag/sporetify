@@ -48,6 +48,11 @@ Item {
   property int restoreCursor: -1
   signal cursorRestoreRequested(int index)
 
+  // Whether the playing track is in Liked Songs.
+  property bool playingLiked: false
+  // Something worth telling the user once ("Added to queue", a failure).
+  signal notice(string text, bool isError)
+
   property var pages: Pages.create(pageSize)
   // Requests of the current place, cancelled when another one opens.
   property var inFlight: []
@@ -225,7 +230,7 @@ Item {
       rows = data.items
       total = rows.length
       if (!data.context_uri) {
-        subtitle = "Nothing has been played from this app yet"
+        subtitle = total > 0 ? "Queued from here" : "Nothing has been played from this app yet"
       } else {
         // Remembered so a row here plays inside the same list.
         uri = data.context_uri
@@ -331,6 +336,100 @@ Item {
       go({ kind: "album", uri: row.album_uri, name: row.album }, cursor)
   }
 
+  // ---- Liking and queueing
+
+  // The track that like and queue act on. `index` is the cursor row when
+  // the list has focus: it must be a track, there is no falling back to
+  // something else the user is not looking at. `index` -1 (the sidebar has
+  // focus, or the now-playing heart was clicked) means the playing track.
+  // Returns { uri, title, liked, playing } or null.
+  function subject(index) {
+    if (index < 0) {
+      return player.track
+        ? { uri: player.track.id, title: player.track.title, liked: playingLiked, playing: true } : null
+    }
+    var row = rowAt(index)
+    if (isTrack(row) && row.available) return { uri: row.uri, title: row.title, liked: row.liked === true, playing: false }
+    return null
+  }
+
+  function subjectOrExplain(index) {
+    var track = subject(index)
+    if (!track) notice(index < 0 ? "Nothing is playing" : "Move to a track first", true)
+    return track
+  }
+
+  // Show a row's new liked state. Rows are replaced, not edited, so the
+  // delegates notice.
+  function markLiked(uri, liked) {
+    var changed = false
+    var next = rows.slice()
+    for (var i = 0; i < next.length; i++) {
+      if (next[i] && next[i].uri === uri && next[i].kind === undefined && next[i].liked !== liked) {
+        var copy = {}
+        for (var key in next[i]) copy[key] = next[i][key]
+        copy.liked = liked
+        next[i] = copy
+        changed = true
+      }
+    }
+    if (changed) {
+      rows = next
+      revision++
+    }
+    if (player.track && player.track.id === uri) playingLiked = liked
+  }
+
+  function toggleLike(index) {
+    var track = subjectOrExplain(index)
+    if (!track) return
+    var want = !track.liked
+    // Shown at once; put back if Spotify refuses.
+    markLiked(track.uri, want)
+    player.request(want ? "library.save" : "library.unsave", { uri: track.uri }, {
+      deadline: 5000,
+      onDone: function(result) {
+        if (result.ok) {
+          root.notice((want ? "Liked " : "Removed from Liked Songs: ") + track.title, false)
+        } else {
+          root.markLiked(track.uri, !want)
+          root.notice(result.error.message, true)
+        }
+      }
+    })
+  }
+
+  function enqueue(index) {
+    var track = subjectOrExplain(index)
+    if (!track) return
+    player.request("player.queue_add", { uri: track.uri }, {
+      deadline: 5000,
+      onDone: function(result) {
+        if (!result.ok) {
+          root.notice(result.error.message, true)
+          return
+        }
+        root.notice("Queued " + track.title, false)
+        if (root.kind === "queue" && root.historyIndex >= 0) root.show(root.history[root.historyIndex], false)
+      }
+    })
+  }
+
+  function refreshPlayingLiked() {
+    if (!player.track) {
+      playingLiked = false
+      return
+    }
+    var uri = player.track.id
+    player.request("library.is_saved", { uri: uri }, {
+      deadline: 5000,
+      scope: "playing-liked",
+      onDone: function(result) {
+        if (result.ok && root.player.track && root.player.track.id === uri) root.playingLiked = result.data.liked
+      }
+    })
+  }
+
   // Up next follows the music. The track object is replaced on every player
   // event, so compare ids rather than reacting to each one.
   property string lastTrackId: ""
@@ -340,6 +439,7 @@ Item {
       var id = root.player.track ? root.player.track.id : ""
       if (id === root.lastTrackId) return
       root.lastTrackId = id
+      root.refreshPlayingLiked()
       if (root.kind === "queue" && root.historyIndex >= 0) root.show(root.history[root.historyIndex], false)
     }
   }

@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 futures-util = "0.3"
+http = "1"
 libc = "0.2"
 librespot-connect = "0.8"
 librespot-core = "0.8"
@@ -14,6 +15,7 @@ librespot-metadata = "0.8"
 librespot-oauth = "0.8"
 librespot-playback = { version = "0.8", default-features = false, features = ["pulseaudio-backend", "native-tls"] }
 librespot-protocol = "0.8"
+log = "0.4"
 mpris-server = { version = "0.10.0", features = ["tokio"] }
 protobuf = "3"
 serde = { version = "1", features = ["derive"] }

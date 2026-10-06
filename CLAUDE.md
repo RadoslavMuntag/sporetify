@@ -334,6 +334,13 @@ Things that bite:
   `sporetifyd --socket /tmp/x.sock --debug-ops` (stop the service first).
   `debug.mercury` and `debug.spclient` make raw internal-API calls.
 - Never `pkill -f` a pattern that also appears in your own command line.
+- **Tests that write to the Spotify account need care.** Like, unlike and
+  queue change the owner's real library and queue. Before sending one, read
+  `describe`'s `subject` to confirm exactly which track it will hit, only
+  like a track that is not already liked, and undo it straight away. A track
+  can exist under several uris (the version in Liked Songs is often not the
+  version an artist page or the player reports), so "liked" for the playing
+  track is only a best guess.
 - **This machine's Sporetify is in daily use.** Before a test that plays,
   pauses, skips, changes volume, restarts the daemon or the shell, or closes
   the app window, check `player.get`; if something is playing, do not touch

@@ -16,6 +16,9 @@ Rectangle {
   // The user clicked the title (album) or the artist line.
   signal albumRequested()
   signal artistRequested()
+  // Whether the playing track is liked, and a request to flip it.
+  property bool liked: false
+  signal likeRequested()
 
   readonly property var track: player.track
   property real nowMs: Date.now()
@@ -121,6 +124,13 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Theme.spacing.lg
 
+        // nf-md-heart / nf-md-heart_outline for the playing track.
+        IconButton {
+          icon: root.liked ? "󰋑" : "󰋕"
+          enabled: root.track !== null
+          tint: root.liked ? Theme.accent : Theme.muted
+          onClicked: root.likeRequested()
+        }
         // nf-md-shuffle_variant; lit when on.
         IconButton {
           icon: "󰒟"
