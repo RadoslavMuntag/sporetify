@@ -28,6 +28,9 @@ pub struct Track {
     pub album: String,
     pub duration_ms: u64,
     pub art_url: Option<String>,
+    /// The cover as a local file, once it has been fetched.
+    #[serde(default)]
+    pub art_path: Option<String>,
 }
 
 /// Playback position as a point in time, so clients can interpolate locally.

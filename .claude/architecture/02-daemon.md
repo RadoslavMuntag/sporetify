@@ -19,13 +19,13 @@ Built:
 | `player` | librespot session, Spotify Connect device, commands, player events to state |
 | `catalog` | Playlists, track lists, track metadata, library search (session internal API) |
 | `persist` | Volume and resume point on disk |
+| `art` | Cover images fetched once and kept as files |
 | `mpris` | MPRIS server mirroring `state`, calling the same commands as the socket |
 
 Planned, not built:
 
 | Module | Responsibility |
 | --- | --- |
-| `artwork` | Fetch and cache cover images as files, extract a dominant colour |
 | `viz` | Band energies and beat pulses from the playback path, for subscribers only |
 | `remote` | Player state when another Connect device is the active one |
 | `api` | Optional public Web API client, only with a user-supplied client id |
@@ -92,15 +92,27 @@ Lines longer than 64 KiB end the connection.
 - Everything goes through the session's internal API (`spclient` and
   `librespot-metadata`). The public Web API answers 429 for the built-in
   client id and is not used.
-- Playlists: the rootlist, with Liked Songs added in front. Folder markers
-  are skipped, so folders are flattened.
+- Sidebar: the rootlist, with Liked Songs added in front. Folders are
+  entries of their own (`kind: "folder"`); every entry carries the `depth`
+  of the folders it sits in.
 - Track lists: playlist contents, or the collection context for Liked Songs.
-  Held in memory for the daemon's lifetime.
+- Saved for offline use in `$XDG_CACHE_HOME/sporetify/library.json`: the
+  sidebar as last fetched and every list that has been loaded. Without a
+  session `library.playlists` and `library.tracks` answer from it (`stale:
+  true`), with placeholder rows for tracks whose metadata was never cached.
 - Track metadata: one lookup per track, bounded concurrency (8 for a page a
   view asked for), cached on disk for good in
   `$XDG_CACHE_HOME/sporetify/tracks.json`, written atomically.
 - Indexing: the first library request starts a background pass over Liked
-  Songs (20 at a time, 3 in flight, retries with backoff) so search covers them.
+  Songs and then every playlist (20 tracks at a time, 3 in flight, retries
+  with backoff), so search covers the whole library and all of it can be
+  shown offline. Entries that can never be looked up (episodes, local
+  files) get fewer retries and do not hold the index open.
+- Covers: `art` downloads an image from Spotify's image hosts once, into
+  `$XDG_CACHE_HOME/sporetify/art/`, and hands out the file path. The playing
+  track's cover is fetched on every track change and added to the state as
+  `track.art_path`; `art.get` does the same for any cover address (album
+  and artist pages carry `art_url`). Nothing is evicted yet.
 - Library search: `library.search` matches every word of the query against
   title, artists and album of cached tracks in known lists. It never hits
   the network.
@@ -137,7 +149,7 @@ unless something is playing. systemd restarts it on the next connection.
 
 | Situation | Daemon behaviour |
 | --- | --- |
-| No network at start | `status: offline`, retry with backoff |
+| No network at start | `status: offline`, retry with backoff; library ops answer from disk |
 | Stored sign-in rejected | Token removed, `status: signed_out` |
 | Account without Premium | `status: no_premium`; playback ops return `no_premium` |
 | Session drops | State reset to the remembered track, `offline`, reconnect |
@@ -158,3 +170,4 @@ Not handled yet: another device taking over is not reported to clients.
   testing first: `persist` round trip, `catalog` search matching, `player`
   state transitions from events.
 - Run a second daemon for experiments with `--socket <path> --debug-ops`.
+  `--no-connect` keeps it offline, to test what works from the saved library.

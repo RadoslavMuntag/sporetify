@@ -425,6 +425,8 @@ impl Playback {
         });
         self.shared.set_status(Status::Ready);
         self.ready.send_replace(true);
+        // The remembered track's cover, so it shows before anything plays.
+        self.fetch_art();
 
         let end = loop {
             tokio::select! {
@@ -464,6 +466,7 @@ impl Playback {
             PlayerEvent::Stopped { .. } => self.loaded.store(false, Ordering::Relaxed),
             _ => {}
         }
+        let track_changed = matches!(event, PlayerEvent::TrackChanged { .. });
         let worth_saving = matches!(
             event,
             PlayerEvent::TrackChanged { .. }
@@ -472,6 +475,9 @@ impl Playback {
                 | PlayerEvent::Seeked { .. }
         );
         self.apply_to_state(event);
+        if track_changed {
+            self.fetch_art();
+        }
         if worth_saving {
             let (_, state) = self.shared.snapshot();
             self.remember(|saved| {
@@ -482,6 +488,27 @@ impl Playback {
                 }
             });
         }
+    }
+
+    /// Fetch the current track's cover in the background and add its path to
+    /// the state when it arrives, unless the track has changed by then.
+    fn fetch_art(&self) {
+        let (_, state) = self.shared.snapshot();
+        let Some(track) = state.track else { return };
+        let Some(url) = track.art_url.clone() else { return };
+        let Ok(session) = self.connected_session() else { return };
+        let shared = self.shared.clone();
+        tokio::spawn(async move {
+            let Some(path) = crate::art::fetch(&session, &url).await else { return };
+            let path = path.to_string_lossy().into_owned();
+            shared.update_player(|state| {
+                if let Some(current) = state.track.as_mut() {
+                    if current.id == track.id {
+                        current.art_path = Some(path);
+                    }
+                }
+            });
+        });
     }
 
     fn apply_to_state(&self, event: PlayerEvent) {
@@ -504,6 +531,8 @@ impl Playback {
                     album,
                     duration_ms: u64::from(audio_item.duration_ms),
                     art_url: audio_item.covers.iter().max_by_key(|c| c.width).map(|c| c.url.clone()),
+                    // Filled in by `fetch_art` once the file is there.
+                    art_path: None,
                 });
             }
             PlayerEvent::Playing { position_ms, .. } => {

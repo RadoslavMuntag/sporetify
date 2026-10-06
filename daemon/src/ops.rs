@@ -65,11 +65,17 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             return Ok(json!({}));
         }
 
+        // The library ops answer from what was saved when Spotify cannot
+        // be reached, so the app can be browsed offline.
         "library.playlists" => {
             ctx.playback.settle().await;
-            let session = ctx.playback.connected_session()?;
-            ctx.catalog.index_in_background(&session);
-            return ctx.catalog.playlists(&session).await;
+            let session = ctx.playback.connected_session().ok();
+            let result = ctx.catalog.playlists(session.as_ref()).await;
+            if let Some(session) = &session {
+                // After the sidebar is known, so the index covers every playlist.
+                ctx.catalog.index_in_background(session);
+            }
+            return result;
         }
         "search" => {
             let query = text(&args, "query")?;
@@ -99,6 +105,21 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
         "library.track" => {
             ctx.playback.settle().await;
             return ctx.catalog.track_row(&ctx.playback.connected_session()?, &text(&args, "uri")?).await;
+        }
+        "art.get" => {
+            ctx.playback.settle().await;
+            let url = text(&args, "url")?;
+            let session = ctx.playback.connected_session().ok();
+            // Offline, a cover fetched earlier is still there.
+            let path = match (&session, crate::art::path_for(&url)) {
+                (_, None) => return Err(OpError::bad_request("not a Spotify image address")),
+                (Some(session), _) => crate::art::fetch(session, &url).await,
+                (None, Some(path)) => path.exists().then_some(path),
+            };
+            return match path {
+                Some(path) => Ok(json!({ "path": path.to_string_lossy() })),
+                None => Err(OpError::new(crate::proto::ErrorCode::Offline, "the cover could not be fetched")),
+            };
         }
         "browse.album" => {
             ctx.playback.settle().await;
@@ -141,7 +162,8 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             let (offset, limit) = catalog::page_args(&args);
             let refresh = args.get("refresh").and_then(Value::as_bool).unwrap_or(false);
             ctx.playback.settle().await;
-            return ctx.catalog.tracks(&ctx.playback.connected_session()?, &uri, offset, limit, refresh).await;
+            let session = ctx.playback.connected_session().ok();
+            return ctx.catalog.tracks(session.as_ref(), &uri, offset, limit, refresh).await;
         }
 
         "auth.begin" => {

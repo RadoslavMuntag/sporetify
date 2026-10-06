@@ -33,6 +33,8 @@ Item {
   property string searchMode: "spotify"
   property string searchFilter: "all"
   readonly property var searchFilters: ["all", "songs", "artists", "albums", "playlists"]
+  // Local file of the album cover or artist portrait for this place, or "".
+  property string artPath: ""
   // Line under the title: counts, or whatever explains the place.
   property string subtitle: ""
   property int total: 0
@@ -188,6 +190,7 @@ Item {
     }
     name = place.name
     subtitle = ""
+    artPath = ""
     total = 0
     rows = []
     revision++
@@ -221,6 +224,19 @@ Item {
           root.cursorRestoreRequested(root.restoreCursor)
           root.restoreCursor = -1
         }
+      }
+    })
+    inFlight.push(handle)
+  }
+
+  // Ask the daemon for a cover as a local file, for the place on screen.
+  function loadArt(url) {
+    if (!url) return
+    var forGeneration = generation
+    var handle = player.request("art.get", { url: url }, {
+      deadline: 8000,
+      onDone: function(result) {
+        if (result.ok && forGeneration === root.generation) root.artPath = result.data.path
       }
     })
     inFlight.push(handle)
@@ -326,7 +342,7 @@ Item {
     }
     var lists = Loadable.hasData(playlists) ? playlists.data : []
     for (var p = 0; p < lists.length; p++) {
-      if (matchesTerm(lists[p].name, term)) out.playlists.push({ uri: lists[p].uri, name: lists[p].name, owner: "" })
+      if (lists[p].kind !== "folder" && matchesTerm(lists[p].name, term)) out.playlists.push({ uri: lists[p].uri, name: lists[p].name, owner: "" })
     }
     return out
   }
@@ -382,6 +398,7 @@ Item {
   function fetchAlbum(albumUri) {
     load("browse.album", { uri: albumUri }, 8000, function(data) {
       name = data.album.name
+      loadArt(data.album.art_url)
       rows = data.items
       total = rows.length
       subtitle = (data.album.kind === "album" ? "Album" : data.album.kind.toUpperCase().charAt(0) + data.album.kind.slice(1))
@@ -392,6 +409,7 @@ Item {
   function fetchArtist(artistUri) {
     load("browse.artist", { uri: artistUri }, 10000, function(data) {
       name = data.artist.name
+      loadArt(data.artist.art_url)
       var out = []
       function albumRows(list) {
         for (var i = 0; i < list.length; i++) {

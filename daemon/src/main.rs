@@ -13,7 +13,7 @@ use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::watch;
 
 const USAGE: &str = "\
-Usage: sporetifyd [--socket PATH] [--idle-secs N] [--debug-ops] [--verbose]
+Usage: sporetifyd [--socket PATH] [--idle-secs N] [--debug-ops] [--verbose] [--no-connect]
 
   --socket PATH   Listen here when not started by systemd socket activation
                   (default: $XDG_RUNTIME_DIR/sporetify.sock)
@@ -21,6 +21,8 @@ Usage: sporetifyd [--socket PATH] [--idle-secs N] [--debug-ops] [--verbose]
                   (default: 900)
   --debug-ops     Enable debug.* ops used by the protocol tests
   --verbose       Print librespot's debug log to stderr
+  --no-connect    Never connect to Spotify and report offline; for testing
+                  what works from the saved library
 ";
 
 /// Prints librespot's own log lines to stderr. Off unless `--verbose`.
@@ -40,13 +42,14 @@ impl log::Log for StderrLog {
 
 struct Options {
     verbose: bool,
+    no_connect: bool,
     socket: Option<PathBuf>,
     idle: Duration,
     debug_ops: bool,
 }
 
 fn parse_args() -> Result<Options, String> {
-    let mut options = Options { verbose: false, socket: None, idle: Duration::from_secs(900), debug_ops: false };
+    let mut options = Options { verbose: false, no_connect: false, socket: None, idle: Duration::from_secs(900), debug_ops: false };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -60,6 +63,7 @@ fn parse_args() -> Result<Options, String> {
             }
             "--debug-ops" => options.debug_ops = true,
             "--verbose" => options.verbose = true,
+            "--no-connect" => options.no_connect = true,
             "--version" => {
                 println!("sporetifyd {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
@@ -158,7 +162,14 @@ async fn run(options: Options) -> io::Result<()> {
     let at_exit = playback.clone();
     let result = tokio::select! {
         served = ipc::serve(listener, shared.clone(), playback.clone(), config, clients_tx) => served,
-        _ = playback.run() => Ok(()),
+        _ = async {
+            if options.no_connect {
+                shared.set_status(Status::Offline);
+                std::future::pending::<()>().await
+            } else {
+                playback.run().await
+            }
+        } => Ok(()),
         _ = sporetifyd::mpris::run(shared.clone(), at_exit.clone()) => Ok(()),
         _ = idle_exit(clients_rx, options.idle, shared.clone()) => {
             eprintln!("sporetifyd: idle, exiting");

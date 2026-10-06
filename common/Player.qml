@@ -28,9 +28,11 @@ Item {
     }
   }
   // Which set of shortcuts applies; see common/Keymap.js.
+  // Offline is not a fault: the saved library can still be browsed.
   readonly property string scope: phase === "signed_out" ? "signedOut"
-    : (phase === "unavailable" || phase === "incompatible" || phase === "offline" || phase === "no_premium") ? "fault"
+    : (phase === "unavailable" || phase === "incompatible" || phase === "no_premium") ? "fault"
     : "player"
+  readonly property bool offline: phase === "offline"
 
   readonly property var player: client.player
   readonly property var track: player && player.track ? player.track : null
