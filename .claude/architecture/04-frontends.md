@@ -60,8 +60,8 @@ BarWidget.qml     icon and track title; owns the mini-player
 MiniPlayer.qml    KeyboardPanel: title, seek, transport, volume, keycaps, hint bar
 ```
 
-- **Bar widget:** left click toggles the mini-player, middle click plays or
-  pauses, the wheel changes volume. The tooltip names the state and, on a
+- **Bar widget:** left click toggles the mini-player, right click plays or
+  pauses, middle click opens the full app, the wheel changes volume. The tooltip names the state and, on a
   fault, the reason. On a vertical bar only the icon is shown.
 - **Service:** connected while the mini-player is open or music plays. It
   also watches MPRIS for the "Sporetify" player, so playback started by media

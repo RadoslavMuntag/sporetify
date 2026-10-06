@@ -30,7 +30,8 @@ login is kept in your desktop keyring.
 | --- | --- |
 | Full app | `sporetify`, the application menu, or `o` in the mini-player |
 | Mini-player | click the bar icon |
-| Play / pause | middle-click the bar icon, or your media keys |
+| Play / pause | right-click the bar icon, or your media keys |
+| Full app from the bar | middle-click the bar icon |
 | Volume | scroll on the bar icon |
 
 Each track has its own small creature, grown from the track itself, shown

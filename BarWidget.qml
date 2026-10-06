@@ -7,7 +7,8 @@ import "common"
 
 // Bar entry: an icon and, while something is loaded, the track title.
 //   left click    open the mini-player
-//   middle click  play / pause
+//   right click   play / pause
+//   middle click  open the full app
 //   wheel         volume
 BarWidget {
   id: root
@@ -72,6 +73,17 @@ BarWidget {
     return !all || all.length === 0 || all[0] === root
   }
 
+  // The icon and the title beside it answer clicks the same way.
+  function clicked(button) {
+    if (button === Qt.RightButton) {
+      if (service) service.run("playPause")
+    } else if (button === Qt.MiddleButton) {
+      if (service) service.openApp()
+    } else {
+      toggle()
+    }
+  }
+
   onPopupOpenChanged: if (service) service.surfaceOpen = popupOpen
 
   Connections {
@@ -101,8 +113,7 @@ BarWidget {
       tooltipText: root.tooltip
       onPressed: function(b) {
         if (!root.service) return
-        if (b === Qt.MiddleButton) root.service.run("playPause")
-        else root.toggle()
+        root.clicked(b)
       }
       onWheelMoved: function(delta) {
         if (root.service) root.service.run(delta > 0 ? "volumeUp" : "volumeDown")
@@ -125,11 +136,10 @@ BarWidget {
 
       MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         cursorShape: Qt.PointingHandCursor
         onClicked: function(mouse) {
-          if (mouse.button === Qt.MiddleButton && root.service) root.service.run("playPause")
-          else root.toggle()
+          root.clicked(mouse.button)
         }
       }
     }
