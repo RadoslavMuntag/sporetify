@@ -42,6 +42,7 @@ var actions = [
   { id: "pageUp",      keys: ["PgUp"],           label: "Page up",     scope: "browse" },
   { id: "reload",      keys: ["R"],              label: "Reload",      scope: "browse" },
   { id: "creatures",   keys: ["v"],              label: "Creatures",   scope: "browse" },
+  { id: "covers",      keys: ["c"],              label: "Covers in lists", scope: "browse" },
   { id: "help",        keys: ["?"],              label: "All keys",    scope: "browse", primary: true },
   { id: "signIn",      keys: ["Return"],         label: "Sign in",     scope: "signedOut", primary: true },
   { id: "retry",       keys: ["Return"],         label: "Retry",       scope: "fault", primary: true },

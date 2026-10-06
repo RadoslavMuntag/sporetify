@@ -60,6 +60,9 @@ Singleton {
     readonly property int xxl: root.space(12)
     readonly property int huge: root.space(18)
     readonly property int rowHeight: root.space(30)
+    // Rows of the track list: two lines of text beside a cover.
+    readonly property int trackRow: root.space(52)
+    readonly property int thumb: root.space(38)
     readonly property int controlHeight: root.space(28)
   }
 

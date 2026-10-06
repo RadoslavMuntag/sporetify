@@ -11,10 +11,12 @@ Item {
   required property var library
   required property var player
   property bool focused: false
+  // Show a cover on each row.
+  property bool covers: true
   property alias currentIndex: list.currentIndex
   signal activated(int index)
 
-  readonly property int rowsPerPage: Math.max(1, Math.floor(list.height / Theme.spacing.rowHeight) - 1)
+  readonly property int rowsPerPage: Math.max(1, Math.floor(list.height / Theme.spacing.trackRow) - 1)
   readonly property string playingUri: player.track ? player.track.id : ""
 
   function move(delta) {
@@ -27,8 +29,8 @@ Item {
   // Ask for the pages behind the rows on screen, plus one screen ahead.
   function ensureVisible() {
     if (list.count === 0) return
-    var first = Math.max(0, Math.floor(list.contentY / Theme.spacing.rowHeight))
-    var onScreen = Math.ceil(list.height / Theme.spacing.rowHeight)
+    var first = Math.max(0, Math.floor(list.contentY / Theme.spacing.trackRow))
+    var onScreen = Math.ceil(list.height / Theme.spacing.trackRow)
     library.ensure(first, first + onScreen * 2)
   }
 
@@ -126,23 +128,66 @@ Item {
         root.library.revision
         return root.library.rowAt(index)
       }
-      // "" for a track, otherwise "heading" or "album".
+      // "" for a track, otherwise "heading", "album", "artist" or "playlist".
       readonly property string kind: track !== null && track.kind !== undefined ? track.kind : ""
       readonly property bool isPlaying: track !== null && kind === "" && track.uri === root.playingUri
       readonly property bool cursor: ListView.isCurrentItem && root.focused
       readonly property color ink: isPlaying ? Theme.accent
         : (track && kind === "" && !track.available ? Theme.muted : Theme.foreground)
 
+      // ---- Layout: number, cover, two lines of text, album, mark, time.
+      readonly property real pad: Theme.spacing.huge
+      readonly property real numberWidth: Theme.space(36)
+      readonly property real timeWidth: Theme.space(52)
+      readonly property real markWidth: Theme.space(24)
+      // On an album page every row would show the same cover.
+      readonly property bool hasThumb: root.covers && kind !== "heading" && root.library.kind !== "album"
+      readonly property real thumbWidth: hasThumb ? Theme.spacing.thumb + Theme.spacing.xl : 0
+      readonly property real textX: pad + numberWidth + thumbWidth
+      readonly property real flexible: width - textX - pad - timeWidth - markWidth
+      // Rows that open something have no album column, so their text runs on.
+      readonly property real mainWidth: kind === "" ? flexible * 0.6 : flexible
+
+      // The second line: who it is by, or what kind of thing it is.
+      readonly property string detail: {
+        if (!track) return ""
+        switch (kind) {
+        case "": return track.artists.join(", ")
+        case "album":
+          var parts = ["Album"]
+          if (track.by) parts.push(track.by)
+          if (track.year) parts.push(String(track.year))
+          if (track.tracks !== undefined) parts.push(track.tracks + (track.tracks === 1 ? " track" : " tracks"))
+          return parts.join(" · ")
+        case "artist": return "Artist"
+        case "playlist": return track.by ? "Playlist · " + track.by : "Playlist"
+        }
+        return ""
+      }
+
+      // ---- Cover: shown from the daemon's file; asked for only once the
+      //      row has stayed on screen a moment, so fast scrolling asks for nothing.
+      readonly property string artUrl: hasThumb ? root.library.artAddress(track) : ""
+      readonly property string artPath: {
+        root.library.artRevision
+        return hasThumb ? root.library.artFor(track) : ""
+      }
+      Timer {
+        interval: 140
+        running: row.artUrl !== "" && row.artPath === ""
+        onTriggered: root.library.wantArt(row.artUrl)
+      }
+
       width: list.width
-      height: Theme.spacing.rowHeight
+      height: Theme.spacing.trackRow
       color: cursor ? Theme.selectedFill
         : (hover.containsMouse && kind !== "heading" ? Theme.hoverFill : "transparent")
 
-      // A section label inside an artist page.
+      // A section label inside an artist page or search results.
       Text {
         visible: row.kind === "heading"
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: Theme.spacing.md
+        anchors.bottomMargin: Theme.spacing.lg
         x: row.pad
         textFormat: Text.PlainText
         text: row.track ? String(row.track.title).toUpperCase() : ""
@@ -152,23 +197,17 @@ Item {
         font.letterSpacing: 1
       }
 
-      readonly property real pad: Theme.spacing.huge
-      readonly property real numberWidth: Theme.space(44)
-      readonly property real timeWidth: Theme.space(52)
-      readonly property real flexible: width - pad * 2 - numberWidth - timeWidth - Theme.spacing.xxl * 2
-
       Text {
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad
         width: row.numberWidth
         textFormat: Text.PlainText
         visible: row.kind !== "heading"
-        // nf-md-volume_high marks the playing row, nf-md-album an album.
+        // nf-md-volume_high marks the playing row; the others the kind of row.
         text: {
           if (row.isPlaying) return "󰕾"
           switch (row.kind) {
           case "album": return "󰀥"
-          // nf-md-account_music, nf-md-playlist_music
           case "artist": return "󰠃"
           case "playlist": return "󰲸"
           }
@@ -179,69 +218,88 @@ Item {
         font.pixelSize: Theme.font.bodySmall
       }
 
-      // Placeholder until the row's metadata arrives.
       Rectangle {
-        visible: row.track === null
+        visible: row.hasThumb
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth
-        width: row.flexible * (0.25 + (row.index % 5) * 0.06)
-        height: Theme.space(6)
-        radius: height / 2
+        width: Theme.spacing.thumb
+        height: Theme.spacing.thumb
+        // Shows through until the picture is there.
         color: Theme.hoverFill
+
+        Image {
+          anchors.fill: parent
+          visible: row.artPath !== ""
+          source: row.artPath !== "" ? "file://" + row.artPath : ""
+          sourceSize.width: Theme.spacing.thumb * 2
+          sourceSize.height: Theme.spacing.thumb * 2
+          fillMode: Image.PreserveAspectCrop
+          asynchronous: true
+        }
+      }
+
+      // Placeholder until the row's metadata arrives.
+      Column {
+        visible: row.track === null
+        anchors.verticalCenter: parent.verticalCenter
+        x: row.textX
+        spacing: Theme.spacing.lg
+        Rectangle {
+          width: row.flexible * (0.22 + (row.index % 5) * 0.05)
+          height: Theme.space(6)
+          radius: height / 2
+          color: Theme.hoverFill
+        }
+        Rectangle {
+          width: row.flexible * (0.14 + (row.index % 3) * 0.04)
+          height: Theme.space(5)
+          radius: height / 2
+          color: Theme.hoverFill
+        }
+      }
+
+      // Title over artists (or over what kind of thing the row is).
+      Column {
+        visible: !!row.track && row.kind !== "heading"
+        anchors.verticalCenter: parent.verticalCenter
+        x: row.textX
+        width: row.mainWidth - Theme.spacing.xxl
+        spacing: Theme.spacing.xs
+
+        Text {
+          width: parent.width
+          elide: Text.ElideRight
+          textFormat: Text.PlainText
+          text: row.track ? row.track.title : ""
+          color: row.ink
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.body
+        }
+        Text {
+          width: parent.width
+          visible: text !== ""
+          elide: Text.ElideRight
+          textFormat: Text.PlainText
+          text: row.detail
+          color: Theme.muted
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.bodySmall
+        }
       }
 
       Text {
-        visible: !!row.track && row.kind !== "heading"
+        visible: !!row.track && row.kind === ""
         anchors.verticalCenter: parent.verticalCenter
-        x: row.pad + row.numberWidth
-        width: row.flexible * 0.45
+        x: row.textX + row.flexible * 0.6
+        width: row.flexible * 0.4 - Theme.spacing.lg
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        text: row.track ? row.track.title : ""
-        color: row.ink
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.body
-      }
-      Text {
-        visible: !!row.track && row.kind !== "heading"
-        anchors.verticalCenter: parent.verticalCenter
-        x: row.pad + row.numberWidth + row.flexible * 0.45 + Theme.spacing.xxl
-        width: row.flexible * 0.3
-        elide: Text.ElideRight
-        textFormat: Text.PlainText
-        text: {
-          if (!row.track) return ""
-          switch (row.kind) {
-          case "": return row.track.artists.join(", ")
-          case "album": return row.track.by !== undefined ? row.track.by : String(row.track.year)
-          case "artist": return "Artist"
-          case "playlist": return row.track.by ? "by " + row.track.by : "Playlist"
-          }
-          return ""
-        }
+        text: row.track && row.kind === "" ? row.track.album : ""
         color: Theme.muted
         font.family: Theme.font.family
-        font.pixelSize: Theme.font.body
+        font.pixelSize: Theme.font.bodySmall
       }
-      Text {
-        visible: !!row.track && row.kind !== "heading"
-        anchors.verticalCenter: parent.verticalCenter
-        x: row.pad + row.numberWidth + row.flexible * 0.75 + Theme.spacing.xxl * 2
-        width: row.flexible * 0.25 - Theme.space(22)
-        elide: Text.ElideRight
-        textFormat: Text.PlainText
-        text: {
-          if (!row.track) return ""
-          if (row.kind === "") return row.track.album
-          if (row.kind !== "album") return ""
-          if (row.track.tracks !== undefined)
-            return row.track.tracks + (row.track.tracks === 1 ? " track" : " tracks")
-          return row.track.year ? String(row.track.year) : ""
-        }
-        color: Theme.muted
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.body
-      }
+
       // nf-md-heart on liked tracks, nf-md-playlist_plus on ones queued from here.
       Text {
         visible: !!row.track && row.kind === "" && (row.track.liked === true || row.track.queued === true)
