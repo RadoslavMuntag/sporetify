@@ -126,6 +126,11 @@ bin/sporetify        focus the window if it exists, otherwise start the app
     named by matching tracks; its playlists are matched by name.
   - A library song plays inside the list it was found in, a Spotify song
     inside its album.
+  - `Esc` cancels the search from the field or the results: the bar closes
+    and the last place that was not a search comes back.
+- **Leaving:** `Ctrl C` quits the app, as does closing the window. `Esc` and
+  `q` do not: in the app `Esc` only cancels a search. (In the mini-player,
+  a popup, `Esc` and `q` still close it.)
 - **Now-playing bar:** creature, title, artist, shuffle and repeat (lit when
   on), transport, seek, volume.
 - **Help:** `?` shows every key valid right now; the footer shows only the
@@ -154,14 +159,15 @@ Planned: a devices view, artwork, playlist folders, reordering the queue.
 | `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
-| `any` | always | `Esc` `q` close |
+| `popup` | mini-player | `Esc` `q` close |
+| `app` | app | `Esc` cancel search, `Ctrl C` quit |
 
 Keys held with Ctrl are separate keys (`Ctrl+f` in the table), so a chord
 never triggers the plain letter's action. Surfaces pass the event's
 modifiers to `actionFor`.
 
 A surface passes a list of scopes, most specific first; `actionFor` returns
-the first match and falls back to `any`. The hint bar is generated from the
+the first match. The hint bar is generated from the
 same list, so it shows exactly what a keypress would do. A test checks that
 scopes used together never bind the same key twice.
 

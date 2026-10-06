@@ -45,7 +45,11 @@ var actions = [
   { id: "help",        keys: ["?"],              label: "All keys",    scope: "browse", primary: true },
   { id: "signIn",      keys: ["Return"],         label: "Sign in",     scope: "signedOut", primary: true },
   { id: "retry",       keys: ["Return"],         label: "Retry",       scope: "fault", primary: true },
-  { id: "close",       keys: ["Esc", "q"],       label: "Close",       scope: "any", primary: true }
+  // A popup closes on Esc; the app window does not (Esc there backs out of
+  // a search), so the two have their own scopes.
+  { id: "close",       keys: ["Esc", "q"],       label: "Close",       scope: "popup", primary: true },
+  { id: "cancel",      keys: ["Esc"],            label: "Cancel search", scope: "app" },
+  { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",        scope: "app", primary: true }
 ]
 
 // Qt::Key values for the keys that have no printable character.

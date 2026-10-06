@@ -20,7 +20,7 @@ KeyboardPanel {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property string scope: service ? service.scope : "fault"
-  readonly property var scopes: scope === "player" ? ["mini", "player"] : [scope]
+  readonly property var scopes: scope === "player" ? ["mini", "player", "popup"] : [scope, "popup"]
   readonly property var track: service ? service.track : null
   readonly property bool playing: service ? service.playing : false
 

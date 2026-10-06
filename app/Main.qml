@@ -16,12 +16,12 @@ FloatingWindow {
   implicitWidth: Theme.space(1100)
   implicitHeight: Theme.space(720)
 
-  // Closing the window ends the app; the music lives in the daemon.
+  // Closing the window (or Ctrl+C) ends the app; the music lives in the daemon.
   onVisibleChanged: if (!visible) Qt.quit()
 
   // "sidebar" or "list"
   property string pane: "sidebar"
-  readonly property var scopes: player.scope === "player" ? ["browse", "player"] : [player.scope]
+  readonly property var scopes: player.scope === "player" ? ["browse", "player", "app"] : [player.scope, "app"]
 
   Player {
     id: player
@@ -79,10 +79,16 @@ FloatingWindow {
     }
     searchField.selectAll()
   }
-  // Back to the lists, keeping the results on screen.
-  function leaveSearchField(toResults) {
-    if (toResults) pane = "list"
-    else searchOpen = false
+  // Enter or Down in the field: on to the results.
+  function leaveSearchField() {
+    pane = "list"
+    keys.forceActiveFocus()
+  }
+  // Esc: close the search and return to what was on screen before it.
+  function cancelSearch() {
+    if (!searchOpen && !library.searching) return
+    searchOpen = false
+    library.leaveSearch(tracks.currentIndex)
     keys.forceActiveFocus()
   }
 
@@ -124,7 +130,8 @@ FloatingWindow {
       pane = "list"
       return
     case "creatures": prefs.creatures = !prefs.creatures; return
-    case "close": Qt.quit(); return
+    case "quit": Qt.quit(); return
+    case "cancel": cancelSearch(); return
     case "paneNext": pane = pane === "sidebar" ? "list" : "sidebar"; return
     case "down": target.move(1); return
     case "up": target.move(-1); return
@@ -182,7 +189,7 @@ FloatingWindow {
         filter: library.searching ? library.searchFilter : "", name: library.name, subtitle: library.subtitle, total: library.total,
         state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
         history: library.historyIndex + 1 + "/" + library.history.length,
-        phase: player.phase, help: window.helpOpen, notice: window.noticeText,
+        phase: player.phase, help: window.helpOpen, searchOpen: window.searchOpen, notice: window.noticeText,
         playingLiked: library.playingLiked, rows: rows,
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
@@ -271,9 +278,9 @@ FloatingWindow {
           font.family: Theme.font.family
           font.pixelSize: Theme.font.body
           onTextEdited: library.search(text, library.searchMode, tracks.currentIndex)
-          Keys.onEscapePressed: window.leaveSearchField(false)
-          Keys.onReturnPressed: window.leaveSearchField(true)
-          Keys.onDownPressed: window.leaveSearchField(true)
+          Keys.onEscapePressed: window.cancelSearch()
+          Keys.onReturnPressed: window.leaveSearchField()
+          Keys.onDownPressed: window.leaveSearchField()
           // Tab walks the result types instead of leaving the field.
           Keys.onTabPressed: library.cycleSearchFilter(1)
           Keys.onBacktabPressed: library.cycleSearchFilter(-1)
@@ -291,7 +298,7 @@ FloatingWindow {
           anchors.right: parent.right
           anchors.rightMargin: Theme.spacing.huge
           textFormat: Text.PlainText
-          text: searchField.activeFocus ? "⇥ type · ⏎ results · Esc close" : "/ Spotify · Ctrl F library · t type"
+          text: searchField.activeFocus ? "⇥ type · ⏎ results · Esc cancel" : "/ Spotify · Ctrl F library · t type · Esc cancel"
           color: Theme.muted
           font.family: Theme.font.family
           font.pixelSize: Theme.font.caption
