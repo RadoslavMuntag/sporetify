@@ -40,7 +40,8 @@ Every surface lists its shortcuts in a footer. The main ones:
 
 | Key | Action | Key | Action |
 | --- | --- | --- | --- |
-| `Space` | Play / pause | `/` | Search your library and Spotify |
+| `Space` | Play / pause | `/` | Search all of Spotify |
+| `Tab` (in search) | Songs / artists / albums / playlists | `Ctrl F` | Search your library |
 | `n` / `p` | Next / previous | `j` `k` / arrows | Move |
 | `+` / `-` | Volume | `Enter` | Play / open |
 | `m` | Mute | `Tab` | Switch pane |

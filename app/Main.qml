@@ -69,11 +69,15 @@ FloatingWindow {
   }
 
   property bool searchOpen: false
-  function openSearch() {
+  // Open the search field for "spotify" or "library". The text typed so far
+  // is kept when switching between the two.
+  function openSearch(mode) {
     searchOpen = true
     searchField.forceActiveFocus()
+    if (!library.searching || library.searchMode !== mode) {
+      library.search(searchField.text, mode, tracks.currentIndex)
+    }
     searchField.selectAll()
-    if (!library.searching) library.search(searchField.text, tracks.currentIndex)
   }
   // Back to the lists, keeping the results on screen.
   function leaveSearchField(toResults) {
@@ -104,7 +108,9 @@ FloatingWindow {
   function act(action) {
     var target = pane === "sidebar" ? sidebar : tracks
     switch (action) {
-    case "search": openSearch(); return
+    case "search": openSearch("spotify"); return
+    case "searchLibrary": openSearch("library"); return
+    case "searchType": if (library.searching) library.cycleSearchFilter(1); return
     case "help": helpOpen = true; return
     case "back": library.back(tracks.currentIndex); pane = "list"; return
     case "forward": library.forward(tracks.currentIndex); pane = "list"; return
@@ -149,12 +155,19 @@ FloatingWindow {
       window.act(action)
       return "ok"
     }
-    function searchFor(text: string): string {
+    function searchFor(text: string): string { return search(text, "spotify") }
+    function searchLibrary(text: string): string { return search(text, "library") }
+    function search(text: string, mode: string): string {
       searchField.text = text
       window.searchOpen = true
-      library.search(text, tracks.currentIndex)
+      library.search(text, mode, tracks.currentIndex)
       window.pane = "list"
       return "ok"
+    }
+    // all | songs | artists | albums | playlists
+    function searchType(filter: string): string {
+      library.setSearchFilter(filter)
+      return library.searchFilter
     }
     // What is on screen, as JSON. For tests.
     function describe(): string {
@@ -165,7 +178,8 @@ FloatingWindow {
           : (row.liked ? "♥ " : "") + (row.queued ? "+ " : "") + row.title))
       }
       return JSON.stringify({
-        kind: library.kind, name: library.name, subtitle: library.subtitle, total: library.total,
+        kind: library.kind, mode: library.searching ? library.searchMode : "",
+        filter: library.searching ? library.searchFilter : "", name: library.name, subtitle: library.subtitle, total: library.total,
         state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
         history: library.historyIndex + 1 + "/" + library.history.length,
         phase: player.phase, help: window.helpOpen, notice: window.noticeText,
@@ -188,7 +202,7 @@ FloatingWindow {
         event.accepted = true
         return
       }
-      var action = Keymap.actionFor(event.key, event.text, window.scopes)
+      var action = Keymap.actionFor(event.key, event.text, window.scopes, event.modifiers)
       if (!action) return
       event.accepted = true
       window.act(action)
@@ -204,54 +218,123 @@ FloatingWindow {
       onActivated: window.openSelected()
     }
 
+    // ---- Search: a field, and under it the kind of result to show.
     Rectangle {
       id: searchBar
       visible: window.searchOpen && player.scope === "player"
       anchors.top: parent.top
       anchors.left: sidebar.right
       anchors.right: parent.right
-      height: visible ? Theme.spacing.rowHeight + Theme.spacing.lg : 0
+      height: visible ? searchRow.height + chips.height + Theme.spacing.md : 0
       color: Theme.raised
 
-      Text {
-        id: searchIcon
-        anchors.verticalCenter: parent.verticalCenter
+      Item {
+        id: searchRow
+        width: parent.width
+        height: Theme.spacing.rowHeight + Theme.spacing.md
+
+        Text {
+          id: searchIcon
+          anchors.verticalCenter: parent.verticalCenter
+          x: Theme.spacing.huge
+          textFormat: Text.PlainText
+          // nf-md-magnify
+          text: "\uDB80\uDF49"
+          color: Theme.muted
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.icon
+        }
+        // Which search this is, since both share the field.
+        Text {
+          id: searchWhere
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.left: searchIcon.right
+          anchors.leftMargin: Theme.spacing.lg
+          textFormat: Text.PlainText
+          text: library.searchMode === "library" ? "Library" : "Spotify"
+          color: Theme.accent
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.bodySmall
+          font.bold: true
+        }
+        TextInput {
+          id: searchField
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.left: searchWhere.right
+          anchors.leftMargin: Theme.spacing.lg
+          anchors.right: searchHelp.left
+          anchors.rightMargin: Theme.spacing.lg
+          clip: true
+          color: Theme.foreground
+          selectionColor: Theme.selectedFill
+          selectedTextColor: Theme.foreground
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.body
+          onTextEdited: library.search(text, library.searchMode, tracks.currentIndex)
+          Keys.onEscapePressed: window.leaveSearchField(false)
+          Keys.onReturnPressed: window.leaveSearchField(true)
+          Keys.onDownPressed: window.leaveSearchField(true)
+          // Tab walks the result types instead of leaving the field.
+          Keys.onTabPressed: library.cycleSearchFilter(1)
+          Keys.onBacktabPressed: library.cycleSearchFilter(-1)
+          Keys.onPressed: function(event) {
+            // Switch between the two searches without leaving the field.
+            if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F) {
+              window.openSearch("library")
+              event.accepted = true
+            }
+          }
+        }
+        Text {
+          id: searchHelp
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.right: parent.right
+          anchors.rightMargin: Theme.spacing.huge
+          textFormat: Text.PlainText
+          text: searchField.activeFocus ? "⇥ type · ⏎ results · Esc close" : "/ Spotify · Ctrl F library · t type"
+          color: Theme.muted
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.caption
+        }
+      }
+
+      Row {
+        id: chips
+        anchors.top: searchRow.bottom
         x: Theme.spacing.huge
-        textFormat: Text.PlainText
-        // nf-md-magnify
-        text: "\uDB80\uDF49"
-        color: Theme.muted
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.icon
-      }
-      TextInput {
-        id: searchField
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: searchIcon.right
-        anchors.leftMargin: Theme.spacing.lg
-        anchors.right: searchHelp.left
-        anchors.rightMargin: Theme.spacing.lg
-        clip: true
-        color: Theme.foreground
-        selectionColor: Theme.selectedFill
-        selectedTextColor: Theme.foreground
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.body
-        onTextEdited: library.search(text, tracks.currentIndex)
-        Keys.onEscapePressed: window.leaveSearchField(false)
-        Keys.onReturnPressed: window.leaveSearchField(true)
-        Keys.onDownPressed: window.leaveSearchField(true)
-      }
-      Text {
-        id: searchHelp
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.right: parent.right
-        anchors.rightMargin: Theme.spacing.huge
-        textFormat: Text.PlainText
-        text: searchField.activeFocus ? "⏎ results · Esc close" : "/ edit"
-        color: Theme.muted
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.caption
+        spacing: Theme.spacing.md
+
+        Repeater {
+          model: library.searchFilters
+
+          Rectangle {
+            required property string modelData
+            readonly property bool current: library.searchFilter === modelData
+            width: chipText.implicitWidth + Theme.spacing.xl * 2
+            height: chipText.implicitHeight + Theme.spacing.sm * 2
+            radius: height / 2
+            color: current ? Theme.selectedFill : (chipArea.containsMouse ? Theme.hoverFill : "transparent")
+            border.width: 1
+            border.color: current ? Theme.accent : Theme.line
+
+            Text {
+              id: chipText
+              anchors.centerIn: parent
+              textFormat: Text.PlainText
+              text: parent.modelData.charAt(0).toUpperCase() + parent.modelData.slice(1)
+              color: parent.current ? Theme.accent : Theme.muted
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.caption
+            }
+            MouseArea {
+              id: chipArea
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: library.setSearchFilter(parent.modelData)
+            }
+          }
+        }
       }
     }
 

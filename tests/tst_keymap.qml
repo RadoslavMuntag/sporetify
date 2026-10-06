@@ -61,6 +61,17 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_E, "e", ["browse", "player"]), "enqueue")
   }
 
+  function test_ctrl_chords_are_their_own_keys() {
+    var scopes = ["browse", "player"]
+    compare(Keymap.actionFor(Qt.Key_F, "\u0006", scopes, Qt.ControlModifier), "searchLibrary")
+    // Ctrl+F must not also be "f" (like), and an unbound chord does nothing.
+    compare(Keymap.actionFor(Qt.Key_F, "f", scopes, Qt.NoModifier), "like")
+    compare(Keymap.actionFor(Qt.Key_N, "\u000e", scopes, Qt.ControlModifier), null)
+    compare(Keymap.actionFor(Qt.Key_Space, " ", scopes, Qt.ControlModifier), null)
+    compare(Keymap.keyLabel("searchLibrary"), "Ctrl F")
+    compare(Keymap.actionFor(Qt.Key_Slash, "/", scopes, Qt.NoModifier), "search")
+  }
+
   function test_unknown_keys_do_nothing() {
     compare(Keymap.actionFor(Qt.Key_F5, "", "player"), null)
     compare(Keymap.actionFor(Qt.Key_Z, "z", "player"), null)
