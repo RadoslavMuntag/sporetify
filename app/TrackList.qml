@@ -190,7 +190,7 @@ Item {
         visible: row.track !== null && row.kind !== "heading"
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth + row.flexible * 0.75 + Theme.spacing.xxl * 2
-        width: row.flexible * 0.25
+        width: row.flexible * 0.25 - Theme.space(22)
         elide: Text.ElideRight
         textFormat: Text.PlainText
         text: !row.track ? "" : (row.kind === "album"
@@ -200,6 +200,19 @@ Item {
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
       }
+      // nf-md-heart on liked tracks, nf-md-playlist_plus on ones queued from here.
+      Text {
+        visible: row.track !== null && row.kind === "" && (row.track.liked === true || row.track.queued === true)
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
+        anchors.rightMargin: row.pad + row.timeWidth
+        textFormat: Text.PlainText
+        text: row.track && row.track.queued === true ? "󰐒" : "󰋑"
+        color: Theme.accent
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.bodySmall
+      }
+
       Text {
         visible: row.track !== null && row.kind === "" && row.track.available
         anchors.verticalCenter: parent.verticalCenter

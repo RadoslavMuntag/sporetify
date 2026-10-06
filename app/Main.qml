@@ -84,6 +84,23 @@ FloatingWindow {
 
   property bool helpOpen: false
 
+  // One line of feedback for actions with no other visible effect.
+  property string noticeText: ""
+  property bool noticeIsError: false
+  Connections {
+    target: library
+    function onNotice(text, isError) {
+      window.noticeText = text
+      window.noticeIsError = isError
+      noticeTimer.restart()
+    }
+  }
+  Timer {
+    id: noticeTimer
+    interval: 2600
+    onTriggered: window.noticeText = ""
+  }
+
   function act(action) {
     var target = pane === "sidebar" ? sidebar : tracks
     switch (action) {
@@ -92,6 +109,8 @@ FloatingWindow {
     case "back": library.back(tracks.currentIndex); pane = "list"; return
     case "forward": library.forward(tracks.currentIndex); pane = "list"; return
     case "queue": library.go({ kind: "queue" }, tracks.currentIndex); pane = "list"; return
+    case "like": library.toggleLike(pane === "list" ? tracks.currentIndex : -1); return
+    case "enqueue": library.enqueue(pane === "list" ? tracks.currentIndex : -1); return
     case "artist":
     case "album":
       // From the sidebar there is no row under the cursor, so it means the playing track.
@@ -142,13 +161,17 @@ FloatingWindow {
       var rows = []
       for (var i = 0; i < Math.min(library.rows.length, 14); i++) {
         var row = library.rows[i]
-        rows.push(!row ? null : (row.kind ? row.kind + ": " + row.title : row.title))
+        rows.push(!row ? null : (row.kind ? row.kind + ": " + row.title
+          : (row.liked ? "♥ " : "") + (row.queued ? "+ " : "") + row.title))
       }
       return JSON.stringify({
         kind: library.kind, name: library.name, subtitle: library.subtitle, total: library.total,
         state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
         history: library.historyIndex + 1 + "/" + library.history.length,
-        phase: player.phase, help: window.helpOpen, rows: rows
+        phase: player.phase, help: window.helpOpen, notice: window.noticeText,
+        playingLiked: library.playingLiked, rows: rows,
+        // What `like` and `enqueue` would act on right now.
+        subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
       })
     }
   }
@@ -281,6 +304,35 @@ FloatingWindow {
       }
     }
 
+    // ---- Feedback toast, just above the now-playing bar
+    Rectangle {
+      visible: opacity > 0
+      opacity: window.noticeText !== "" ? 1 : 0
+      Behavior on opacity { NumberAnimation { duration: 120 } }
+      anchors.bottom: nowPlaying.top
+      anchors.bottomMargin: Theme.spacing.xl
+      anchors.horizontalCenter: tracks.horizontalCenter
+      width: Math.min(toast.implicitWidth + Theme.spacing.huge * 2, tracks.width - Theme.spacing.huge * 2)
+      height: toast.implicitHeight + Theme.spacing.lg * 2
+      radius: Theme.spacing.sm
+      color: Theme.raised
+      border.width: 1
+      border.color: window.noticeIsError ? Theme.urgent : Theme.border
+      z: 5
+
+      Text {
+        id: toast
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, parent.width - Theme.spacing.huge * 2)
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        text: window.noticeText
+        color: window.noticeIsError ? Theme.urgent : Theme.foreground
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.bodySmall
+      }
+    }
+
     NowPlayingBar {
       id: nowPlaying
       anchors.bottom: hints.top
@@ -288,6 +340,8 @@ FloatingWindow {
       player: player
       live: window.visible
       visuals: prefs.creatures
+      liked: library.playingLiked
+      onLikeRequested: library.toggleLike(-1)
       onAlbumRequested: { library.openRelated("album", -1); window.pane = "list" }
       onArtistRequested: { library.openRelated("artist", -1); window.pane = "list" }
     }

@@ -116,6 +116,9 @@ Built:
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
 | `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}` |
 | `library.track` | `uri` | `{track}`: one track row |
+| `library.save` `library.unsave` | `uri` | `{uri, liked}`; writes to Liked Songs |
+| `library.is_saved` | `uri` | `{uri, liked}`, from the cached Liked Songs list |
+| `player.queue_add` | `uri` | `{}`; puts the track at the front of the queue |
 | `browse.album` | `uri` | `{album: {uri, name, artists, year, kind, tracks}, items}` |
 | `browse.artist` | `uri` | `{artist: {uri, name}, top_tracks, albums, singles}` |
 | `player.up_next` | optional `limit` (max 200) | `{context_uri, context_name, position, total, shuffle, items}` |
@@ -125,26 +128,35 @@ Built:
 | `cancel` | `target` (no `id`) | none |
 
 A track row is `{uri, title, artists, artist_uris, album, album_uri,
-duration_ms, available}`; search results add `context_uri` and
+duration_ms, available, liked}`; search results add `context_uri` and
 `context_name`, the list the track was found in. `player.play_context`
 accepts playlist, collection, album and artist uris.
 
-`player.up_next` lists what follows the current track in the list it was
-started from, in that list's own order. It is not Spotify's queue: librespot
-does not expose the queue, so tracks cannot be added to it, the context is
-only known when playback was started from Sporetify, and with shuffle on the
-real order differs (`shuffle` says so).
+`player.up_next` lists first the tracks queued from Sporetify that have not
+played yet (rows with `queued: true`), then what follows the current track in
+the list it was started from, in that list's own order. Spotify's queue
+cannot be read back, so anything queued from another device is missing, the
+context is only known when playback was started from Sporetify, and with
+shuffle on the real order differs (`shuffle` says so).
 
-Player ops return as soon as the command is queued; the effect arrives as a
-`player` event. With nothing loaded, `player.play` resumes the remembered
-track or starts Liked Songs.
+How the two writes work without a client id:
+
+- **Likes** go to Spotify's collection service (`POST /collection/v2/write`,
+  a small protobuf encoded by hand in `catalog.rs`).
+- **Queueing** sends the same request another device's "add to queue" would
+  (`POST /connect-state/v1/player/command/from/<self>/to/<self>`); Spotify
+  routes it back and librespot handles it as a remote command.
+
+A track can exist under several uris, and the version in Liked Songs is
+often not the version the player or an artist page reports, so `liked` can
+be false for a song the user does have liked.
 
 With `--debug-ops` only: `debug.sleep {ms}`, `debug.panic`,
 `debug.mercury {uri}`, `debug.spclient {endpoint}`.
 
 Planned: `devices.list`, `player.transfer`, `player.play_tracks`,
-`library.save` / `unsave`, `settings.*`. A real queue (`queue.*`) needs
-support librespot does not offer yet.
+`settings.*`. Reading, reordering and clearing the queue need support
+librespot does not offer yet.
 
 ## Compatibility rules (from v1 on)
 

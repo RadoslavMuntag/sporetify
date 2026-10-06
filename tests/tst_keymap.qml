@@ -57,6 +57,8 @@ TestCase {
     compare(primary[primary.length - 1].label, "Close")
     compare(Keymap.actionFor(Qt.Key_Backspace, "", ["browse", "player"]), "back")
     compare(Keymap.actionFor(Qt.Key_Question, "?", ["browse", "player"]), "help")
+    compare(Keymap.actionFor(Qt.Key_F, "f", ["browse", "player"]), "like")
+    compare(Keymap.actionFor(Qt.Key_E, "e", ["browse", "player"]), "enqueue")
   }
 
   function test_unknown_keys_do_nothing() {

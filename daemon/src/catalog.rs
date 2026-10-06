@@ -153,8 +153,37 @@ impl Catalog {
             "name": list.name,
             "total": list.uris.len(),
             "offset": offset,
-            "items": rows,
+            "items": self.decorate(rows),
         }))
+    }
+
+    /// The uris in Liked Songs, if that list has been loaded.
+    fn liked_set(&self) -> HashSet<String> {
+        let lists = self.lists.lock().expect("lists lock");
+        lists
+            .iter()
+            .find(|(uri, _)| uri.ends_with(":collection"))
+            .map(|(_, list)| list.uris.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Rows as sent to clients: each carries whether the track is liked.
+    fn decorate(&self, rows: Vec<TrackRow>) -> Vec<Value> {
+        let liked = self.liked_set();
+        rows.into_iter()
+            .map(|row| {
+                let is_liked = liked.contains(&row.uri);
+                let mut value = serde_json::to_value(row).unwrap_or(Value::Null);
+                value["liked"] = json!(is_liked);
+                value
+            })
+            .collect()
+    }
+
+    /// Track rows for `uris`, decorated, for places that are not a stored list.
+    pub async fn decorated_rows(&self, session: &Session, uris: Vec<String>) -> Vec<Value> {
+        let rows = self.rows(session, uris, LOOKUPS_IN_FLIGHT).await;
+        self.decorate(rows)
     }
 
     async fn rows(&self, session: &Session, uris: Vec<String>, in_flight: usize) -> Vec<TrackRow> {
@@ -236,6 +265,11 @@ impl Catalog {
         let mut ordered: Vec<(&String, &Arc<List>)> = lists.iter().collect();
         ordered.sort_by_key(|(uri, list)| (!uri.ends_with(":collection"), list.name.to_lowercase()));
 
+        let liked: HashSet<&String> = lists
+            .iter()
+            .find(|(uri, _)| uri.ends_with(":collection"))
+            .map(|(_, list)| list.uris.iter().collect())
+            .unwrap_or_default();
         let mut seen = HashSet::new();
         let mut items = Vec::new();
         let mut total = 0usize;
@@ -252,6 +286,7 @@ impl Catalog {
                         total += 1;
                         if items.len() < limit {
                             let mut item = serde_json::to_value(row).unwrap_or(Value::Null);
+                            item["liked"] = json!(liked.contains(uri));
                             item["context_uri"] = json!(context_uri);
                             item["context_name"] = json!(list.name);
                             items.push(item);
@@ -316,7 +351,7 @@ impl Catalog {
             .expect("lists lock")
             .insert(uri.to_owned(), Arc::new(List { name: header.name.clone(), uris: uris.clone() }));
         let rows = self.rows(session, uris, LOOKUPS_IN_FLIGHT).await;
-        Ok(json!({ "album": header, "items": rows }))
+        Ok(json!({ "album": header, "items": self.decorate(rows) }))
     }
 
     async fn album_header(&self, session: &Session, uri: String) -> Option<AlbumHeader> {
@@ -354,17 +389,55 @@ impl Catalog {
 
         Ok(json!({
             "artist": { "uri": uri, "name": artist.name },
-            "top_tracks": rows,
+            "top_tracks": self.decorate(rows),
             "albums": albums,
             "singles": singles,
         }))
+    }
+
+    /// Add a track to Liked Songs or remove it, through the collection
+    /// service the official clients use. Needs no client id.
+    pub async fn set_liked(&self, session: &Session, uri: &str, liked: bool) -> OpResult {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let body = collection_write(&session.username(), uri, now, !liked);
+
+        let mut headers = http::HeaderMap::new();
+        let kind = http::HeaderValue::from_static("application/vnd.collection-v2.spotify.proto");
+        headers.insert(http::header::CONTENT_TYPE, kind.clone());
+        headers.insert(http::header::ACCEPT, kind);
+        session
+            .spclient()
+            .request(&http::Method::POST, "/collection/v2/write", Some(headers), Some(&body))
+            .await
+            .map_err(|e| upstream("the change to your liked songs", e))?;
+
+        // Keep the cached Liked Songs list in step, newest first like Spotify.
+        let key = liked_songs_uri(session);
+        let mut lists = self.lists.lock().expect("lists lock");
+        if let Some(list) = lists.get(&key).cloned() {
+            let mut uris: Vec<String> = list.uris.iter().filter(|u| u.as_str() != uri).cloned().collect();
+            if liked {
+                uris.insert(0, uri.to_owned());
+            }
+            lists.insert(key, Arc::new(List { name: list.name.clone(), uris }));
+        }
+        Ok(json!({ "uri": uri, "liked": liked }))
+    }
+
+    /// Whether a track is in Liked Songs, as far as the cached list knows.
+    pub async fn is_liked(&self, session: &Session, uri: &str) -> OpResult {
+        let list = self.list(session, &liked_songs_uri(session), false).await?;
+        Ok(json!({ "uri": uri, "liked": list.uris.iter().any(|u| u == uri) }))
     }
 
     /// One track's row, for navigating from a track the view has no row for.
     pub async fn track_row(&self, session: &Session, uri: &str) -> OpResult {
         let row = self.track(session, uri.to_owned()).await;
         self.flush();
-        Ok(json!({ "track": row }))
+        Ok(json!({ "track": self.decorate(vec![row]).pop() }))
     }
 
     /// What plays after `current` in `context_uri`, in the list's own order.
@@ -379,7 +452,7 @@ impl Catalog {
             "context_name": list.name,
             "position": position,
             "total": list.uris.len(),
-            "items": rows,
+            "items": self.decorate(rows),
         }))
     }
 
@@ -444,6 +517,43 @@ impl Catalog {
     }
 }
 
+/// A `spotify.collection.proto.v2.WriteRequest` for one item. librespot does
+/// not compile this message, and it is small enough to encode by hand:
+///
+/// ```text
+/// WriteRequest   { 1: username, 2: set, 3: repeated CollectionItem, 4: client_update_id }
+/// CollectionItem { 1: uri, 2: added_at (int32 seconds), 3: is_removed }
+/// ```
+fn collection_write(username: &str, uri: &str, now_secs: u64, remove: bool) -> Vec<u8> {
+    fn varint(out: &mut Vec<u8>, mut value: u64) {
+        while value >= 0x80 {
+            out.push((value as u8 & 0x7f) | 0x80);
+            value >>= 7;
+        }
+        out.push(value as u8);
+    }
+    fn bytes(out: &mut Vec<u8>, field: u8, value: &[u8]) {
+        out.push(field << 3 | 2);
+        varint(out, value.len() as u64);
+        out.extend_from_slice(value);
+    }
+
+    let mut item = Vec::new();
+    bytes(&mut item, 1, uri.as_bytes());
+    item.push(2 << 3);
+    varint(&mut item, now_secs);
+    if remove {
+        item.extend_from_slice(&[3 << 3, 1]);
+    }
+
+    let mut request = Vec::new();
+    bytes(&mut request, 1, username.as_bytes());
+    bytes(&mut request, 2, b"collection");
+    bytes(&mut request, 3, &item);
+    bytes(&mut request, 4, format!("{now_secs:016x}{:08x}", uri.len()).as_bytes());
+    request
+}
+
 /// Albums and singles listed per artist.
 const MAX_RELEASES: usize = 30;
 const TOP_TRACKS: usize = 10;
@@ -466,4 +576,29 @@ fn top_tracks(session: &Session, artist: &Artist) -> Vec<String> {
 pub fn page_args(args: &Value) -> (usize, usize) {
     let read = |key: &str, default: u64| args.get(key).and_then(Value::as_u64).unwrap_or(default) as usize;
     (read("offset", 0), read("limit", 50))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collection_write;
+
+    #[test]
+    fn collection_write_encodes_the_documented_fields() {
+        let body = collection_write("u", "spotify:track:x", 300, true);
+        let expected: Vec<u8> = [
+            &[0x0a, 1, b'u'][..],                      // 1: username
+            &[0x12, 10][..], b"collection",            // 2: set
+            &[0x1a, 22, 0x0a, 15][..], b"spotify:track:x", // 3: item { 1: uri
+            &[0x10, 0xac, 0x02, 0x18, 1][..],          //   2: added_at = 300, 3: is_removed }
+            &[0x22, 24][..], b"000000000000012c0000000f", // 4: client_update_id
+        ]
+        .concat();
+        assert_eq!(body, expected);
+    }
+
+    #[test]
+    fn collection_write_omits_is_removed_when_adding() {
+        let body = collection_write("u", "spotify:track:x", 300, false);
+        assert!(!body.windows(2).any(|pair| pair == [0x18, 1]));
+    }
 }
