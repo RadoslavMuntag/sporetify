@@ -111,7 +111,7 @@ KeyboardPanel {
     }
 
     Keys.onPressed: function(event) {
-      var action = Keymap.actionFor(event.key, event.text, panel.scopes)
+      var action = Keymap.actionFor(event.key, event.text, panel.scopes, event.modifiers)
       if (!action) return
       event.accepted = true
       panel.act(action)

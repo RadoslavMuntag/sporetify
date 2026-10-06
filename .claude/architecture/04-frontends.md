@@ -114,18 +114,24 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   known; a row is a placeholder until its page arrives, at the same height.
   `Library.ensure` claims pages for the visible rows plus one screen ahead
   through `Pages.js`. Other places arrive whole.
-- **Search:** `/` opens a field above the list. The first keystroke opens a
-  search place; later ones update it without adding history. Library matches
-  appear on every key; Spotify is asked once typing pauses (280 ms) and its
-  songs, artists, albums and playlists are appended under headings. A
-  library result plays inside the list it was found in, a Spotify result
-  inside its album. If Spotify's search fails, the library results stay and
-  the subtitle says why.
+- **Search:** two searches share one field. `/` searches all of Spotify,
+  `Ctrl F` the user's library; the field shows which one is active and keeps
+  the text when switching. Each is its own place in the history. Under the
+  field a row of chips picks the kind of result: All, Songs, Artists, Albums
+  or Playlists. `Tab` and `Shift Tab` walk the chips while typing, `t` does
+  from the results, and they can be clicked. With All, each kind is a
+  section under a heading; with one kind, Spotify is asked for 50 of it.
+  - Spotify is asked once typing pauses (280 ms), from two characters on.
+  - The library answers on every key. Its artists and albums are the ones
+    named by matching tracks; its playlists are matched by name.
+  - A library song plays inside the list it was found in, a Spotify song
+    inside its album.
 - **Now-playing bar:** creature, title, artist, shuffle and repeat (lit when
   on), transport, seek, volume.
 - **Help:** `?` shows every key valid right now; the footer shows only the
   ones marked `primary` in the keymap. Any key closes the overlay.
-- **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>` and
+- **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>`,
+  `searchLibrary <text>`, `searchType <kind>` and
   `describe` (what is on screen, as JSON, including the `subject` that like
   and queue would act on). Tests drive the app through it,
   which needs no key injection and works with the screen off.
@@ -145,10 +151,14 @@ Planned: a devices view, artwork, playlist folders, reordering the queue.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `?` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `any` | always | `Esc` `q` close |
+
+Keys held with Ctrl are separate keys (`Ctrl+f` in the table), so a chord
+never triggers the plain letter's action. Surfaces pass the event's
+modifiers to `actionFor`.
 
 A surface passes a list of scopes, most specific first; `actionFor` returns
 the first match and falls back to `any`. The hint bar is generated from the

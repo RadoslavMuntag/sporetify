@@ -26,7 +26,7 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | D9 | Frontends hold the socket only while needed (surface open, request in flight, 10 s linger) | A permanently connected bar would keep the daemon from ever idling out |
 | D10 | A request sent on a connection that drops fails `offline` at once; unsent ones wait for reconnect until their deadline | Fast failure beats silently replaying a command the user may no longer want |
 | D11 | Library, metadata and playback go through the librespot session's internal API; the public Web API is optional and only used with a user-supplied client id | Probe showed the Web API is 429 for the built-in id, while the session API works with no id |
-| D12 | Search shows the user's library first (cached, instant), then all of Spotify through the search service Spotify's own apps use | The library part works offline and never fails; the Spotify part needs no client id but depends on a query hash Spotify may retire |
+| D12 | Two searches: `/` for all of Spotify (the search service its own apps use), `Ctrl F` for the user's library (cached, instant), each filterable by kind of result | Owner's call on 2026-10-06 to keep them apart. The library one works offline and never fails; the Spotify one needs no client id but depends on a query hash Spotify may retire |
 | D13 | Caches are plain JSON files written atomically | Small data, one writer; simpler than a database and enough so far |
 | D14 | In-app actions must feel instant; app launch time is not a goal | Owner's call on 2026-10-06: playing, browsing and searching matter, a second to open the window does not |
 | D15 | Plugin id stays `namelessnovice.sporetify`; licence is MIT | Owner's call on 2026-10-06 |

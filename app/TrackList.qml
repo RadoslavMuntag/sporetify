@@ -171,7 +171,7 @@ Item {
       }
 
       Text {
-        visible: row.track !== null && row.kind !== "heading"
+        visible: !!row.track && row.kind !== "heading"
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth
         width: row.flexible * 0.45
@@ -183,7 +183,7 @@ Item {
         font.pixelSize: Theme.font.body
       }
       Text {
-        visible: row.track !== null && row.kind !== "heading"
+        visible: !!row.track && row.kind !== "heading"
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth + row.flexible * 0.45 + Theme.spacing.xxl
         width: row.flexible * 0.3
@@ -204,7 +204,7 @@ Item {
         font.pixelSize: Theme.font.body
       }
       Text {
-        visible: row.track !== null && row.kind !== "heading"
+        visible: !!row.track && row.kind !== "heading"
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad + row.numberWidth + row.flexible * 0.75 + Theme.spacing.xxl * 2
         width: row.flexible * 0.25 - Theme.space(22)
@@ -224,7 +224,7 @@ Item {
       }
       // nf-md-heart on liked tracks, nf-md-playlist_plus on ones queued from here.
       Text {
-        visible: row.track !== null && row.kind === "" && (row.track.liked === true || row.track.queued === true)
+        visible: !!row.track && row.kind === "" && (row.track.liked === true || row.track.queued === true)
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: row.pad + row.timeWidth
@@ -236,7 +236,7 @@ Item {
       }
 
       Text {
-        visible: row.track !== null && row.kind === "" && row.track.available
+        visible: !!row.track && row.kind === "" && row.track.available === true
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: row.pad

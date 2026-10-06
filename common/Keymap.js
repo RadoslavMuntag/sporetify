@@ -24,7 +24,9 @@ var actions = [
   { id: "openApp",     keys: ["o"],              label: "Open app",    scope: "mini", primary: true },
   { id: "activate",    keys: ["Return"],         label: "Play / open", scope: "browse", primary: true },
   { id: "paneNext",    keys: ["Tab"],            label: "Switch pane", scope: "browse", primary: true },
-  { id: "search",      keys: ["/"],              label: "Search",      scope: "browse", primary: true },
+  { id: "search",      keys: ["/"],              label: "Search Spotify", scope: "browse", primary: true },
+  { id: "searchLibrary", keys: ["Ctrl+f"],       label: "Search library", scope: "browse", primary: true },
+  { id: "searchType",  keys: ["t"],              label: "Result type", scope: "browse" },
   { id: "artist",      keys: ["a"],              label: "Artist",      scope: "browse", primary: true },
   { id: "album",       keys: ["d"],              label: "Album",       scope: "browse", primary: true },
   { id: "like",        keys: ["f"],              label: "Like",        scope: "browse", primary: true },
@@ -67,8 +69,16 @@ var named = {
 // Symbols used when a key is shown to the user.
 var glyphs = { Space: "␣", Left: "←", Right: "→", Up: "↑", Down: "↓", Return: "⏎", Tab: "⇥", Backspace: "⌫" }
 
-// Name of the key in a QML key event ({ key, text }).
-function keyName(key, text) {
+// Qt::ControlModifier
+var CTRL = 0x04000000
+
+// Name of the key in a QML key event. With Ctrl held the name is "Ctrl+x",
+// so a chord never triggers the plain key's action.
+function keyName(key, text, modifiers) {
+  if (modifiers & CTRL) {
+    // Letters: Qt::Key_A..Key_Z are their ASCII codes.
+    return key >= 0x41 && key <= 0x5a ? "Ctrl+" + String.fromCharCode(key).toLowerCase() : ""
+  }
   if (named[key] !== undefined) return named[key]
   return text && text.length === 1 ? text : ""
 }
@@ -79,8 +89,9 @@ function inScopes(action, scopes) {
 
 // The action a key triggers, or null. `scopes` is one scope name or a list
 // of them, most specific first; actions scoped "any" apply everywhere.
-function actionFor(key, text, scopes) {
-  var name = keyName(key, text)
+// `modifiers` is the event's modifier mask (optional).
+function actionFor(key, text, scopes, modifiers) {
+  var name = keyName(key, text, modifiers)
   if (name === "") return null
   var list = typeof scopes === "string" ? [scopes] : scopes
   for (var s = 0; s <= list.length; s++) {
@@ -97,6 +108,7 @@ function keyLabel(id) {
   for (var i = 0; i < actions.length; i++) {
     if (actions[i].id === id) {
       var key = actions[i].keys[0]
+      if (key.indexOf("Ctrl+") === 0) return "Ctrl " + key.slice(5).toUpperCase()
       return glyphs[key] !== undefined ? glyphs[key] : key
     }
   }
