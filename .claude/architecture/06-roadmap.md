@@ -108,7 +108,18 @@ Original scope:
 Exit: app opens to a full library with the network unplugged; the soak test
 passes; scrolling a 5 000-track playlist stays smooth.
 
-## M4 · Spore visuals
+## M4 · Spore visuals (organisms done)
+
+Built: the organism generator and component, shown in the bar, mini-player
+and app, with off switches (see "What exists" in
+[05-visuals.md](05-visuals.md)).
+
+Still to do: audio reactivity (needs the daemon's `viz` tap), the helix
+loader, the tide-pool now-playing view, zoom transitions, collection-level
+visuals (album, artist, playlist), the galaxy view, a `reduced` setting
+between on and off, and measuring the cost on integrated graphics.
+
+Original scope:
 
 - Build order from [05-visuals.md](05-visuals.md): organism generator and
   shader, helix, tide pool with `viz`, zoom transitions, then galaxy

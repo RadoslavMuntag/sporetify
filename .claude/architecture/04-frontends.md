@@ -21,7 +21,7 @@ Rules for `common/`: no host-specific imports (`qs.Commons` is plugin-only;
 `Theme` is app-only), so colours and sizes are passed in as properties; no
 network; every `.js` file has tests in `tests/`.
 
-Planned here: `Organism.js` and the shader components from
+Also here: `Organism.js` and `Organism.qml`, the per-track creature; see
 [05-visuals.md](05-visuals.md).
 
 ### `DaemonClient` and `ClientCore`
@@ -54,7 +54,7 @@ Planned here: `Organism.js` and the shader components from
 ## Shell plugin
 
 ```
-manifest.json     kinds: service + bar-widget; settings: showTrackTitle, maxTitleWidth
+manifest.json     kinds: service + bar-widget; settings: showTrackTitle, maxTitleWidth, creatures
 Service.qml       Player + IPC target "sporetify" + MPRIS watch + openApp()
 BarWidget.qml     icon and track title; owns the mini-player
 MiniPlayer.qml    KeyboardPanel: title, seek, transport, volume, keycaps, hint bar
@@ -120,7 +120,7 @@ devices views, a help overlay, artwork, playlist folders.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `R` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `R` `v` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `any` | always | `Esc` `q` close |
@@ -133,7 +133,7 @@ scopes used together never bind the same key twice.
 ## Tests
 
 - `tests/tst_client_core.qml`, `tst_loadable.qml`, `tst_keymap.qml`,
-  `tst_pages.qml`: 39 tests, run with the Qt 6 `qmltestrunner`.
+  `tst_pages.qml`, `tst_organism.qml`: 45 tests, run with the Qt 6 `qmltestrunner`.
 - `tests/lint.sh`: no colour literals, no network calls in QML, valid manifest.
 - UI checks are manual: drive with `wtype`, capture with `grim`.
 - Not automated: `DaemonClient.qml` against a real socket, and any view.

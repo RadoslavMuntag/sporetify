@@ -82,7 +82,7 @@ App.qml              entry point of the full app (`qs -p App.qml`); at the root 
                      that app/ and common/ are both inside its config folder
 app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
-                     Loadable.js, Pages.js, Position.js, HintBar, KeyCap
+                     Loadable.js, Pages.js, Position.js, HintBar, KeyCap, Organism
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
 scripts/             test.sh, install-dev.sh, uninstall-dev.sh, env.sh
@@ -253,6 +253,10 @@ Full detail is in `.claude/architecture/05-visuals.md`; the essentials:
   spatial view exists; the visuals decorate the app, they are never the only
   way to do something.
 
+Built so far: the per-track creature (`common/Organism.js` and
+`Organism.qml`) in the bar, mini-player and app. To judge a change to it,
+render a grid of them in a scratch Quickshell config and look.
+
 Technical limits for all visuals:
 
 - GPU only: `ShaderEffect` / `MultiEffect` and property animations. No
@@ -322,6 +326,10 @@ Things that bite:
   `sporetifyd --socket /tmp/x.sock --debug-ops` (stop the service first).
   `debug.mercury` and `debug.spclient` make raw internal-API calls.
 - Never `pkill -f` a pattern that also appears in your own command line.
+- **This machine's Sporetify is in daily use.** Before a test that plays,
+  pauses, skips, changes volume, restarts the daemon or the shell, or closes
+  the app window, check `player.get`; if something is playing, do not touch
+  the live player. Test UI against a paused state, or ask first.
 - A Connect device ignores every command except activate until it is active,
   and activation resets its volume. See `Playback::command` in
   `daemon/src/player.rs`.

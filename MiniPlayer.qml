@@ -14,6 +14,8 @@ KeyboardPanel {
   id: panel
 
   property var service: null
+  property bool creatures: true
+  property var creatureColors: []
 
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
@@ -120,30 +122,50 @@ KeyboardPanel {
       width: parent.width
       spacing: Style.spacing.xxl
 
-      // ---- What is playing
-      Column {
+      // ---- What is playing, with the track's creature
+      Row {
         width: parent.width
-        spacing: Style.spacing.labelGap
+        spacing: Style.spacing.xl
 
-        Text {
-          width: parent.width
-          textFormat: Text.PlainText
-          elide: Text.ElideRight
-          text: panel.track ? panel.track.title : "Nothing playing"
-          color: panel.fg
-          font.family: panel.family
-          font.pixelSize: Style.font.subtitle
-          font.bold: true
+        Organism {
+          id: creature
+          visible: panel.creatures && panel.track !== null
+          anchors.verticalCenter: parent.verticalCenter
+          width: visible ? Style.space(56) : 0
+          height: Style.space(56)
+          seed: panel.track ? panel.track.id : ""
+          alive: visible && panel.open && panel.playing
+          awake: panel.playing
+          palette: panel.creatureColors
+          eye: panel.fg
+          pupil: Color.popups.background
         }
-        Text {
-          width: parent.width
-          visible: text !== ""
-          textFormat: Text.PlainText
-          elide: Text.ElideRight
-          text: panel.track ? panel.track.artists.join(", ") : ""
-          color: Color.muted
-          font.family: panel.family
-          font.pixelSize: Style.font.bodySmall
+
+        Column {
+          anchors.verticalCenter: parent.verticalCenter
+          width: parent.width - (creature.visible ? creature.width + parent.spacing : 0)
+          spacing: Style.spacing.labelGap
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            text: panel.track ? panel.track.title : "Nothing playing"
+            color: panel.fg
+            font.family: panel.family
+            font.pixelSize: Style.font.subtitle
+            font.bold: true
+          }
+          Text {
+            width: parent.width
+            visible: text !== ""
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            text: panel.track ? panel.track.artists.join(", ") : ""
+            color: Color.muted
+            font.family: panel.family
+            font.pixelSize: Style.font.bodySmall
+          }
         }
       }
 

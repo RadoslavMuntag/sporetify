@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 import "../common"
 import "../common/Keymap.js" as Keymap
@@ -52,6 +53,21 @@ FloatingWindow {
     pane = "list"
   }
 
+  // The app's few preferences, kept across launches.
+  FileView {
+    id: preferences
+    path: Quickshell.env("HOME") + "/.config/sporetify/app.json"
+    blockLoading: true
+    printErrors: false
+    onAdapterUpdated: writeAdapter()
+
+    JsonAdapter {
+      id: prefs
+      // Draw each track's creature.
+      property bool creatures: true
+    }
+  }
+
   property bool searchOpen: false
   function openSearch() {
     searchOpen = true
@@ -70,6 +86,7 @@ FloatingWindow {
     var target = pane === "sidebar" ? sidebar : tracks
     switch (action) {
     case "search": openSearch(); return
+    case "creatures": prefs.creatures = !prefs.creatures; return
     case "close": Qt.quit(); return
     case "paneNext": pane = pane === "sidebar" ? "list" : "sidebar"; return
     case "down": target.move(1); return
@@ -218,6 +235,7 @@ FloatingWindow {
       width: parent.width
       player: player
       live: window.visible
+      visuals: prefs.creatures
     }
 
     Rectangle {

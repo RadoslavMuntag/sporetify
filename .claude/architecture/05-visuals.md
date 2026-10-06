@@ -5,6 +5,27 @@ The idea borrowed from *Spore* is a feeling, not its assets: life that is
 a cell to a galaxy**. Nothing from the game is reused: no art, names, logos,
 fonts, sounds or recognisable creature designs.
 
+## What exists
+
+- `common/Organism.js`: the generator. Track id → FNV-1a hash → a small
+  seeded generator → lobes, nucleus, eyes, hairs, two palette choices and a
+  temperament. Pure, with tests for determinism, bounds and variety.
+- `common/Organism.qml`: draws it from plain items (overlapping circles read
+  as one blob) with property animations only: a slow breath, each lobe
+  swelling on its own period, hairs swaying, an occasional blink. No shader,
+  no per-frame JavaScript. Below 28 px it drops hairs and nucleus and shows
+  one eye. `alive: false` stops every animation; `awake: false` half-closes
+  the eyes.
+- Shown in the bar icon, the mini-player and the app's now-playing bar. It
+  breathes only while its track plays and its surface is visible, and dozes
+  when paused.
+- Off switches: the `creatures` widget setting for the plugin, the `v` key in
+  the app (kept in `~/.config/sporetify/app.json`).
+
+Everything below this section is the plan for the rest. Where it says
+"shader", plain items turned out to be enough for the organism; the tide
+pool and galaxy may still need one.
+
 ## Scale as metaphor
 
 | Spore stage | Sporetify level | Where it shows |

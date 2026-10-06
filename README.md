@@ -31,6 +31,10 @@ login is kept in your desktop keyring.
 | Play / pause | middle-click the bar icon, or your media keys |
 | Volume | scroll on the bar icon |
 
+Each track has its own small creature, grown from the track itself, shown
+beside it while it plays. Turn them off with `v` in the app or the Creatures
+setting of the bar widget.
+
 Every surface lists its shortcuts in a footer. The main ones:
 
 | Key | Action | Key | Action |

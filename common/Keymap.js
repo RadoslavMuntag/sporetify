@@ -30,6 +30,7 @@ var actions = [
   { id: "pageUp",      keys: ["PgUp"],       label: "Page up",     scope: "browse" },
   { id: "search",      keys: ["/"],          label: "Search",      scope: "browse" },
   { id: "reload",      keys: ["R"],          label: "Reload",      scope: "browse" },
+  { id: "creatures",   keys: ["v"],          label: "Creatures",   scope: "browse" },
   { id: "signIn",      keys: ["Return"],     label: "Sign in",     scope: "signedOut" },
   { id: "retry",       keys: ["Return"],     label: "Retry",       scope: "fault" },
   { id: "close",       keys: ["Esc", "q"],   label: "Close",       scope: "any" }

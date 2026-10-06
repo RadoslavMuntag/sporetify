@@ -11,6 +11,8 @@ Rectangle {
   required property var player
   // Whether the window is showing, so the clock only ticks when seen.
   property bool live: true
+  // Whether creatures are drawn at all.
+  property bool visuals: true
 
   readonly property var track: player.track
   property real nowMs: Date.now()
@@ -47,10 +49,27 @@ Rectangle {
     width: parent.width - Theme.spacing.huge * 2
     implicitHeight: middle.implicitHeight
 
+    // ---- The track's creature
+    Organism {
+      id: creature
+      visible: root.visuals && root.track !== null
+      anchors.verticalCenter: parent.verticalCenter
+      width: visible ? Theme.space(46) : 0
+      height: Theme.space(46)
+      seed: root.track ? root.track.id : ""
+      alive: visible && root.live && root.player.playing
+      awake: root.player.playing
+      palette: Theme.creatureColors
+      eye: Theme.foreground
+      pupil: Theme.sunken
+    }
+
     // ---- Track
     Column {
       anchors.verticalCenter: parent.verticalCenter
-      width: parent.width * 0.28
+      anchors.left: creature.right
+      anchors.leftMargin: creature.visible ? Theme.spacing.xl : 0
+      width: parent.width * 0.28 - creature.width - anchors.leftMargin
       spacing: Theme.spacing.xs
 
       Text {

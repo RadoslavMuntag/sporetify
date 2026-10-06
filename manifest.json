@@ -26,7 +26,8 @@
     "defaultSection": "left",
     "defaults": {
       "showTrackTitle": "On",
-      "maxTitleWidth": 220
+      "maxTitleWidth": 220,
+      "creatures": "On"
     },
     "schema": [
       {
@@ -49,6 +50,17 @@
         "step": 20,
         "defaultValue": 220,
         "description": "Width in pixels after which the title is cut short."
+      },
+      {
+        "key": "creatures",
+        "type": "enum",
+        "label": "Creatures",
+        "options": [
+          "On",
+          "Off"
+        ],
+        "defaultValue": "On",
+        "description": "Draw each track's creature in the bar and the mini-player. Off shows a plain icon."
       }
     ]
   },

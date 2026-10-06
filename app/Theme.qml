@@ -32,6 +32,14 @@ Singleton {
   readonly property color raised: pick("lighter_background", alpha(foreground, 0.06))
   readonly property color sunken: pick("dark_background", background)
 
+  // Colours a creature's body may take: the theme's named palette.
+  readonly property var creatureColors: {
+    var names = ["green", "cyan", "blue", "magenta", "yellow", "orange", "red"]
+    var out = []
+    for (var i = 0; i < names.length; i++) if (palette[names[i]] !== undefined) out.push(Qt.color(palette[names[i]]))
+    return out.length > 0 ? out : [accent]
+  }
+
   // Control states, same strengths as the shell's defaults.
   readonly property color hoverFill: alpha(foreground, 0.08)
   readonly property color selectedFill: alpha(foreground, 0.18)
