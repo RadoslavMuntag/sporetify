@@ -94,6 +94,8 @@ pub struct Catalog {
     indexing: AtomicBool,
     indexed: AtomicBool,
     lookup_failure_logged: AtomicBool,
+    /// False in tests, which must not write to the user's cache.
+    persistent: bool,
 }
 
 impl Default for Catalog {
@@ -109,6 +111,7 @@ impl Default for Catalog {
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
             lookup_failure_logged: AtomicBool::new(false),
+            persistent: true,
         }
     }
 }
@@ -301,22 +304,26 @@ impl Catalog {
         }))
     }
 
-    /// The uris in Liked Songs, if that list has been loaded.
-    fn liked_set(&self) -> HashSet<String> {
-        let lists = self.lists.lock().expect("lists lock");
-        lists
-            .iter()
-            .find(|(uri, _)| uri.ends_with(":collection"))
-            .map(|(_, list)| list.uris.iter().cloned().collect())
-            .unwrap_or_default()
+    /// What is in Liked Songs, for answering "is this liked" quickly.
+    fn liked_index(&self) -> LikedIndex {
+        let uris: Vec<String> = {
+            let lists = self.lists.lock().expect("lists lock");
+            lists
+                .iter()
+                .find(|(uri, _)| uri.ends_with(":collection"))
+                .map(|(_, list)| list.uris.clone())
+                .unwrap_or_default()
+        };
+        let tracks = self.tracks.lock().expect("tracks lock");
+        LikedIndex::new(uris.iter().map(|uri| (uri.as_str(), tracks.get(uri))))
     }
 
     /// Rows as sent to clients: each carries whether the track is liked.
     fn decorate(&self, rows: Vec<TrackRow>) -> Vec<Value> {
-        let liked = self.liked_set();
+        let liked = self.liked_index();
         rows.into_iter()
             .map(|row| {
-                let is_liked = liked.contains(&row.uri);
+                let is_liked = liked.find(&row).is_some();
                 // A cover that is already on disk costs the client no request.
                 let art_path = row.art_url.as_deref().and_then(crate::art::path_for).filter(|path| path.exists());
                 let mut value = serde_json::to_value(row).unwrap_or(Value::Null);
@@ -347,6 +354,9 @@ impl Catalog {
 
     /// Write the track cache if it has grown. Losing it only costs refetching.
     fn flush(&self) {
+        if !self.persistent {
+            return;
+        }
         if self.unsaved.swap(false, Ordering::Relaxed) {
             let bytes = serde_json::to_vec(&*self.tracks.lock().expect("tracks lock"));
             if let (Some(path), Ok(bytes)) = (tracks_path(), bytes) {
@@ -439,6 +449,8 @@ impl Catalog {
     /// every word of `query`. Only cached metadata is searched.
     pub fn search(&self, query: &str, limit: usize) -> OpResult {
         let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+        // Built before the locks below are taken; it takes the same ones.
+        let liked = self.liked_index();
         let lists = self.lists.lock().expect("lists lock");
         let tracks = self.tracks.lock().expect("tracks lock");
 
@@ -446,11 +458,6 @@ impl Catalog {
         let mut ordered: Vec<(&String, &Arc<List>)> = lists.iter().collect();
         ordered.sort_by_key(|(uri, list)| (!uri.ends_with(":collection"), list.name.to_lowercase()));
 
-        let liked: HashSet<&String> = lists
-            .iter()
-            .find(|(uri, _)| uri.ends_with(":collection"))
-            .map(|(_, list)| list.uris.iter().collect())
-            .unwrap_or_default();
         let mut seen = HashSet::new();
         let mut items = Vec::new();
         let mut total = 0usize;
@@ -467,7 +474,7 @@ impl Catalog {
                         total += 1;
                         if items.len() < limit {
                             let mut item = serde_json::to_value(row).unwrap_or(Value::Null);
-                            item["liked"] = json!(liked.contains(uri));
+                            item["liked"] = json!(liked.find(row).is_some());
                             item["context_uri"] = json!(context_uri);
                             item["context_name"] = json!(list.name);
                             items.push(item);
@@ -719,6 +726,18 @@ impl Catalog {
     /// Add a track to Liked Songs or remove it, through the collection
     /// service the official clients use. Needs no client id.
     pub async fn set_liked(&self, session: &Session, uri: &str, liked: bool) -> OpResult {
+        // The song may be liked under another uri than the one asked about:
+        // Spotify often plays, or lists, a different version of it. Liking
+        // again would add a duplicate, and unliking must remove the entry
+        // that is actually there.
+        let row = self.track(session, uri.to_owned()).await;
+        let existing = self.liked_index().find(&row).map(str::to_owned);
+        if liked && existing.is_some() {
+            return Ok(json!({ "uri": uri, "liked": true }));
+        }
+        let asked = uri;
+        let uri = if liked { asked } else { existing.as_deref().unwrap_or(asked) };
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -745,13 +764,15 @@ impl Catalog {
             }
             lists.insert(key, Arc::new(List { name: list.name.clone(), uris, art_url: None }));
         }
-        Ok(json!({ "uri": uri, "liked": liked }))
+        Ok(json!({ "uri": asked, "liked": liked }))
     }
 
     /// Whether a track is in Liked Songs, as far as the cached list knows.
     pub async fn is_liked(&self, session: &Session, uri: &str) -> OpResult {
-        let list = self.list(session, &liked_songs_uri(session), false).await?;
-        Ok(json!({ "uri": uri, "liked": list.uris.iter().any(|u| u == uri) }))
+        // Make sure the list is loaded, then match by song, not only by uri.
+        self.list(session, &liked_songs_uri(session), false).await?;
+        let row = self.track(session, uri.to_owned()).await;
+        Ok(json!({ "uri": uri, "liked": self.liked_index().find(&row).is_some() }))
     }
 
     /// One track's row, for navigating from a track the view has no row for.
@@ -884,6 +905,48 @@ fn collection_write(username: &str, uri: &str, now_secs: u64, remove: bool) -> V
     request
 }
 
+/// Liked Songs, searchable by uri and by song.
+///
+/// A song exists under several uris (regional versions, re-releases that
+/// Spotify substitutes for one another), so the version in Liked Songs is
+/// often not the one a player or an artist page reports. Two rows with the
+/// same title and first artist are taken to be the same song.
+struct LikedIndex {
+    uris: HashSet<String>,
+    by_song: HashMap<String, String>,
+}
+
+impl LikedIndex {
+    /// From each liked uri and, where known, its row.
+    fn new<'a>(liked: impl Iterator<Item = (&'a str, Option<&'a TrackRow>)>) -> Self {
+        let mut index = Self { uris: HashSet::new(), by_song: HashMap::new() };
+        for (uri, row) in liked {
+            index.uris.insert(uri.to_owned());
+            if let Some(key) = row.and_then(song_key) {
+                // The first one wins: Liked Songs is newest first.
+                index.by_song.entry(key).or_insert_with(|| uri.to_owned());
+            }
+        }
+        index
+    }
+
+    /// The uri under which `row`'s song is liked, if it is.
+    fn find(&self, row: &TrackRow) -> Option<&str> {
+        if let Some(uri) = self.uris.get(&row.uri) {
+            return Some(uri);
+        }
+        self.by_song.get(&song_key(row)?).map(String::as_str)
+    }
+}
+
+/// What makes two rows the same song: title and first artist, ignoring case.
+/// `None` for rows without either, which must never match each other.
+fn song_key(row: &TrackRow) -> Option<String> {
+    let title = row.title.trim().to_lowercase();
+    let artist = row.artists.first()?.trim().to_lowercase();
+    (row.available && !title.is_empty() && !artist.is_empty()).then(|| format!("{title}\u{1}{artist}"))
+}
+
 /// The address of the smallest of `images`, for thumbnails.
 fn thumbnail_url(images: &librespot_metadata::image::Images) -> Option<String> {
     let image = images.iter().filter(|image| image.width > 0).min_by_key(|image| image.width).or(images.first())?;
@@ -999,6 +1062,153 @@ mod tests {
         assert_eq!(super::percent_decode("caf%C3%A9"), "café");
         assert_eq!(super::percent_decode("100%"), "100%");
         assert_eq!(super::percent_decode("%zz"), "%zz");
+    }
+
+    /// A catalog holding only what the test gives it, and never touching disk.
+    fn catalog(sidebar: Vec<serde_json::Value>, lists: &[(&str, &str, &[&str])], rows: &[super::TrackRow]) -> super::Catalog {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::{Arc, Mutex};
+        super::Catalog {
+            lists: Mutex::new(
+                lists
+                    .iter()
+                    .map(|(uri, name, uris)| {
+                        let list = super::List {
+                            name: name.to_string(),
+                            uris: uris.iter().map(|u| u.to_string()).collect(),
+                            art_url: None,
+                        };
+                        (uri.to_string(), Arc::new(list))
+                    })
+                    .collect(),
+            ),
+            sidebar: Mutex::new(sidebar),
+            library_unsaved: AtomicBool::new(false),
+            tracks: Mutex::new(rows.iter().map(|row| (row.uri.clone(), row.clone())).collect()),
+            albums: Mutex::default(),
+            unsaved: AtomicBool::new(false),
+            indexing: AtomicBool::new(false),
+            indexed: AtomicBool::new(false),
+            lookup_failure_logged: AtomicBool::new(false),
+            persistent: false,
+        }
+    }
+
+    fn library() -> super::Catalog {
+        let mut on_album = row("t:1", "Weeping Willow", &["Sébastien Schuller"]);
+        on_album.album = "Happiness".into();
+        catalog(
+            vec![serde_json::json!({ "uri": "spotify:user:u:collection", "name": "Liked Songs" })],
+            &[
+                ("spotify:user:u:collection", "Liked Songs", &["t:1", "t:2"]),
+                ("spotify:playlist:p", "Mix", &["t:2", "t:3", "t:missing"]),
+            ],
+            &[on_album, row("t:2", "Follow the Sun", &["IS TROPICAL"]), row("t:3", "Sun Song", &["Other"])],
+        )
+    }
+
+    fn titles(result: &serde_json::Value) -> Vec<String> {
+        result["items"].as_array().unwrap().iter().map(|i| i["title"].as_str().unwrap().to_owned()).collect()
+    }
+
+    #[test]
+    fn search_needs_every_word_and_looks_at_title_artist_and_album() {
+        let library = library();
+        assert_eq!(titles(&library.search("sun", 10).unwrap()), ["Follow the Sun", "Sun Song"]);
+        assert_eq!(titles(&library.search("SUN tropical", 10).unwrap()), ["Follow the Sun"]);
+        assert_eq!(titles(&library.search("happiness", 10).unwrap()), ["Weeping Willow"]);
+        assert_eq!(titles(&library.search("schuller willow", 10).unwrap()), ["Weeping Willow"]);
+        assert!(titles(&library.search("sun nothing", 10).unwrap()).is_empty());
+        assert!(titles(&library.search("   ", 10).unwrap()).is_empty());
+    }
+
+    #[test]
+    fn search_lists_a_track_once_and_says_where_it_was_found() {
+        let found = library().search("follow", 10).unwrap();
+        // In both lists; reported once, from Liked Songs, and marked liked.
+        assert_eq!(found["total"], 1);
+        assert_eq!(found["items"][0]["context_name"], "Liked Songs");
+        assert_eq!(found["items"][0]["liked"], true);
+        let other = library().search("song", 10).unwrap();
+        assert_eq!(other["items"][0]["context_uri"], "spotify:playlist:p");
+        assert_eq!(other["items"][0]["liked"], false);
+    }
+
+    #[test]
+    fn search_counts_everything_but_returns_only_the_limit() {
+        let found = library().search("sun", 1).unwrap();
+        assert_eq!(found["total"], 2);
+        assert_eq!(found["items"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn offline_the_saved_sidebar_is_served_as_stale() {
+        let saved = library().playlists(None).await.unwrap();
+        assert_eq!(saved["stale"], true);
+        assert_eq!(saved["items"][0]["name"], "Liked Songs");
+        // With nothing saved there is nothing to show, and it says why.
+        let empty = catalog(Vec::new(), &[], &[]);
+        assert_eq!(empty.playlists(None).await.unwrap_err().code, crate::proto::ErrorCode::Offline);
+    }
+
+    #[tokio::test]
+    async fn offline_a_saved_list_is_served_with_placeholders_for_unknown_tracks() {
+        let library = library();
+        let page = library.tracks(None, "spotify:playlist:p", 0, 50, false).await.unwrap();
+        assert_eq!(page["name"], "Mix");
+        assert_eq!(page["total"], 3);
+        assert_eq!(titles(&page), ["Follow the Sun", "Sun Song", "Unavailable"]);
+        assert_eq!(page["items"][2]["available"], false);
+        // Paging works the same from disk.
+        let second = library.tracks(None, "spotify:playlist:p", 1, 1, false).await.unwrap();
+        assert_eq!(titles(&second), ["Sun Song"]);
+        // A list never loaded cannot be shown offline.
+        let unknown = library.tracks(None, "spotify:playlist:never", 0, 50, false).await.unwrap_err();
+        assert_eq!(unknown.code, crate::proto::ErrorCode::Offline);
+    }
+
+    fn row(uri: &str, title: &str, artists: &[&str]) -> super::TrackRow {
+        super::TrackRow {
+            uri: uri.to_owned(),
+            title: title.to_owned(),
+            artists: artists.iter().map(|a| a.to_string()).collect(),
+            album: String::new(),
+            duration_ms: 1,
+            available: true,
+            artist_uris: Vec::new(),
+            album_uri: String::new(),
+            art_url: None,
+        }
+    }
+
+    #[test]
+    fn a_song_is_liked_under_any_of_its_versions() {
+        let liked_version = row("spotify:track:liked", "Date on the Meadow", &["Pat's Soundhouse"]);
+        let other = row("spotify:track:other", "Something Else", &["Someone"]);
+        let index = super::LikedIndex::new(
+            [("spotify:track:liked", Some(&liked_version)), ("spotify:track:other", Some(&other)), ("spotify:track:unknown", None)]
+                .into_iter(),
+        );
+
+        // The exact uri, and a uri never looked up but in the list.
+        assert_eq!(index.find(&liked_version), Some("spotify:track:liked"));
+        assert_eq!(index.find(&row("spotify:track:unknown", "", &[])), Some("spotify:track:unknown"));
+        // Another version of the same song resolves to the liked entry.
+        let playing = row("spotify:track:playing", "date on the meadow ", &["Pat's Soundhouse", "Guest"]);
+        assert_eq!(index.find(&playing), Some("spotify:track:liked"));
+        // Same title by someone else, and a different song, do not.
+        assert_eq!(index.find(&row("spotify:track:x", "Date on the Meadow", &["Cover Band"])), None);
+        assert_eq!(index.find(&row("spotify:track:y", "Date on the Meadow - Live", &["Pat's Soundhouse"])), None);
+    }
+
+    #[test]
+    fn rows_without_a_title_or_artist_never_match_each_other() {
+        let blank = row("spotify:track:a", "", &[]);
+        let index = super::LikedIndex::new([("spotify:track:a", Some(&blank))].into_iter());
+        assert_eq!(index.find(&row("spotify:track:b", "", &[])), None);
+        let mut unavailable = row("spotify:track:c", "Unavailable", &["x"]);
+        unavailable.available = false;
+        assert!(super::song_key(&unavailable).is_none());
     }
 
     #[test]

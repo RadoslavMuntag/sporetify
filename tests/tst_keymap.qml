@@ -14,6 +14,8 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_Equal, "=", "player"), "volumeUp")
     compare(Keymap.actionFor(Qt.Key_Left, "", "player"), "seekBack")
     compare(Keymap.actionFor(Qt.Key_Escape, "", ["player", "popup"]), "close")
+    // In the mini-player f likes the playing track; in the app it likes the cursor row.
+    compare(Keymap.actionFor(Qt.Key_F, "f", ["mini", "player", "popup"]), "likePlaying")
     // Outside a popup Esc is not "close".
     compare(Keymap.actionFor(Qt.Key_Escape, "", "player"), null)
   }

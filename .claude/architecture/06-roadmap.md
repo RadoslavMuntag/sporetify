@@ -46,8 +46,6 @@ Left over:
   while it runs. The bar shortcuts can.
 - When another Spotify device takes over, the UI is not told why controls
   stop responding.
-- No artwork yet: it must come through the daemon's cache, not an `Image`
-  fetching over the network.
 
 Original scope:
 
@@ -75,18 +73,18 @@ and app share moved to `common/Player.qml`.
 Added on `feature/app-views`: history with back/forward, artist pages
 (popular tracks, albums, singles), album pages, an up-next list, shuffle and
 repeat buttons, a help overlay, and an IPC handle for driving the app.
-Verified over IPC only; the views were not looked at (the screen was off).
 
 Also added there: like and unlike (`f`, and a heart in the now-playing bar)
 and add to queue (`e`), both without a client id; hearts on liked rows; up
-next lists what was queued from here first. Verified over IPC on a silent
-second device: the like round trip against the real account, and the queue
-request being accepted and handled. Not yet heard: a queued track actually
-playing next.
+next lists what was queued from here first.
 
-Still to do: a devices view, reading and reordering the queue,
-light-theme check, playlist folders (currently flattened), artwork. Launch
-time was measured at about 970 ms and is no longer a goal (decision D14).
+Checked by hand by the owner on 2026-10-12, and reported working: a queued
+track playing next, the bar's right and middle click, the search keys and
+`Esc`, the heart, shuffle and repeat. (What exactly was covered, such as a
+light theme or a second monitor, was not itemised.)
+
+Still to do: a devices view, reading and reordering the queue. Launch time
+was measured at about 970 ms and is no longer a goal (decision D14).
 
 Original scope:
 
@@ -98,7 +96,7 @@ Original scope:
 Exit: launch budget measured; theme switch applies live in dark and light;
 every control reachable by keyboard with a visible hint.
 
-## M3 · Library and search (library partly done, see M2)
+## M3 · Library and search (done, apart from the list below)
 
 Done: track metadata cached on disk for good; Liked Songs indexed in the
 background with retries; `library.search` over the cache, with a search box
@@ -114,8 +112,14 @@ daemon, shown for the playing track and on album and artist pages.
 Also there: taller two-line rows with a cover thumbnail on every row of a
 list and of search results (track cache moved to `tracks.v3.json`).
 
-Not done: stale-while-revalidate frames, batched metadata lookups, eviction
-of the cover cache, a devices view, and
+Added in phase 1 of [07-plan.md](07-plan.md): a song counts as liked under
+any of its versions (matched by title and first artist), so hearts are right
+on artist pages and for the playing track, and unliking removes the entry
+that is really there; the cover cache is held to 200 MB by dropping the
+least recently used; a like button in the mini-player.
+
+Not done: stale-while-revalidate frames, batched metadata lookups, a devices
+view, and
 telling the user when another device takes over playback (both of the last
 two need information librespot does not hand out).
 

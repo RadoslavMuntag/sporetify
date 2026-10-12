@@ -112,7 +112,10 @@ Lines longer than 64 KiB end the connection.
   `$XDG_CACHE_HOME/sporetify/art/`, and hands out the file path. The playing
   track's cover is fetched on every track change and added to the state as
   `track.art_path`; `art.get` does the same for any cover address (album
-  and artist pages carry `art_url`). Nothing is evicted yet.
+  and artist pages carry `art_url`). The folder is held to 200 MB: at start
+  and every 200 downloads the least recently used covers are removed until
+  it is back to 160 MB. "Used" is the file's modification time, refreshed
+  at most once a day when a cover is served.
 - Library search: `library.search` matches every word of the query against
   title, artists and album of cached tracks in known lists. It never hits
   the network.
@@ -122,7 +125,11 @@ Lines longer than 64 KiB end the connection.
   The query is named by a hash (`SEARCH_QUERY_HASH`, overridable with
   `SPORETIFY_SEARCH_HASH`) that Spotify can retire.
 - Likes: `library.save` / `unsave` write to the collection service; every
-  track row carries `liked`, taken from the cached Liked Songs list.
+  track row carries `liked`, taken from the cached Liked Songs list. A song
+  exists under several uris, so "liked" is matched by uri and, failing that,
+  by title and first artist (`LikedIndex`). Liking a song already liked
+  under another version does nothing; unliking removes the entry that is
+  actually in the list.
 
 ## Persistence
 
@@ -165,9 +172,11 @@ Not handled yet: another device taking over is not reported to clients.
 - `daemon/tests/protocol.rs`: 16 tests over a real Unix socket (hello,
   deadlines, cancel, panics, malformed input, concurrency, events, argument
   validation, fail-fast when signed out).
-- No automated tests yet for `auth`, `player`, `catalog`, `persist` or
-  `mpris`; they were verified by hand against a real account. Pure parts worth
-  testing first: `persist` round trip, `catalog` search matching, `player`
-  state transitions from events.
+- Unit tests beside the code (24): `persist` round trip and old files;
+  `catalog` search matching, the offline fallback, liked matching across
+  versions, folder parsing and the hand-encoded collection message; `art`
+  host checks and eviction order; `player` play/pause clock and volume.
+- Still only verified by hand against a real account: `auth`, the session
+  loop, MPRIS, and everything that needs Spotify to answer.
 - Run a second daemon for experiments with `--socket <path> --debug-ops`.
   `--no-connect` keeps it offline, to test what works from the saved library.

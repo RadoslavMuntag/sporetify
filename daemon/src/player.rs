@@ -600,3 +600,65 @@ fn to_device_volume(volume: f32) -> u16 {
 fn from_device_volume(volume: u16) -> f32 {
     f32::from(volume) / f32::from(u16::MAX)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{from_device_volume, now_ms, set_playing, to_device_volume};
+    use crate::state::{PlayerState, Position, Track};
+
+    fn loaded(playing: bool, position_ms: u64, seconds_ago: u64) -> PlayerState {
+        PlayerState {
+            track: Some(Track { id: "t".into(), title: "T".into(), ..Track::default() }),
+            playing,
+            position: Position {
+                position_ms,
+                at_ms: now_ms() - seconds_ago * 1000,
+                rate: if playing { 1.0 } else { 0.0 },
+            },
+            ..PlayerState::default()
+        }
+    }
+
+    #[test]
+    fn pausing_freezes_the_clock_where_playback_has_got_to() {
+        let mut state = loaded(true, 10_000, 5);
+        set_playing(&mut state, false);
+        assert!(!state.playing);
+        assert_eq!(state.position.rate, 0.0);
+        // Ten seconds in, five more played since: about fifteen.
+        assert!((15_000..15_300).contains(&state.position.position_ms), "{}", state.position.position_ms);
+    }
+
+    #[test]
+    fn resuming_restarts_the_clock_from_where_it_was_paused() {
+        let mut state = loaded(false, 10_000, 60);
+        set_playing(&mut state, true);
+        assert!(state.playing);
+        assert_eq!(state.position.rate, 1.0);
+        // The minute spent paused does not count.
+        assert_eq!(state.position.position_ms, 10_000);
+        assert!(now_ms() - state.position.at_ms < 300);
+    }
+
+    #[test]
+    fn nothing_changes_without_a_track_or_without_a_change() {
+        let mut empty = PlayerState::default();
+        set_playing(&mut empty, true);
+        assert!(!empty.playing);
+
+        let before = loaded(true, 10_000, 5);
+        let mut state = before.clone();
+        set_playing(&mut state, true);
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn volume_survives_the_trip_to_the_device_and_back() {
+        for percent in [0, 1, 12, 50, 67, 99, 100] {
+            let volume = percent as f32 / 100.0;
+            assert!((from_device_volume(to_device_volume(volume)) - volume).abs() < 0.001);
+        }
+        assert_eq!(to_device_volume(-1.0), 0);
+        assert_eq!(to_device_volume(2.0), u16::MAX);
+    }
+}

@@ -22,6 +22,7 @@ var actions = [
   { id: "shuffle",     keys: ["s"],              label: "Shuffle",     scope: "player" },
   { id: "repeat",      keys: ["r"],              label: "Repeat",      scope: "player" },
   { id: "openApp",     keys: ["o"],              label: "Open app",    scope: "mini", primary: true },
+  { id: "likePlaying", keys: ["f"],              label: "Like",        scope: "mini", primary: true },
   { id: "activate",    keys: ["Return"],         label: "Play / open", scope: "browse", primary: true },
   { id: "paneNext",    keys: ["Tab"],            label: "Switch pane", scope: "browse", primary: true },
   { id: "search",      keys: ["/"],              label: "Search Spotify", scope: "browse", primary: true },
