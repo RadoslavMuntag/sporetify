@@ -94,6 +94,7 @@ scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
                      uninstall-dev.sh (for a checkout), test.sh, env.sh, lib.sh
 .github/workflows/   ci.yml (every push), release.yml (builds the daemon on a tag)
 CHANGELOG.md         one section per version
+docs/screenshots/    the pictures the README shows
 bin/sporetify        launcher: focus the running app or start it
 tests/               qmltestrunner tests (tst_*.qml) and lint.sh
 .claude/architecture/  architecture plan, protocol draft, visual language, roadmap
