@@ -77,6 +77,15 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_A, "a", ["browse", "player"]), "artist")
     compare(Keymap.actionFor(Qt.Key_Delete, "", ["browse", "player"]), "removeFromPlaylist")
     compare(Keymap.actionFor(Qt.Key_X, "x", ["browse", "player"]), "removeFromPlaylist")
+    // Capitals edit playlists; the plain letters keep their meaning.
+    compare(Keymap.actionFor(Qt.Key_J, "J", ["browse", "player"]), "moveDown")
+    compare(Keymap.actionFor(Qt.Key_J, "j", ["browse", "player"]), "down")
+    compare(Keymap.actionFor(Qt.Key_K, "K", ["browse", "player"]), "moveUp")
+    compare(Keymap.actionFor(Qt.Key_V, "V", ["browse", "player"]), "mark")
+    compare(Keymap.actionFor(Qt.Key_V, "v", ["browse", "player"]), "creatures")
+    compare(Keymap.actionFor(Qt.Key_N, "N", ["browse", "player"]), "newPlaylist")
+    compare(Keymap.actionFor(Qt.Key_N, "n", ["browse", "player"]), "next")
+    compare(Keymap.actionFor(Qt.Key_F2, "", ["browse", "player"]), "rename")
   }
 
   function test_ctrl_chords_are_their_own_keys() {

@@ -33,7 +33,12 @@ var actions = [
   { id: "like",        keys: ["f"],              label: "Like",        scope: "browse", primary: true },
   { id: "enqueue",     keys: ["e"],              label: "Queue it",    scope: "browse", primary: true },
   { id: "addToPlaylist", keys: ["A"],            label: "Add to playlist", scope: "browse", primary: true },
-  { id: "removeFromPlaylist", keys: ["x", "Del"], label: "Remove from playlist", scope: "browse" },
+  { id: "removeFromPlaylist", keys: ["x", "Del"], label: "Remove / delete playlist", scope: "browse" },
+  { id: "mark",        keys: ["V"],              label: "Select track", scope: "browse" },
+  { id: "moveDown",    keys: ["J"],              label: "Move track down", scope: "browse" },
+  { id: "moveUp",      keys: ["K"],              label: "Move track up", scope: "browse" },
+  { id: "newPlaylist", keys: ["N"],              label: "New playlist", scope: "browse" },
+  { id: "rename",      keys: ["F2"],             label: "Rename playlist", scope: "browse" },
   { id: "queue",       keys: ["u"],              label: "Up next",     scope: "browse", primary: true },
   { id: "back",        keys: ["Backspace", "["], label: "Back",        scope: "browse", primary: true },
   { id: "forward",     keys: ["]"],              label: "Forward",     scope: "browse" },
@@ -52,7 +57,7 @@ var actions = [
   // A popup closes on Esc; the app window does not (Esc there backs out of
   // a search), so the two have their own scopes.
   { id: "close",       keys: ["Esc", "q"],       label: "Close",       scope: "popup", primary: true },
-  { id: "cancel",      keys: ["Esc"],            label: "Cancel search", scope: "app" },
+  { id: "cancel",      keys: ["Esc"],            label: "Clear selection / cancel search", scope: "app" },
   { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",        scope: "app", primary: true }
 ]
 
@@ -63,6 +68,7 @@ var named = {
   0x01000001: "Tab",
   0x01000003: "Backspace",
   0x01000007: "Del",
+  0x01000031: "F2",
   0x01000004: "Return",
   0x01000005: "Return",
   0x01000010: "Home",

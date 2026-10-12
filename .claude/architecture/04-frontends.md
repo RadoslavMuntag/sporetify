@@ -114,13 +114,23 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   sidebar pane, and from the heart in the now-playing bar, they act on the
   playing track. A like shows at once and is put back if Spotify refuses. A
   one-line toast names the track that was affected.
-- **Editing playlists:** `A` opens a picker of the user's own playlists for
-  the track under the cursor (or the playing track, from the sidebar); type
-  to narrow, arrows to move, `Enter` to add. `x` or `Delete` removes the
-  track under the cursor from the playlist on screen, and takes two presses:
-  the first names what would go, the second, within a few seconds, does it.
-  It refuses on playlists that are not the user's, and on Liked Songs points
-  to `f`.
+- **Editing playlists** (the user's own only):
+  - `V` selects the track under the cursor and moves down; the header counts
+    the selection and `Esc` clears it. Add and remove act on the selection,
+    or on the cursor's track when nothing is selected.
+  - `A` opens a picker: type to narrow the user's playlists, `Enter` to add.
+    When something is typed the last row creates a playlist of that name
+    with the tracks in it (last, so a name that exists adds to it).
+  - `N` asks for a name and creates an empty playlist.
+  - `x` or `Delete` removes tracks from the playlist on screen; with the
+    sidebar focused it deletes the playlist under the cursor. Both take two
+    presses: the first names what would go, the second, within a few
+    seconds, does it.
+  - `J` / `K` move the track under the cursor down or up. The row moves at
+    once; the moves are sent one at a time in order, and a failure reloads
+    the playlist.
+  - `F2` renames the playlist under the sidebar's cursor, or the one on
+    screen.
 - **Lists:** a playlist has a row for every track as soon as the total is
   known; a row is a placeholder until its page arrives, at the same height.
   `Library.ensure` claims pages for the visible rows plus one screen ahead
@@ -164,7 +174,8 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Help:** `?` shows every key valid right now; the footer shows only the
   ones marked `primary` in the keymap. Any key closes the overlay.
 - **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>`,
-  `searchLibrary <text>`, `searchType <kind>`, `addTo <playlist> <track uri>` and
+  `searchLibrary <text>`, `searchType <kind>`, `addTo <playlist> <track uris>`,
+  `answer <text>` (for the open picker or prompt), `sidebarTo <name>` and
   `describe` (what is on screen, as JSON, including the `subject` that like
   and queue would act on). Tests drive the app through it,
   which needs no key injection and works with the screen off.
@@ -184,7 +195,7 @@ Planned: a devices view, reordering the queue.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` `f` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `A` `x` `⌫` `[` `]` `R` `v` `c` `?` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `A` `x` `V` `J` `K` `N` `F2` `⌫` `[` `]` `R` `v` `c` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `popup` | mini-player | `Esc` `q` close |

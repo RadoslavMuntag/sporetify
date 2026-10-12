@@ -128,22 +128,29 @@ FloatingWindow {
 
   property bool helpOpen: false
 
-  // ---- Choosing a playlist to add a track to
+  // ---- Choosing a playlist to add tracks to
   property bool pickerOpen: false
-  // { uri, title } of the track being added.
-  property var pickerTrack: null
+  // [{ uri, title }] being added.
+  property var pickerTracks: []
+  // What the picker lists: the user's playlists whose name holds every
+  // typed word, then, when something has been typed, a row that creates a
+  // playlist of that name. Creating comes last so that Enter on a name that
+  // already exists adds to it and does not make a second one.
   readonly property var pickerChoices: {
-    var words = pickerFilter.text.toLowerCase().split(/\s+/)
-    return library.editablePlaylists.filter(function(playlist) {
+    var typed = pickerFilter.text.trim()
+    var words = typed.toLowerCase().split(/\s+/)
+    var out = library.editablePlaylists.filter(function(playlist) {
       var name = playlist.name.toLowerCase()
       for (var i = 0; i < words.length; i++) if (words[i] !== "" && name.indexOf(words[i]) === -1) return false
       return true
     })
+    if (typed !== "") out = out.concat([{ create: true, name: typed }])
+    return out
   }
   function openPicker(index) {
-    var track = library.subjectOrExplain(index)
-    if (!track) return
-    pickerTrack = track
+    var tracks = library.selection(index)
+    if (tracks.length === 0) return
+    pickerTracks = tracks
     pickerFilter.text = ""
     pickerList.currentIndex = 0
     pickerOpen = true
@@ -154,9 +161,46 @@ FloatingWindow {
     keys.forceActiveFocus()
   }
   function confirmPicker() {
-    var playlist = pickerChoices[pickerList.currentIndex]
-    if (playlist && pickerTrack) library.addToPlaylist(playlist, pickerTrack)
+    var choice = pickerChoices[pickerList.currentIndex]
+    if (choice && pickerTracks.length > 0) {
+      if (choice.create) library.createPlaylist(choice.name, pickerTracks)
+      else library.addToPlaylist(choice, pickerTracks)
+    }
     closePicker()
+  }
+
+  // ---- Asking for a line of text (a new playlist's name, a new name)
+  property bool promptOpen: false
+  property string promptTitle: ""
+  property var promptAccept: null
+  function ask(title, initial, accept) {
+    promptTitle = title
+    promptAccept = accept
+    promptField.text = initial
+    promptOpen = true
+    promptField.forceActiveFocus()
+    promptField.selectAll()
+  }
+  function closePrompt() {
+    promptOpen = false
+    promptAccept = null
+    keys.forceActiveFocus()
+  }
+  function confirmPrompt() {
+    var text = promptField.text.trim()
+    var accept = promptAccept
+    closePrompt()
+    if (text !== "" && accept) accept(text)
+  }
+
+  // The playlist rename and delete act on: the one under the sidebar's
+  // cursor, or from the list pane the one on screen.
+  function targetPlaylist() {
+    if (pane === "sidebar") return sidebar.itemAt(sidebar.currentIndex)
+    if (library.kind !== "playlist") return null
+    for (var i = 0; i < library.editablePlaylists.length; i++)
+      if (library.editablePlaylists[i].uri === library.uri) return library.editablePlaylists[i]
+    return null
   }
 
   // One line of feedback for actions with no other visible effect.
@@ -198,7 +242,31 @@ FloatingWindow {
     case "queue": library.go({ kind: "queue" }, tracks.currentIndex); pane = "list"; return
     case "like": library.toggleLike(pane === "list" ? tracks.currentIndex : -1); return
     case "addToPlaylist": openPicker(pane === "list" ? tracks.currentIndex : -1); return
-    case "removeFromPlaylist": library.removeFromPlaylist(pane === "list" ? tracks.currentIndex : -1); return
+    case "removeFromPlaylist":
+      // In the sidebar it means the playlist; in the list, tracks.
+      if (pane === "sidebar") library.deletePlaylist(sidebar.itemAt(sidebar.currentIndex))
+      else library.removeFromPlaylist(tracks.currentIndex)
+      return
+    case "mark":
+      if (pane === "list" && library.toggleMark(tracks.currentIndex)) tracks.move(1)
+      return
+    case "moveDown":
+    case "moveUp":
+      if (pane !== "list") return
+      var landed = library.moveTrack(tracks.currentIndex, action === "moveDown" ? 1 : -1)
+      if (landed >= 0) tracks.jump(landed)
+      return
+    case "newPlaylist":
+      ask("Name the new playlist", "", function(name) { library.createPlaylist(name, []) })
+      return
+    case "rename":
+      var playlist = targetPlaylist()
+      if (!playlist || playlist.editable !== true) {
+        library.notice("Move to one of your own playlists to rename it", true)
+        return
+      }
+      ask("Rename " + playlist.name, playlist.name, function(name) { library.renamePlaylist(playlist.uri, name) })
+      return
     case "enqueue": library.enqueue(pane === "list" ? tracks.currentIndex : -1); return
     case "artist":
     case "album":
@@ -209,7 +277,11 @@ FloatingWindow {
     case "creatures": prefs.creatures = !prefs.creatures; return
     case "covers": prefs.covers = !prefs.covers; return
     case "quit": Qt.quit(); return
-    case "cancel": cancelSearch(); return
+    case "cancel":
+      // A selection is cleared before a search is left.
+      if (library.markedCount > 0) library.clearMarks()
+      else cancelSearch()
+      return
     case "paneNext": pane = pane === "sidebar" ? "list" : "sidebar"; return
     case "down": target.move(1); return
     case "up": target.move(-1); return
@@ -248,18 +320,55 @@ FloatingWindow {
       window.pane = "list"
       return "ok"
     }
-    // Add one track to the user's playlist of this exact name. The track is
-    // named by uri and never taken from the cursor or the player: a test
-    // must say exactly what it writes to a real account.
-    function addTo(playlistName: string, trackUri: string): string {
-      if (trackUri.indexOf("spotify:track:") !== 0) return "not a track uri"
+    // ---- Helpers for tests. Anything that writes names its target
+    //      explicitly: tracks by uri, playlists by exact name.
+
+    // Add tracks (uris separated by commas) to the user's playlist of this
+    // exact name, as picking it in the playlist picker would.
+    function addTo(playlistName: string, trackUris: string): string {
+      var tracks = trackUris.split(",").filter(function(uri) { return uri.indexOf("spotify:track:") === 0 })
+        .map(function(uri) { return { uri: uri, title: uri } })
+      if (tracks.length === 0) return "no track uris"
       for (var i = 0; i < library.editablePlaylists.length; i++) {
         if (library.editablePlaylists[i].name === playlistName) {
-          library.addToPlaylist(library.editablePlaylists[i], { uri: trackUri, title: trackUri })
+          library.addToPlaylist(library.editablePlaylists[i], tracks)
           return "ok"
         }
       }
       return "no such playlist"
+    }
+    // Type into whichever of the picker or the prompt is open, and confirm.
+    function answer(text: string): string {
+      if (window.promptOpen) {
+        promptField.text = text
+        window.confirmPrompt()
+        return "prompt"
+      }
+      if (window.pickerOpen) {
+        pickerFilter.text = text
+        // The playlist of exactly this name if there is one, else the first row.
+        var at = 0
+        for (var i = 0; i < window.pickerChoices.length; i++) {
+          if (!window.pickerChoices[i].create && window.pickerChoices[i].name === text) at = i
+        }
+        pickerList.currentIndex = at
+        var chosen = window.pickerChoices[at]
+        window.confirmPicker()
+        return chosen ? (chosen.create ? "created " : "added to ") + chosen.name : "nothing to pick"
+      }
+      return "nothing open"
+    }
+    // Put the sidebar's cursor on the entry of this exact name.
+    function sidebarTo(name: string): string {
+      for (var i = 0; i < sidebar.count; i++) {
+        var item = sidebar.itemAt(i)
+        if (item && item.name === name) {
+          sidebar.currentIndex = i
+          window.pane = "sidebar"
+          return "ok"
+        }
+      }
+      return "not found"
     }
     // all | songs | artists | albums | playlists
     function searchType(filter: string): string {
@@ -283,6 +392,11 @@ FloatingWindow {
         playingLiked: library.playingLiked, rows: rows,
         artPath: library.artPath, offline: player.offline, sidebar: sidebar.count,
         picker: window.pickerOpen ? window.pickerChoices.length : -1, editable: library.editablePlaylists.length,
+        pickerFirst: window.pickerOpen && window.pickerChoices.length > 0
+          ? (window.pickerChoices[0].create ? "create: " : "") + window.pickerChoices[0].name : "",
+        prompt: window.promptOpen ? window.promptTitle : "", marked: library.markedCount,
+        selection: library.markedCount > 0 ? library.selection(-1).map(function(t) { return t.uri }) : [],
+        sidebarItem: sidebar.itemAt(sidebar.currentIndex) ? sidebar.itemAt(sidebar.currentIndex).name : "",
         playingArt: player.track && player.track.art_path ? player.track.art_path : "",
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
@@ -586,7 +700,9 @@ FloatingWindow {
             width: parent.width
             elide: Text.ElideRight
             textFormat: Text.PlainText
-            text: window.pickerTrack ? "Add \u201C" + window.pickerTrack.title + "\u201D to\u2026" : ""
+            text: window.pickerTracks.length === 0 ? ""
+              : "Add " + (window.pickerTracks.length === 1 ? "\u201C" + window.pickerTracks[0].title + "\u201D"
+                : window.pickerTracks.length + " tracks") + " to\u2026"
             color: Theme.foreground
             font.family: Theme.font.family
             font.pixelSize: Theme.font.title
@@ -620,7 +736,7 @@ FloatingWindow {
               anchors.verticalCenter: parent.verticalCenter
               x: Theme.spacing.lg
               textFormat: Text.PlainText
-              text: "Type to narrow the list"
+              text: "Type to narrow the list, or a name for a new playlist"
               color: Theme.muted
               font.family: Theme.font.family
               font.pixelSize: Theme.font.body
@@ -655,8 +771,9 @@ FloatingWindow {
               width: parent.width - Theme.spacing.huge * 2 - choiceCount.width
               elide: Text.ElideRight
               textFormat: Text.PlainText
-              text: choice.playlist ? choice.playlist.name : ""
-              color: Theme.foreground
+              text: !choice.playlist ? "" : (choice.playlist.create
+                ? "+ Create \u201C" + choice.playlist.name + "\u201D" : choice.playlist.name)
+              color: choice.playlist && choice.playlist.create ? Theme.accent : Theme.foreground
               font.family: Theme.font.family
               font.pixelSize: Theme.font.body
             }
@@ -666,8 +783,8 @@ FloatingWindow {
               anchors.right: parent.right
               anchors.rightMargin: Theme.spacing.huge
               textFormat: Text.PlainText
-              text: choice.playlist && choice.playlist.length !== null && choice.playlist.length !== undefined
-                ? String(choice.playlist.length) : ""
+              text: choice.playlist && !choice.playlist.create && choice.playlist.length !== null
+                && choice.playlist.length !== undefined ? String(choice.playlist.length) : ""
               color: Theme.muted
               font.family: Theme.font.family
               font.pixelSize: Theme.font.bodySmall
@@ -695,6 +812,75 @@ FloatingWindow {
           color: Theme.muted
           font.family: Theme.font.family
           font.pixelSize: Theme.font.caption
+        }
+      }
+    }
+
+    // ---- A one-line question
+    Rectangle {
+      visible: window.promptOpen
+      anchors.fill: parent
+      color: Theme.alpha(Theme.background, 0.88)
+      z: 9
+
+      MouseArea { anchors.fill: parent; onClicked: window.closePrompt() }
+
+      Rectangle {
+        anchors.centerIn: parent
+        width: Math.min(parent.width - Theme.spacing.huge * 4, Theme.space(460))
+        height: promptBody.implicitHeight + Theme.spacing.xxl * 2
+        color: Theme.raised
+        border.width: 1
+        border.color: Theme.border
+        radius: Theme.spacing.sm
+
+        MouseArea { anchors.fill: parent }
+
+        Column {
+          id: promptBody
+          x: Theme.spacing.huge
+          y: Theme.spacing.xxl
+          width: parent.width - Theme.spacing.huge * 2
+          spacing: Theme.spacing.lg
+
+          Text {
+            width: parent.width
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            text: window.promptTitle
+            color: Theme.foreground
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.title
+            font.bold: true
+          }
+          Rectangle {
+            width: parent.width
+            height: Theme.spacing.rowHeight
+            color: Theme.sunken
+            radius: Theme.spacing.xs
+
+            TextInput {
+              id: promptField
+              anchors.verticalCenter: parent.verticalCenter
+              x: Theme.spacing.lg
+              width: parent.width - Theme.spacing.lg * 2
+              clip: true
+              color: Theme.foreground
+              selectionColor: Theme.selectedFill
+              selectedTextColor: Theme.foreground
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.body
+              Keys.onEscapePressed: window.closePrompt()
+              Keys.onReturnPressed: window.confirmPrompt()
+            }
+          }
+          Text {
+            textFormat: Text.PlainText
+            text: "\u23ce confirm \u00b7 Esc cancel"
+            color: Theme.muted
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.caption
+          }
         }
       }
     }

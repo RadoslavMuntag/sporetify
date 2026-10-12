@@ -87,13 +87,16 @@ Item {
       Text {
         textFormat: Text.PlainText
         text: {
-          if (root.library.kind === "") return "Pick a playlist on the left, or press / to search"
+          if (root.library.markedCount > 0)
+          return root.library.markedCount + " selected · A add to playlist · x remove · Esc clear"
+        if (root.library.kind === "") return "Pick a playlist on the left, or press / to search"
           if (root.library.collection.state === "error")
             return root.library.collection.error.message + " · press R to retry"
           if (root.library.collection.state === "loading" && root.library.subtitle === "") return "Loading…"
           return root.library.subtitle
         }
-        color: root.library.collection.state === "error" ? Theme.urgent : Theme.muted
+        color: root.library.markedCount > 0 ? Theme.accent
+        : (root.library.collection.state === "error" ? Theme.urgent : Theme.muted)
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
       }
@@ -132,6 +135,10 @@ Item {
       readonly property string kind: track !== null && track.kind !== undefined ? track.kind : ""
       readonly property bool isPlaying: track !== null && kind === "" && track.uri === root.playingUri
       readonly property bool cursor: ListView.isCurrentItem && root.focused
+      readonly property bool marked: {
+        root.library.revision
+        return root.library.isMarked(track)
+      }
       readonly property color ink: isPlaying ? Theme.accent
         : (track && kind === "" && !track.available ? Theme.muted : Theme.foreground)
 
@@ -183,6 +190,14 @@ Item {
       color: cursor ? Theme.selectedFill
         : (hover.containsMouse && kind !== "heading" ? Theme.hoverFill : "transparent")
 
+      // A bar down the left edge of a selected row.
+      Rectangle {
+        visible: row.marked
+        width: Theme.space(3)
+        height: parent.height
+        color: Theme.accent
+      }
+
       // A section label inside an artist page or search results.
       Text {
         visible: row.kind === "heading"
@@ -205,6 +220,8 @@ Item {
         visible: row.kind !== "heading"
         // nf-md-volume_high marks the playing row; the others the kind of row.
         text: {
+          // nf-md-check on a selected row.
+          if (row.marked) return "󰄬"
           if (row.isPlaying) return "󰕾"
           switch (row.kind) {
           case "album": return "󰀥"
@@ -213,7 +230,7 @@ Item {
           }
           return String(row.index + 1)
         }
-        color: row.isPlaying ? Theme.accent : Theme.muted
+        color: row.isPlaying || row.marked ? Theme.accent : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
       }

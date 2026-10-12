@@ -180,6 +180,9 @@ Item {
     artQueue = []
     generation++
     pages.reset()
+    // A selection belongs to the place it was made in.
+    marked = {}
+    markedCount = 0
   }
 
   function show(place, refresh) {
@@ -694,6 +697,56 @@ Item {
     })
   }
 
+  // ---- Selecting several tracks
+  // uri -> title of the tracks marked in the place on screen.
+  property var marked: ({})
+  property int markedCount: 0
+
+  function isMarked(row) {
+    return !!row && row.kind === undefined && marked[row.uri] !== undefined
+  }
+
+  // Mark or unmark the track at `index`. Returns false if it is not a track.
+  function toggleMark(index) {
+    var row = rowAt(index)
+    if (!isTrack(row) || !row.available) {
+      notice("Move to a track first", true)
+      return false
+    }
+    var next = {}
+    for (var key in marked) if (key !== row.uri) next[key] = marked[key]
+    if (marked[row.uri] === undefined) next[row.uri] = row.title
+    marked = next
+    markedCount = Object.keys(next).length
+    revision++
+    return true
+  }
+
+  function clearMarks() {
+    if (markedCount === 0) return
+    marked = {}
+    markedCount = 0
+    revision++
+  }
+
+  // What an action on "the selection" applies to: the marked tracks, in the
+  // order they appear, or failing that the one track `subject` gives.
+  // Returns [{ uri, title }], empty when there is nothing to act on.
+  function selection(index) {
+    if (markedCount > 0) {
+      var out = []
+      for (var i = 0; i < rows.length; i++) if (isMarked(rows[i])) out.push({ uri: rows[i].uri, title: rows[i].title })
+      // Marked rows whose page has since been dropped still count.
+      if (out.length > 0) return out
+    }
+    var one = subjectOrExplain(index)
+    return one ? [{ uri: one.uri, title: one.title }] : []
+  }
+
+  function describeTracks(tracks) {
+    return tracks.length === 1 ? tracks[0].title : tracks.length + " tracks"
+  }
+
   // ---- Playlists the user can change
 
   // [{ uri, name, length }] of the user's own (or collaborative) playlists.
@@ -709,71 +762,215 @@ Item {
     return false
   }
 
-  // Add `track` ({ uri, title }) to a playlist. Says what happened.
-  function addToPlaylist(playlist, track) {
-    player.request("playlist.add", { playlist_uri: playlist.uri, track_uri: track.uri }, {
-      deadline: 8000,
+  // Show the playlist on screen again after it changed, cursor at `cursor`.
+  function refreshIfShowing(playlistUri, cursor) {
+    if (kind !== "playlist" || uri !== playlistUri || historyIndex < 0) return
+    if (cursor !== undefined) history[historyIndex].cursor = Math.max(0, cursor)
+    show(history[historyIndex], true)
+  }
+
+  // Add tracks ([{ uri, title }]) to a playlist. Says what happened.
+  function addToPlaylist(playlist, tracks) {
+    if (tracks.length === 0) return
+    var uris = tracks.map(function(track) { return track.uri })
+    player.request("playlist.add", { playlist_uri: playlist.uri, track_uris: uris }, {
+      deadline: 10000,
       onDone: function(result) {
         if (!result.ok) {
           root.notice(result.error.message, true)
           return
         }
-        root.notice(result.data.changed
-          ? "Added " + track.title + " to " + result.data.playlist
-          : track.title + " is already in " + result.data.playlist, false)
-        // If that playlist is on screen, show the new row.
-        if (result.data.changed && root.kind === "playlist" && root.uri === playlist.uri && root.historyIndex >= 0)
-          root.show(root.history[root.historyIndex], true)
+        var data = result.data
+        if (!data.changed) {
+          root.notice(root.describeTracks(tracks) + (tracks.length === 1 ? " is" : " are") + " already in " + data.playlist, false)
+          return
+        }
+        root.notice("Added " + (tracks.length === 1 ? tracks[0].title : data.added + " tracks") + " to " + data.playlist
+          + (data.skipped > 0 ? " (" + data.skipped + " already there)" : ""), false)
+        root.clearMarks()
+        root.loadPlaylists()
+        root.refreshIfShowing(playlist.uri)
       }
     })
   }
 
-  // Removing takes two presses: the first names what would go, the second,
-  // within a few seconds, does it.
-  property string removeArmed: ""
-  Timer {
-    id: disarm
-    interval: 3500
-    onTriggered: root.removeArmed = ""
-  }
-
-  function removeFromPlaylist(index) {
-    if (kind !== "playlist") {
-      notice("Open a playlist to remove a track from it", true)
-      return
-    }
-    if (uri.indexOf(":collection") !== -1) {
-      notice("Liked Songs: press f on a track to unlike it", true)
-      return
-    }
-    if (!isEditable(uri)) {
-      notice("This playlist is not yours to change", true)
-      return
-    }
-    var track = subjectOrExplain(index)
-    if (!track) return
-    if (removeArmed !== track.uri) {
-      removeArmed = track.uri
-      disarm.restart()
-      notice("Press again to remove " + track.title + " from " + name, false)
-      return
-    }
-    removeArmed = ""
-    var playlistUri = uri
-    player.request("playlist.remove", { playlist_uri: playlistUri, track_uri: track.uri }, {
-      deadline: 8000,
+  // Create a playlist, with `tracks` in it if any are given.
+  function createPlaylist(name, tracks) {
+    var args = { name: name }
+    if (tracks && tracks.length > 0) args.track_uris = tracks.map(function(track) { return track.uri })
+    player.request("playlist.create", args, {
+      deadline: 15000,
       onDone: function(result) {
         if (!result.ok) {
           root.notice(result.error.message, true)
           return
         }
-        root.notice(result.data.changed ? "Removed " + track.title + " from " + result.data.playlist
-          : track.title + " was not in " + result.data.playlist, false)
-        // Show the playlist without it, keeping the cursor where it was.
-        if (root.kind === "playlist" && root.uri === playlistUri && root.historyIndex >= 0) {
-          root.history[root.historyIndex].cursor = Math.max(0, index)
-          root.show(root.history[root.historyIndex], true)
+        root.notice("Created " + result.data.playlist
+          + (result.data.total > 0 ? " with " + root.count(result.data.total, "track", "tracks") : ""), false)
+        root.clearMarks()
+        root.loadPlaylists()
+      }
+    })
+  }
+
+  function renamePlaylist(playlistUri, name) {
+    player.request("playlist.rename", { playlist_uri: playlistUri, name: name }, {
+      deadline: 10000,
+      onDone: function(result) {
+        if (!result.ok) {
+          root.notice(result.error.message, true)
+          return
         }
+        root.notice(result.data.changed ? "Renamed to " + result.data.playlist : "It is already called that", false)
+        root.loadPlaylists()
+        if (root.kind === "playlist" && root.uri === playlistUri) root.name = result.data.playlist
+      }
+    })
+  }
+
+  // Dangerous actions take two presses: the first names what would happen,
+  // the second, within a few seconds, does it. `armed` is what is pending.
+  property string armed: ""
+  Timer {
+    id: disarm
+    interval: 3500
+    onTriggered: root.armed = ""
+  }
+  // True on the second press for `key`; on the first it says `question`.
+  function confirmed(key, question) {
+    if (armed === key) {
+      armed = ""
+      return true
+    }
+    armed = key
+    disarm.restart()
+    notice(question, false)
+    return false
+  }
+
+  // Delete one of the user's playlists (from the sidebar).
+  function deletePlaylist(playlist) {
+    if (!playlist || !playlist.uri || playlist.editable !== true) {
+      notice("Only your own playlists can be deleted", true)
+      return
+    }
+    if (!confirmed("delete:" + playlist.uri, "Press again to delete the playlist " + playlist.name)) return
+    player.request("playlist.delete", { playlist_uri: playlist.uri }, {
+      deadline: 10000,
+      onDone: function(result) {
+        if (!result.ok) {
+          root.notice(result.error.message, true)
+          return
+        }
+        root.notice("Deleted " + playlist.name, false)
+        root.loadPlaylists()
+        // If it was on screen, there is nothing left to show.
+        if (root.kind === "playlist" && root.uri === playlist.uri) root.leaveDeleted()
+      }
+    })
+  }
+
+  function leaveDeleted() {
+    if (canGoBack) {
+      history = history.slice(0, historyIndex)
+      historyIndex = history.length - 1
+      show(history[historyIndex], false)
+    } else {
+      leaveCurrent()
+      history = []
+      historyIndex = -1
+      kind = ""
+      uri = ""
+      name = ""
+      subtitle = ""
+      rows = []
+      total = 0
+      revision++
+      collection = Loadable.ready(null)
+    }
+  }
+
+  // Why the playlist on screen cannot be changed, or "" if it can.
+  function whyNotEditable() {
+    if (kind !== "playlist") return "Open one of your playlists first"
+    if (uri.indexOf(":collection") !== -1) return "Liked Songs: press f on a track to unlike it"
+    if (!isEditable(uri)) return "This playlist is not yours to change"
+    return ""
+  }
+
+  // Remove the selection from the playlist on screen.
+  function removeFromPlaylist(index) {
+    var why = whyNotEditable()
+    if (why !== "") {
+      notice(why, true)
+      return
+    }
+    var tracks = selection(index)
+    if (tracks.length === 0) return
+    var key = "remove:" + tracks.map(function(track) { return track.uri }).join(",")
+    if (!confirmed(key, "Press again to remove " + describeTracks(tracks) + " from " + name)) return
+    var playlistUri = uri
+    player.request("playlist.remove", {
+      playlist_uri: playlistUri, track_uris: tracks.map(function(track) { return track.uri })
+    }, {
+      deadline: 10000,
+      onDone: function(result) {
+        if (!result.ok) {
+          root.notice(result.error.message, true)
+          return
+        }
+        root.notice(result.data.changed ? "Removed " + root.describeTracks(tracks) + " from " + result.data.playlist
+          : "Nothing to remove", false)
+        root.clearMarks()
+        root.loadPlaylists()
+        root.refreshIfShowing(playlistUri, index)
+      }
+    })
+  }
+
+  // ---- Reordering. Moves are sent one at a time, in order, because each
+  //      is described by positions that the one before it changes.
+  property var moveQueue: []
+  property bool moving: false
+
+  // Move the track at `index` up (-1) or down (+1) in the playlist on
+  // screen. Returns the row's new index, or -1 if it did not move.
+  function moveTrack(index, delta) {
+    var why = whyNotEditable()
+    if (why !== "") {
+      notice(why, true)
+      return -1
+    }
+    var to = index + delta
+    if (!isTrack(rowAt(index)) || to < 0 || to >= total) return -1
+    // Shown at once.
+    var next = rows.slice()
+    var moved = next[index]
+    next[index] = next[to]
+    next[to] = moved
+    rows = next
+    revision++
+    moveQueue.push({ playlist: uri, from: index, to: to })
+    pumpMoves()
+    return to
+  }
+
+  function pumpMoves() {
+    if (moving || moveQueue.length === 0) return
+    var move = moveQueue.shift()
+    moving = true
+    player.request("playlist.move", { playlist_uri: move.playlist, from: move.from, to: move.to }, {
+      deadline: 10000,
+      onDone: function(result) {
+        root.moving = false
+        if (!result.ok) {
+          // The screen no longer matches Spotify: drop what was queued and reload.
+          root.moveQueue = []
+          root.notice(result.error.message, true)
+          root.refreshIfShowing(move.playlist, move.to)
+          return
+        }
+        root.pumpMoves()
       }
     })
   }
