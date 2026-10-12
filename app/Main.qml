@@ -57,6 +57,11 @@ FloatingWindow {
       toggleFolder(item.id)
       return
     }
+    if (item.kind === "foryou") {
+      library.go({ kind: "foryou", name: "For you" }, tracks.currentIndex)
+      pane = "list"
+      return
+    }
     library.go({ kind: "playlist", uri: item.uri, name: item.name }, tracks.currentIndex)
     pane = "list"
   }

@@ -206,6 +206,7 @@ Item {
     case "album": fetchAlbum(place.uri); break
     case "artist": fetchArtist(place.uri); break
     case "queue": fetchQueue(); break
+    case "foryou": fetchForYou(refresh === true); break
     }
   }
 
@@ -471,6 +472,16 @@ Item {
           })
         }
       }
+      // Spotify's own playlists for the artist, when it has them.
+      var own = []
+      if (data.this_is) own.push({ kind: "playlist", uri: data.this_is.uri, title: data.this_is.name,
+        by: "The essentials, by Spotify", art_url: data.this_is.art_url })
+      if (data.radio) own.push({ kind: "playlist", uri: data.radio.uri, title: data.radio.name,
+        by: "Songs like theirs, by Spotify", art_url: data.radio.art_url })
+      if (own.length > 0) {
+        out.push({ kind: "heading", title: "Start here" })
+        for (var o = 0; o < own.length; o++) out.push(own[o])
+      }
       if (data.top_tracks.length > 0) {
         out.push({ kind: "heading", title: "Popular" })
         for (var i = 0; i < data.top_tracks.length; i++) out.push(data.top_tracks[i])
@@ -487,6 +498,21 @@ Item {
       total = out.length
       subtitle = "Artist · " + count(data.albums.length, "album", "albums")
         + " · " + count(data.singles.length, "single", "singles")
+    })
+  }
+
+  // The playlists Spotify makes for this user.
+  function fetchForYou(refresh) {
+    name = "For you"
+    load("library.made_for_you", { refresh: refresh }, 15000, function(data) {
+      var out = []
+      for (var i = 0; i < data.items.length; i++) {
+        var playlist = data.items[i]
+        out.push({ kind: "playlist", uri: playlist.uri, title: playlist.name, by: "Made for you", art_url: playlist.art_url })
+      }
+      rows = out
+      total = out.length
+      subtitle = count(total, "playlist", "playlists") + " from Spotify, made for you"
     })
   }
 

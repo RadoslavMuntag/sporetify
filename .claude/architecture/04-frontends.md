@@ -101,6 +101,9 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   flat list of rows (tracks, plus `heading` and `album` rows on an artist
   page) and keeps a history: `Backspace` or `[` goes back, `]` forward, and
   the cursor returns to where it was.
+- **Artist pages** start with a "Start here" section when Spotify has them:
+  the artist's "This Is" playlist and their radio. Then popular tracks,
+  albums, singles.
 - **Getting around:** `a` opens the artist and `d` the album of the row under
   the cursor, or of the playing track when the cursor is not on a track;
   clicking the title or artist in the now-playing bar does the same. `u`
@@ -132,7 +135,8 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Leaving:** `Ctrl C` quits the app, as does closing the window. `Esc` and
   `q` do not: in the app `Esc` only cancels a search. (In the mini-player,
   a popup, `Esc` and `q` still close it.)
-- **Sidebar:** Liked Songs, then playlists and folders. A folder folds and
+- **Sidebar:** Liked Songs (with a heart), "For you" (the playlists Spotify
+  makes for the user), then playlists and folders. A folder folds and
   unfolds with `Enter`; which ones are folded is kept in the preferences.
 - **Offline:** not a fault. The sidebar says it is showing what was saved,
   playlists and library search work from the daemon's files, and anything
