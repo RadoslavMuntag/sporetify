@@ -61,6 +61,31 @@ that). It changes nothing else, and never your Hyprland config.
 Then click the bar icon and choose **Sign in to Spotify**. The login is kept
 in your desktop keyring.
 
+### What it installs and runs
+
+An Omarchy plugin is not sandboxed: it runs inside the shell with your
+user's permissions, so read this before you enable it.
+
+- **In the shell:** the bar widget and the mini-player. They only draw
+  state and send commands; they make no network calls.
+- **A background service, `sporetifyd`:** a systemd user service that
+  plays the audio and is the only part that talks to Spotify. It starts
+  when something connects to its socket and exits after 15 minutes idle
+  unless music is playing. It is a Rust program built from `daemon/` in
+  this repository; setup downloads the build attached to the matching
+  GitHub release and checks its checksum, or builds it on your machine.
+- **A second window process:** the full app is its own Quickshell process
+  (`qs -p App.qml`), started when you open it and gone when you close it.
+  It is separate so a heavy view can never stall your bar or lock screen.
+- **On disk:** the daemon and launcher in `~/.local/bin`, two unit files
+  in `~/.config/systemd/user`, a menu entry and icon under
+  `~/.local/share`, caches in `~/.cache/sporetify`, a resume point in
+  `~/.local/state/sporetify`, preferences in `~/.config/sporetify`.
+- **Your Spotify sign-in:** a refresh token in the desktop keyring
+  (through `secret-tool`), nowhere else.
+
+Nothing runs as root, and nothing outside those places is changed.
+
 To make links such as `spotify:album:…` open in Sporetify, make it the
 handler yourself (setup does not change your defaults):
 

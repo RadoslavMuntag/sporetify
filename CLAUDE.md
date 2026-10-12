@@ -95,6 +95,7 @@ scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
                      demo-daemon.py (a stand-in daemon with a made-up library)
 .github/workflows/   ci.yml (every push), release.yml (builds the daemon on a tag)
 assets/sporetify.svg the icon, installed for the menu entry
+preview.png          the picture plugin listings show (app and mini-player composed)
 CHANGELOG.md         one section per version
 docs/screenshots/    the pictures the README shows
 bin/sporetify        launcher: focus the running app or start it

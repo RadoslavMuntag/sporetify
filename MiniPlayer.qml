@@ -70,7 +70,6 @@ KeyboardPanel {
     property string action
     property string icon
     property real iconSize: Style.font.icon
-    property bool enabled: true
     property color tint: panel.fg
     spacing: Style.spacing.sm
 
