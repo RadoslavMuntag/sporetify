@@ -4,7 +4,7 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
-## 0.1.0 (not released yet)
+## 0.1.0 (2026-10-12)
 
 First version.
 
