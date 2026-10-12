@@ -5,6 +5,7 @@
 #   - no network from QML (the daemon owns it)
 #   - a valid plugin manifest
 #   - one version in the manifest, the daemon and the changelog
+#   - well-formed pinned daemon digests
 
 set -o pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -36,6 +37,10 @@ daemon_version=$(sed -n 's/^version = "\(.*\)"/\1/p' daemon/Cargo.toml | head -n
   report "versions differ" "manifest.json $manifest_version, daemon/Cargo.toml $daemon_version"
 grep -q "^## $manifest_version" CHANGELOG.md 2>/dev/null ||
   report "no changelog entry" "CHANGELOG.md has no '## $manifest_version' section"
+
+# Pinned daemon builds: every line is "<sha256>  sporetifyd-<version>-x86_64-linux.tar.gz".
+bad=$(grep -vE '^#|^$' scripts/daemon.sha256 | grep -vE '^[0-9a-f]{64}  sporetifyd-[0-9][0-9A-Za-z.-]*-x86_64-linux\.tar\.gz$')
+[[ -z $bad ]] || report "malformed line in scripts/daemon.sha256" "$bad"
 
 if command -v omarchy >/dev/null 2>&1; then
   out=$(omarchy plugin validate . 2>&1) || report "manifest does not validate" "$out"

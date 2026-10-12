@@ -23,4 +23,5 @@ First version.
 - Opens `spotify:` links and `open.spotify.com` addresses
   (`sporetify <link>`); has its own icon.
 - `scripts/setup.sh` and `scripts/uninstall.sh` for installing from the
-  plugin folder.
+  plugin folder. Setup installs a downloaded daemon only if its SHA-256 is
+  the one committed in `scripts/daemon.sha256`.

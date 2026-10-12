@@ -308,8 +308,21 @@ check needs must therefore be in `scripts/test.sh`, not only run by hand.
 Releasing: the version lives in `manifest.json` and `daemon/Cargo.toml`
 (the lint fails if they differ or `CHANGELOG.md` has no section for it).
 Pushing a tag `v<version>` makes `.github/workflows/release.yml` publish a
-GitHub release with the daemon attached, which is what `scripts/setup.sh`
-downloads. Tagging is the owner's call; never tag or publish unasked.
+GitHub release with the daemon attached. `scripts/setup.sh` downloads it,
+but installs it only if its SHA-256 is listed in `scripts/daemon.sha256`;
+a release can be edited later, a digest in the checkout cannot (the
+marketplace reviewer asked for this on 2026-10-12). So a release takes two
+steps: tag and let the workflow publish, then commit the published
+archive's digest (`sha256sum` of the downloaded file, cross-checked against
+the asset's `digest` from `gh api repos/<repo>/releases/tags/v<version>`)
+to `scripts/daemon.sha256`. Until that second commit, setup builds from
+source. The commit to list in the marketplace is the one with the digest.
+Tagging is the owner's call; never tag or publish unasked.
+
+The marketplace is plugins.omarchy.org; submissions and updates are issues
+on `omacom/omarchy-plugin-marketplace` (its `SUBMISSION.md` has the exact
+format). A listing is bound to one commit; a newer one needs the "Plugin
+verification" form.
 
 Things that bite:
 
