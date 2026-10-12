@@ -231,7 +231,7 @@ scopes used together never bind the same key twice.
 ## Tests
 
 - `tests/tst_client_core.qml`, `tst_loadable.qml`, `tst_keymap.qml`,
-  `tst_pages.qml`, `tst_organism.qml`, `tst_faults.qml`, `tst_links.qml`: 66 tests, run with the Qt 6 `qmltestrunner`.
+  `tst_pages.qml`, `tst_organism.qml`, `tst_faults.qml`, `tst_links.qml`: 68 tests, run with the Qt 6 `qmltestrunner`.
 - `tests/lint.sh`: no colour literals, no network calls in QML, valid manifest.
 - UI checks are manual: drive with `wtype`, capture with `grim`.
 - Not automated: `DaemonClient.qml` against a real socket, and any view.
