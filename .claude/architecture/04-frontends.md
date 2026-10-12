@@ -171,8 +171,12 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   request at all.
 - **Now-playing bar:** cover, creature, title, artist, shuffle and repeat (lit when
   on), transport, seek, volume.
-- **Help:** `?` shows every key valid right now; the footer shows only the
-  ones marked `primary` in the keymap. Any key closes the overlay.
+- **Help:** `?` shows every key valid right now, in sections (Playback,
+  Moving around, Going places, Search, The track under the cursor, Your
+  playlists, App) laid out in up to three columns, with every key that
+  triggers an action shown. Sections and their order come from `group` in
+  the keymap. The footer shows only the actions marked `primary`. Any key
+  closes the overlay.
 - **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>`,
   `searchLibrary <text>`, `searchType <kind>`, `addTo <playlist> <track uris>`,
   `answer <text>` (for the open picker or prompt), `sidebarTo <name>` and

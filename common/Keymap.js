@@ -9,56 +9,76 @@
 // in hints.
 
 // `primary` actions are the ones a hint bar shows when space is short; the
-// rest are still listed in the help overlay.
+// rest are still listed in the help overlay. `group` says which section of
+// the help overlay an action belongs to.
 var actions = [
-  { id: "playPause",   keys: ["Space"],          label: "Play/Pause",  scope: "player", primary: true },
-  { id: "next",        keys: ["n"],              label: "Next",        scope: "player", primary: true },
-  { id: "previous",    keys: ["p"],              label: "Previous",    scope: "player", primary: true },
-  { id: "volumeUp",    keys: ["+", "="],         label: "Vol +",       scope: "player" },
-  { id: "volumeDown",  keys: ["-"],              label: "Vol −",       scope: "player" },
-  { id: "mute",        keys: ["m"],              label: "Mute",        scope: "player" },
-  { id: "seekForward", keys: ["Right", "l"],     label: "+10s",        scope: "player" },
-  { id: "seekBack",    keys: ["Left", "h"],      label: "−10s",        scope: "player" },
-  { id: "shuffle",     keys: ["s"],              label: "Shuffle",     scope: "player" },
-  { id: "repeat",      keys: ["r"],              label: "Repeat",      scope: "player" },
-  { id: "openApp",     keys: ["o"],              label: "Open app",    scope: "mini", primary: true },
-  { id: "likePlaying", keys: ["f"],              label: "Like",        scope: "mini", primary: true },
-  { id: "activate",    keys: ["Return"],         label: "Play / open", scope: "browse", primary: true },
-  { id: "paneNext",    keys: ["Tab"],            label: "Switch pane", scope: "browse", primary: true },
-  { id: "search",      keys: ["/"],              label: "Search Spotify", scope: "browse", primary: true },
-  { id: "searchLibrary", keys: ["Ctrl+f"],       label: "Search library", scope: "browse", primary: true },
-  { id: "searchType",  keys: ["t"],              label: "Result type", scope: "browse" },
-  { id: "artist",      keys: ["a"],              label: "Artist",      scope: "browse", primary: true },
-  { id: "album",       keys: ["d"],              label: "Album",       scope: "browse", primary: true },
-  { id: "like",        keys: ["f"],              label: "Like",        scope: "browse", primary: true },
-  { id: "enqueue",     keys: ["e"],              label: "Queue it",    scope: "browse", primary: true },
-  { id: "addToPlaylist", keys: ["A"],            label: "Add to playlist", scope: "browse", primary: true },
-  { id: "removeFromPlaylist", keys: ["x", "Del"], label: "Remove / delete playlist", scope: "browse" },
-  { id: "mark",        keys: ["V"],              label: "Select track", scope: "browse" },
-  { id: "moveDown",    keys: ["J"],              label: "Move track down", scope: "browse" },
-  { id: "moveUp",      keys: ["K"],              label: "Move track up", scope: "browse" },
-  { id: "newPlaylist", keys: ["N"],              label: "New playlist", scope: "browse" },
-  { id: "rename",      keys: ["F2"],             label: "Rename playlist", scope: "browse" },
-  { id: "queue",       keys: ["u"],              label: "Up next",     scope: "browse", primary: true },
-  { id: "back",        keys: ["Backspace", "["], label: "Back",        scope: "browse", primary: true },
-  { id: "forward",     keys: ["]"],              label: "Forward",     scope: "browse" },
-  { id: "down",        keys: ["j", "Down"],      label: "Down",        scope: "browse" },
-  { id: "up",          keys: ["k", "Up"],        label: "Up",          scope: "browse" },
-  { id: "top",         keys: ["g", "Home"],      label: "Top",         scope: "browse" },
-  { id: "bottom",      keys: ["G", "End"],       label: "Bottom",      scope: "browse" },
-  { id: "pageDown",    keys: ["PgDn"],           label: "Page down",   scope: "browse" },
-  { id: "pageUp",      keys: ["PgUp"],           label: "Page up",     scope: "browse" },
-  { id: "reload",      keys: ["R"],              label: "Reload",      scope: "browse" },
-  { id: "creatures",   keys: ["v"],              label: "Creatures",   scope: "browse" },
-  { id: "covers",      keys: ["c"],              label: "Covers in lists", scope: "browse" },
-  { id: "help",        keys: ["?"],              label: "All keys",    scope: "browse", primary: true },
-  { id: "signIn",      keys: ["Return"],         label: "Sign in",     scope: "signedOut", primary: true },
-  { id: "retry",       keys: ["Return"],         label: "Retry",       scope: "fault", primary: true },
+  { id: "playPause",   keys: ["Space"],          label: "Play / pause",     scope: "player", group: "playback", primary: true },
+  { id: "next",        keys: ["n"],              label: "Next track",       scope: "player", group: "playback", primary: true },
+  { id: "previous",    keys: ["p"],              label: "Previous track",   scope: "player", group: "playback", primary: true },
+  { id: "seekForward", keys: ["Right", "l"],     label: "Forward 10 s",     scope: "player", group: "playback" },
+  { id: "seekBack",    keys: ["Left", "h"],      label: "Back 10 s",        scope: "player", group: "playback" },
+  { id: "volumeUp",    keys: ["+", "="],         label: "Volume up",        scope: "player", group: "playback" },
+  { id: "volumeDown",  keys: ["-"],              label: "Volume down",      scope: "player", group: "playback" },
+  { id: "mute",        keys: ["m"],              label: "Mute",             scope: "player", group: "playback" },
+  { id: "shuffle",     keys: ["s"],              label: "Shuffle",          scope: "player", group: "playback" },
+  { id: "repeat",      keys: ["r"],              label: "Repeat",           scope: "player", group: "playback" },
+
+  { id: "openApp",     keys: ["o"],              label: "Open app",         scope: "mini", group: "places", primary: true },
+  { id: "likePlaying", keys: ["f"],              label: "Like",             scope: "mini", group: "track", primary: true },
+
+  { id: "down",        keys: ["j", "Down"],      label: "Down",             scope: "browse", group: "moving" },
+  { id: "up",          keys: ["k", "Up"],        label: "Up",               scope: "browse", group: "moving" },
+  { id: "pageDown",    keys: ["PgDn"],           label: "Page down",        scope: "browse", group: "moving" },
+  { id: "pageUp",      keys: ["PgUp"],           label: "Page up",          scope: "browse", group: "moving" },
+  { id: "top",         keys: ["g", "Home"],      label: "Top",              scope: "browse", group: "moving" },
+  { id: "bottom",      keys: ["G", "End"],       label: "Bottom",           scope: "browse", group: "moving" },
+  { id: "paneNext",    keys: ["Tab"],            label: "Switch pane",      scope: "browse", group: "moving", primary: true },
+  { id: "activate",    keys: ["Return"],         label: "Play / open",      scope: "browse", group: "moving", primary: true },
+
+  { id: "back",        keys: ["Backspace", "["], label: "Back",             scope: "browse", group: "places", primary: true },
+  { id: "forward",     keys: ["]"],              label: "Forward",          scope: "browse", group: "places" },
+  { id: "artist",      keys: ["a"],              label: "Go to artist",     scope: "browse", group: "places", primary: true },
+  { id: "album",       keys: ["d"],              label: "Go to album",      scope: "browse", group: "places", primary: true },
+  { id: "queue",       keys: ["u"],              label: "Up next",          scope: "browse", group: "places", primary: true },
+
+  { id: "search",      keys: ["/"],              label: "Search Spotify",   scope: "browse", group: "search", primary: true },
+  { id: "searchLibrary", keys: ["Ctrl+f"],       label: "Search library",   scope: "browse", group: "search", primary: true },
+  { id: "searchType",  keys: ["t"],              label: "Songs / artists / albums / playlists", scope: "browse", group: "search" },
+
+  { id: "like",        keys: ["f"],              label: "Like / unlike",    scope: "browse", group: "track", primary: true },
+  { id: "enqueue",     keys: ["e"],              label: "Add to queue",     scope: "browse", group: "track", primary: true },
+  { id: "addToPlaylist", keys: ["A"],            label: "Add to playlist",  scope: "browse", group: "track", primary: true },
+  { id: "mark",        keys: ["V"],              label: "Select several",   scope: "browse", group: "track" },
+
+  { id: "newPlaylist", keys: ["N"],              label: "New playlist",     scope: "browse", group: "playlists" },
+  { id: "rename",      keys: ["F2"],             label: "Rename playlist",  scope: "browse", group: "playlists" },
+  { id: "moveDown",    keys: ["J"],              label: "Move track down",  scope: "browse", group: "playlists" },
+  { id: "moveUp",      keys: ["K"],              label: "Move track up",    scope: "browse", group: "playlists" },
+  { id: "removeFromPlaylist", keys: ["x", "Del"], label: "Remove track, or delete playlist in sidebar (twice)", scope: "browse", group: "playlists" },
+
+  { id: "reload",      keys: ["R"],              label: "Reload",           scope: "browse", group: "app" },
+  { id: "covers",      keys: ["c"],              label: "Covers in lists",  scope: "browse", group: "app" },
+  { id: "creatures",   keys: ["v"],              label: "Creatures",        scope: "browse", group: "app" },
+  { id: "help",        keys: ["?"],              label: "All keys",         scope: "browse", group: "app", primary: true },
+
+  { id: "signIn",      keys: ["Return"],         label: "Sign in",          scope: "signedOut", group: "app", primary: true },
+  { id: "retry",       keys: ["Return"],         label: "Retry",            scope: "fault", group: "app", primary: true },
   // A popup closes on Esc; the app window does not (Esc there backs out of
   // a search), so the two have their own scopes.
-  { id: "close",       keys: ["Esc", "q"],       label: "Close",       scope: "popup", primary: true },
-  { id: "cancel",      keys: ["Esc"],            label: "Clear selection / cancel search", scope: "app" },
-  { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",        scope: "app", primary: true }
+  { id: "close",       keys: ["Esc", "q"],       label: "Close",            scope: "popup", group: "app", primary: true },
+  { id: "cancel",      keys: ["Esc"],            label: "Clear selection, or leave search", scope: "app", group: "search" },
+  { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",             scope: "app", group: "app", primary: true }
+]
+
+// The sections of the help overlay, in reading order.
+var groups = [
+  { id: "playback",  title: "Playback" },
+  { id: "moving",    title: "Moving around" },
+  { id: "places",    title: "Going places" },
+  { id: "search",    title: "Search" },
+  { id: "track",     title: "The track under the cursor" },
+  { id: "playlists", title: "Your playlists" },
+  { id: "app",       title: "App" }
 ]
 
 // Qt::Key values for the keys that have no printable character.
@@ -122,17 +142,20 @@ function actionFor(key, text, scopes, modifiers) {
 function keyLabel(id) {
   for (var i = 0; i < actions.length; i++) {
     if (actions[i].id === id) {
-      var key = actions[i].keys[0]
-      if (key.indexOf("Ctrl+") === 0) return "Ctrl " + key.slice(5).toUpperCase()
-      return glyphs[key] !== undefined ? glyphs[key] : key
+      return show(actions[i].keys[0])
     }
   }
   return ""
 }
 
+// How a key name is shown.
+function show(key) {
+  if (key.indexOf("Ctrl+") === 0) return "Ctrl " + key.slice(5).toUpperCase()
+  return glyphs[key] !== undefined ? glyphs[key] : key
+}
+
 // Hint entries for one scope or a list of scopes: [{ key, label }], in table
-// order, with the "any" actions last. With `primaryOnly`, just the actions
-// marked primary.
+// order. With `primaryOnly`, just the actions marked primary.
 function hints(scopes, primaryOnly) {
   var list = typeof scopes === "string" ? [scopes] : scopes
   var out = []
@@ -141,5 +164,48 @@ function hints(scopes, primaryOnly) {
     if (primaryOnly && !actions[i].primary) continue
     out.push({ key: keyLabel(actions[i].id), label: actions[i].label })
   }
+  return out
+}
+
+// Everything the scopes offer, by section, for the help overlay:
+// [{ title, items: [{ keys: [shown key, ...], label }] }]. Every key of an
+// action is listed, and sections with nothing in them are left out.
+function sections(scopes) {
+  var list = typeof scopes === "string" ? [scopes] : scopes
+  var out = []
+  for (var g = 0; g < groups.length; g++) {
+    var items = []
+    for (var i = 0; i < actions.length; i++) {
+      var action = actions[i]
+      if (action.group !== groups[g].id || !inScopes(action, list)) continue
+      items.push({ keys: action.keys.map(show), label: action.label })
+    }
+    if (items.length > 0) out.push({ title: groups[g].title, items: items })
+  }
+  return out
+}
+
+// The sections dealt into `count` columns of similar height, each section
+// kept whole and the reading order kept down the columns.
+function columns(scopes, count) {
+  var all = sections(scopes)
+  var total = 0
+  for (var i = 0; i < all.length; i++) total += all[i].items.length + 2
+  var out = []
+  var column = []
+  var height = 0
+  var target = total / count
+  for (var s = 0; s < all.length; s++) {
+    var size = all[s].items.length + 2
+    // Start a new column when this one is full enough, unless it is the last.
+    if (column.length > 0 && out.length < count - 1 && height + size / 2 > target) {
+      out.push(column)
+      column = []
+      height = 0
+    }
+    column.push(all[s])
+    height += size
+  }
+  if (column.length > 0) out.push(column)
   return out
 }
