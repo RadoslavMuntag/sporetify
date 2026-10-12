@@ -16,6 +16,15 @@ search across all of Spotify and across your library, likes, add to queue,
 playlist editing, cover art, and a library that still opens when you are
 offline.
 
+![An artist page in the Sporetify app](docs/screenshots/artist.png)
+
+| | |
+| --- | --- |
+| ![Liked Songs](docs/screenshots/library.png) Your library | ![Search results](docs/screenshots/search.png) Search across Spotify |
+| ![Every shortcut, grouped](docs/screenshots/keys.png) Every shortcut, on `?` | <img src="docs/screenshots/mini-player.png" alt="The mini-player under the bar" width="300"> The mini-player under the bar |
+
+The colours follow your Omarchy theme.
+
 ## Requirements
 
 - Omarchy 4 (Hyprland with the Quickshell-based shell).

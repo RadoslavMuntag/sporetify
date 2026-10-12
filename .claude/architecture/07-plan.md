@@ -95,7 +95,7 @@ also needs a daemon binary, systemd units and a launcher. So:
 - **Versioning.** `CHANGELOG.md` started; the lint checks that the manifest,
   the daemon and the changelog name the same version.
 - **README for strangers.** Rewritten: the unofficial-API caveat first,
-  requirements, install, update, remove. No screenshots yet.
+  requirements, install, update, remove, with screenshots in `docs/screenshots/`.
 
 Tested: setup and uninstall in a throwaway home folder with stand-ins for
 `systemctl` and the keyring: download with a good checksum, a bad checksum
@@ -115,7 +115,7 @@ tag `v0.1.0`. Omarchy has no plugin directory to submit to: `omarchy plugin
 add` takes any git URL, and its catalogue only lists what is installed.
 
 Also still open from M5 in the roadmap: opening `spotify:` links, an icon
-of our own, screenshots.
+of our own.
 
 Done when: on a clean Omarchy install, `plugin add`, one setup command and a
 sign-in give a working Sporetify.

@@ -183,7 +183,7 @@ dragging, editing a playlist's description or picture, folders.
 
 Built: `scripts/setup.sh` and `scripts/uninstall.sh` for users, the release
 workflow, the changelog, and a README written for people who are not the
-author. Not built: `spotify:` links, an icon, screenshots. No release has
+author. Not built: `spotify:` links, an icon. No release has
 been tagged.
 
 Original scope:
