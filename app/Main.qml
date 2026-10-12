@@ -81,6 +81,8 @@ FloatingWindow {
       property bool creatures: true
       // Show covers on the rows of lists.
       property bool covers: true
+      property bool sidebar: true
+      onSidebarChanged: if (!sidebar) window.pane = "list"
       // Ids of sidebar folders that are folded shut, comma separated.
       property string foldedFolders: ""
     }
@@ -277,13 +279,21 @@ FloatingWindow {
       return
     case "creatures": prefs.creatures = !prefs.creatures; return
     case "covers": prefs.covers = !prefs.covers; return
+    case "sidebar":
+      prefs.sidebar = !prefs.sidebar
+      // Focus follows: into the sidebar when it appears, out when it goes.
+      pane = prefs.sidebar ? "sidebar" : "list"
+      return
     case "quit": Qt.quit(); return
     case "cancel":
       // A selection is cleared before a search is left.
       if (library.markedCount > 0) library.clearMarks()
       else cancelSearch()
       return
-    case "paneNext": pane = pane === "sidebar" ? "list" : "sidebar"; return
+    case "paneNext":
+      // With the sidebar hidden there is only the list.
+      pane = pane === "sidebar" || !prefs.sidebar ? "list" : "sidebar"
+      return
     case "down": target.move(1); return
     case "up": target.move(-1); return
     case "pageDown": target.move(target.rowsPerPage); return
@@ -389,7 +399,7 @@ FloatingWindow {
         filter: library.searching ? library.searchFilter : "", name: library.name, subtitle: library.subtitle, total: library.total,
         state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
         history: library.historyIndex + 1 + "/" + library.history.length,
-        phase: player.phase, help: window.helpOpen,
+        phase: player.phase, help: window.helpOpen, sidebarShown: prefs.sidebar,
         helpColumns: help.columns.map(function(column) {
           return column.map(function(section) { return section.title + " (" + section.items.length + ")" })
         }), searchOpen: window.searchOpen, notice: window.noticeText,
@@ -430,7 +440,8 @@ FloatingWindow {
       id: sidebar
       anchors.top: parent.top
       anchors.bottom: nowPlaying.top
-      width: Math.min(Theme.space(280), parent.width * 0.3)
+      visible: prefs.sidebar
+      width: visible ? Math.min(Theme.space(280), parent.width * 0.3) : 0
       library: library
       focused: window.pane === "sidebar"
       collapsed: window.foldedFolders

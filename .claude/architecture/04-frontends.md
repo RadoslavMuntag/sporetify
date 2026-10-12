@@ -156,6 +156,8 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Sidebar:** Liked Songs (with a heart), "For you" (the playlists Spotify
   makes for the user), then playlists and folders. A folder folds and
   unfolds with `Enter`; which ones are folded is kept in the preferences.
+  `b` hides and shows the whole sidebar (kept in the preferences); while it
+  is hidden the list has the focus and `Tab` stays there.
 - **Offline:** not a fault. The sidebar says it is showing what was saved,
   playlists and library search work from the daemon's files, and anything
   that needs Spotify says why it failed in a toast.
@@ -203,7 +205,7 @@ Planned: a devices view, reordering the queue.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` `f` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `A` `x` `V` `J` `K` `N` `F2` `⌫` `[` `]` `R` `v` `c` `?` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `A` `x` `V` `J` `K` `N` `F2` `⌫` `[` `]` `R` `b` `v` `c` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `popup` | mini-player | `Esc` `q` close |

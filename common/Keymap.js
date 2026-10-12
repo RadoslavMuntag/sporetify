@@ -57,6 +57,7 @@ var actions = [
   { id: "removeFromPlaylist", keys: ["x", "Del"], label: "Remove track, or delete playlist in sidebar (twice)", scope: "browse", group: "playlists" },
 
   { id: "reload",      keys: ["R"],              label: "Reload",           scope: "browse", group: "app" },
+  { id: "sidebar",     keys: ["b"],              label: "Show / hide sidebar", scope: "browse", group: "app" },
   { id: "covers",      keys: ["c"],              label: "Covers in lists",  scope: "browse", group: "app" },
   { id: "creatures",   keys: ["v"],              label: "Creatures",        scope: "browse", group: "app" },
   { id: "help",        keys: ["?"],              label: "All keys",         scope: "browse", group: "app", primary: true },
