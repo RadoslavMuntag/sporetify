@@ -11,6 +11,7 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | [04-frontends.md](04-frontends.md) | Shell plugin and full app: QML structure, state, keymap, theme |
 | [05-visuals.md](05-visuals.md) | Spore-inspired visual language and how it is rendered cheaply |
 | [06-roadmap.md](06-roadmap.md) | Milestones, each with a runnable result |
+| [07-plan.md](07-plan.md) | What to work on next, in order |
 
 ## Decisions so far
 
