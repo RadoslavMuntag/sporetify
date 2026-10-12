@@ -83,6 +83,11 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             ctx.playback.settle().await;
             return ctx.catalog.search_spotify(&ctx.playback.connected_session()?, &query, limit).await;
         }
+        "library.made_for_you" => {
+            ctx.playback.settle().await;
+            let refresh = args.get("refresh").and_then(Value::as_bool).unwrap_or(false);
+            return ctx.catalog.made_for_you(&ctx.playback.connected_session()?, refresh).await;
+        }
         "library.search" => {
             let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(200) as usize;
             let query = args.get("query").and_then(Value::as_str).unwrap_or("");

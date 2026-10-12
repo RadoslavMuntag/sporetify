@@ -89,6 +89,7 @@ pub struct Catalog {
     library_unsaved: AtomicBool,
     tracks: Mutex<HashMap<String, TrackRow>>,
     albums: Mutex<HashMap<String, AlbumHeader>>,
+    made_for_you: Mutex<Vec<Value>>,
     /// Tracks fetched since the cache file was last written.
     unsaved: AtomicBool,
     indexing: AtomicBool,
@@ -107,6 +108,7 @@ impl Default for Catalog {
             library_unsaved: AtomicBool::new(false),
             tracks: Mutex::new(load_tracks()),
             albums: Mutex::default(),
+            made_for_you: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -579,15 +581,25 @@ impl Catalog {
         let take = |uris: Vec<&SpotifyUri>| -> Vec<String> {
             uris.into_iter().filter_map(|u| u.to_uri().ok()).take(MAX_RELEASES).collect()
         };
-        let albums = releases(take(artist.albums_current().collect())).await;
-        let singles = releases(take(artist.singles_current().collect())).await;
-        let rows = self.rows(session, top, LOOKUPS_IN_FLIGHT).await;
+        // Everything the page needs, fetched side by side. Spotify's own
+        // playlists for the artist may be missing, and neither is worth
+        // failing the page for.
+        let this_is_name = format!("This Is {}", artist.name);
+        let (albums, singles, rows, this_is, radio) = tokio::join!(
+            releases(take(artist.albums_current().collect())),
+            releases(take(artist.singles_current().collect())),
+            self.rows(session, top, LOOKUPS_IN_FLIGHT),
+            self.spotify_playlist_named(session, &this_is_name),
+            self.radio_playlist(session, uri, &artist.name),
+        );
 
         Ok(json!({
             "artist": { "uri": uri, "name": artist.name, "art_url": image_url(&artist.portrait_group).or_else(|| image_url(&artist.portraits)) },
             "top_tracks": self.decorate(rows),
             "albums": albums,
             "singles": singles,
+            "this_is": this_is,
+            "radio": radio,
         }))
     }
 
@@ -782,6 +794,56 @@ impl Catalog {
         Ok(json!({ "track": self.decorate(vec![row]).pop() }))
     }
 
+    /// The playlist Spotify itself publishes under exactly this name, such
+    /// as "This Is Radiohead" or "Discover Weekly", found through search.
+    /// Playlists by anyone else with the same name are ignored.
+    async fn spotify_playlist_named(&self, session: &Session, name: &str) -> Option<Value> {
+        let found = self.search_spotify(session, name, 10).await.ok()?;
+        found["playlists"].as_array()?.iter().find(|playlist| is_spotifys_own(playlist, name)).cloned()
+    }
+
+    /// The radio playlist Spotify generates for an artist or a track.
+    async fn radio_playlist(&self, session: &Session, seed_uri: &str, seed_name: &str) -> Option<Value> {
+        let endpoint = format!("/inspiredby-mix/v2/seed_to_playlist/{seed_uri}?response-format=json");
+        let bytes = session
+            .spclient()
+            .request_as_json(&http::Method::GET, &endpoint, None, None)
+            .await
+            .ok()?;
+        let answer: Value = serde_json::from_slice(&bytes).ok()?;
+        let uri = answer["mediaItems"][0]["uri"].as_str()?;
+        Some(json!({ "uri": uri, "name": format!("{seed_name} Radio"), "owner": "Spotify", "art_url": null }))
+    }
+
+    /// The playlists Spotify makes for this user: Discover Weekly, the daily
+    /// mixes and so on. Found by name through search, since nothing lists
+    /// them; an account that lacks one simply does not get it. Kept for the
+    /// daemon's lifetime once found.
+    pub async fn made_for_you(&self, session: &Session, refresh: bool) -> OpResult {
+        if !refresh {
+            let cached = self.made_for_you.lock().expect("made_for_you lock").clone();
+            if !cached.is_empty() {
+                return Ok(json!({ "items": cached }));
+            }
+        }
+        let names: Vec<String> = MADE_FOR_YOU.iter().map(|name| name.to_string()).collect();
+        let found: Vec<Value> = stream::iter(names)
+            .map(|name| async move { self.spotify_playlist_named(session, &name).await })
+            .buffered(3)
+            .filter_map(|playlist| async move { playlist })
+            .collect()
+            .await;
+        // Two names can resolve to one playlist; keep the first.
+        let mut seen = HashSet::new();
+        let found: Vec<Value> =
+            found.into_iter().filter(|p| seen.insert(p["uri"].as_str().unwrap_or_default().to_owned())).collect();
+        if found.is_empty() {
+            return Err(upstream("your made-for-you playlists", "none were found"));
+        }
+        *self.made_for_you.lock().expect("made_for_you lock") = found.clone();
+        Ok(json!({ "items": found }))
+    }
+
     /// What plays after `current` in `context_uri`, in the list's own order.
     pub async fn up_next(&self, session: &Session, context_uri: &str, current: &str, limit: usize) -> OpResult {
         let list = self.list(session, context_uri, false).await?;
@@ -903,6 +965,27 @@ fn collection_write(username: &str, uri: &str, now_secs: u64, remove: bool) -> V
     bytes(&mut request, 3, &item);
     bytes(&mut request, 4, format!("{now_secs:016x}{:08x}", uri.len()).as_bytes());
     request
+}
+
+/// Names of the playlists Spotify generates per user, in the order shown.
+const MADE_FOR_YOU: [&str; 11] = [
+    "Discover Weekly",
+    "Release Radar",
+    "daylist",
+    "On Repeat",
+    "Repeat Rewind",
+    "Daily Mix 1",
+    "Daily Mix 2",
+    "Daily Mix 3",
+    "Daily Mix 4",
+    "Daily Mix 5",
+    "Daily Mix 6",
+];
+
+/// Whether a playlist from search is the one Spotify publishes as `name`.
+fn is_spotifys_own(playlist: &Value, name: &str) -> bool {
+    playlist["owner"].as_str() == Some("Spotify")
+        && playlist["name"].as_str().is_some_and(|found| found.trim().eq_ignore_ascii_case(name.trim()))
 }
 
 /// Liked Songs, searchable by uri and by song.
@@ -1086,6 +1169,7 @@ mod tests {
             library_unsaved: AtomicBool::new(false),
             tracks: Mutex::new(rows.iter().map(|row| (row.uri.clone(), row.clone())).collect()),
             albums: Mutex::default(),
+            made_for_you: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -1209,6 +1293,16 @@ mod tests {
         let mut unavailable = row("spotify:track:c", "Unavailable", &["x"]);
         unavailable.available = false;
         assert!(super::song_key(&unavailable).is_none());
+    }
+
+    #[test]
+    fn only_spotifys_own_playlist_of_that_exact_name_counts() {
+        use serde_json::json;
+        let own = json!({ "name": "This Is Radiohead", "owner": "Spotify" });
+        assert!(super::is_spotifys_own(&own, "this is radiohead"));
+        assert!(!super::is_spotifys_own(&json!({ "name": "This Is Radiohead", "owner": "Jude" }), "This Is Radiohead"));
+        assert!(!super::is_spotifys_own(&json!({ "name": "This is Radiohead (Improved)", "owner": "Spotify" }), "This Is Radiohead"));
+        assert!(!super::is_spotifys_own(&json!({ "name": "Daily Mix 1" }), "Daily Mix 1"));
     }
 
     #[test]

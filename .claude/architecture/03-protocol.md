@@ -114,6 +114,7 @@ Built:
 | `player.play_context` | `uri`, optional `track_uri` | `{}` |
 | `library.playlists` | | `{items, stale}`: the sidebar, Liked Songs first. An item is `{uri, name, length, depth}` or a folder `{kind:"folder", id, name, depth}` |
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
+| `library.made_for_you` | optional `refresh` | `{items}`: the playlists Spotify generates for this user, as `{uri, name, owner, art_url}` |
 | `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}`; cached library only, never the network |
 | `search` | `query`, optional `limit` per section (max 50) | `{query, tracks, artists, albums, playlists}`; all of Spotify |
 | `library.track` | `uri` | `{track}`: one track row |
@@ -122,7 +123,7 @@ Built:
 | `library.is_saved` | `uri` | `{uri, liked}`, from the cached Liked Songs list |
 | `player.queue_add` | `uri` | `{}`; puts the track at the front of the queue |
 | `browse.album` | `uri` | `{album: {uri, name, artists, year, kind, tracks}, items}` |
-| `browse.artist` | `uri` | `{artist: {uri, name}, top_tracks, albums, singles}` |
+| `browse.artist` | `uri` | `{artist: {uri, name, art_url}, top_tracks, albums, singles, this_is, radio}`; the last two are playlists or null |
 | `player.up_next` | optional `limit` (max 200) | `{context_uri, context_name, position, total, shuffle, items}` |
 | `auth.begin` | | `{started}`; opens the browser, outcome arrives as events |
 | `auth.sign_out` `auth.retry` | | `{}` |

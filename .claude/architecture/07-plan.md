@@ -46,7 +46,15 @@ there is known to work.
 Done when: the hand check list is ticked off, `scripts/test.sh` covers the
 new tests, and the roadmap has no stale claims.
 
-## Phase 2 · The wishlist's quick wins
+## Phase 2 · The wishlist's quick wins (done on `phase-2-wishlist`)
+
+Outcome: all three are built. The investigation found that nothing lists the
+made-for-you playlists, but Spotify-wide search finds each by name with
+Spotify as owner, so "For you" looks them up that way. Artist radio comes
+from `/inspiredby-mix/v2/seed_to_playlist/<artist uri>`, which answers with
+the radio playlist's uri; "This Is" from search, like the others.
+
+Original list:
 
 - **Heart on Liked Songs in the sidebar.** Sidebar only.
 - **"This Is" and radio on artist pages.**

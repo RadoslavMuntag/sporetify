@@ -19,7 +19,12 @@ Rectangle {
   property bool offline: false
   signal folderToggled(string id)
 
-  readonly property var all: Loadable.hasData(library.playlists) ? library.playlists.data : []
+  // The daemon's sidebar, with "For you" slotted in after Liked Songs.
+  readonly property var all: {
+    var saved = Loadable.hasData(library.playlists) ? library.playlists.data : []
+    if (saved.length === 0) return saved
+    return [saved[0], { kind: "foryou", name: "For you", depth: 0 }].concat(saved.slice(1))
+  }
   // What is listed: everything except the contents of folded folders.
   readonly property var items: {
     var out = []
@@ -92,8 +97,10 @@ Rectangle {
       readonly property var item: root.itemAt(index)
       readonly property bool folder: !!item && item.kind === "folder"
       readonly property real indent: Theme.spacing.xxl + (item ? (item.depth || 0) : 0) * Theme.spacing.xl
-      readonly property bool open: !!item && !folder && root.library.kind === "playlist"
-        && item.uri === root.library.uri
+      readonly property bool forYou: !!item && item.kind === "foryou"
+      readonly property bool liked: !!item && !!item.uri && String(item.uri).indexOf(":collection") !== -1
+      readonly property bool open: forYou ? root.library.kind === "foryou"
+        : (!!item && !folder && root.library.kind === "playlist" && item.uri === root.library.uri)
       readonly property bool cursor: ListView.isCurrentItem && root.focused
 
       width: list.width
@@ -112,9 +119,15 @@ Rectangle {
         width: parent.width - row.indent - Theme.spacing.xxl
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        // A folder shows whether it is folded.
-        text: !row.item ? "" : (row.folder
-          ? (root.collapsed[row.item.id] === true ? "▸ " : "▾ ") + row.item.name : row.item.name)
+        // A folder shows whether it is folded; Liked Songs wears a heart
+        // (nf-md-heart) and For you a sparkle (nf-md-creation).
+        text: {
+          if (!row.item) return ""
+          if (row.folder) return (root.collapsed[row.item.id] === true ? "▸ " : "▾ ") + row.item.name
+          if (row.liked) return "󰋑  " + row.item.name
+          if (row.forYou) return "󰙴  " + row.item.name
+          return row.item.name
+        }
         color: row.open ? Theme.accent : (row.folder ? Theme.muted : Theme.foreground)
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body

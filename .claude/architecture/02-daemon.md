@@ -124,6 +124,14 @@ Lines longer than 64 KiB end the connection.
   token, and maps the answer to track rows, artists, albums and playlists.
   The query is named by a hash (`SEARCH_QUERY_HASH`, overridable with
   `SPORETIFY_SEARCH_HASH`) that Spotify can retire.
+- Spotify's own playlists: nothing lists them, so they are found by name
+  through Spotify search, keeping only the one owned by "Spotify" with
+  exactly that name. `library.made_for_you` looks up a fixed list of names
+  (Discover Weekly, Release Radar, daylist, On Repeat, Repeat Rewind, Daily
+  Mix 1 to 6) and keeps the answer for the daemon's lifetime;
+  `browse.artist` adds "This Is <artist>" the same way. Artist radio comes
+  from `/inspiredby-mix/v2/seed_to_playlist/<uri>`, which returns the radio
+  playlist's uri. All of them open as ordinary playlists.
 - Likes: `library.save` / `unsave` write to the collection service; every
   track row carries `liked`, taken from the cached Liked Songs list. A song
   exists under several uris, so "liked" is matched by uri and, failing that,

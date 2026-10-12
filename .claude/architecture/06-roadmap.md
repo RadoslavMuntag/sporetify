@@ -152,28 +152,21 @@ Original scope:
 Exit: visual budgets measured and met; nothing renders while hidden or paused;
 app verified complete with visuals off.
 
-## Owner's wishlist (noted 2026-10-06, not started)
+## Owner's wishlist (noted 2026-10-06)
 
-Ideas from the owner to pick up later, most wanted first. None has been
-investigated; the feasibility notes are guesses to check before building.
-
-1. **Heart next to Liked Songs in the sidebar.** A small heart icon on that
-   entry. Purely a sidebar change.
-2. **"For you" / Discover section.** A place for Spotify's personal picks
-   (daily mixes, Discover Weekly, recommendations). Only if it is reachable:
-   the public Web API is closed to us, so this depends on finding it in the
-   internal API or the GraphQL service that search uses. Some of these
-   playlists may already be in the user's rootlist if they follow them.
-3. **Artist radio and "This Is" on artist pages.** Links on an artist page
-   to that artist's radio and to their "This Is <artist>" playlist. librespot
-   has radio and station lookups (`get_radio_for_track`,
-   `get_apollo_station`) that have not been tried; "This Is" playlists show
-   up in Spotify-wide playlist search under that name.
-4. **Full-screen screensaver** (least important). A procedural, shader-like
-   animation, possibly Spore themed, for people who keep the screen on and
-   want to avoid burn-in from a static window: nothing may stay in one place
-   for long. Fits with the tide-pool idea in [05-visuals.md](05-visuals.md);
-   Omarchy already has a screensaver hook it might plug into.
+1. **Heart next to Liked Songs in the sidebar.** Done in phase 2.
+2. **"For you" / Discover section.** Done in phase 2: a "For you" entry
+   under Liked Songs lists Discover Weekly, Release Radar, daylist, On
+   Repeat, Repeat Rewind and the daily mixes. They are found by name through
+   Spotify-wide search (owner must be Spotify), because nothing lists them.
+3. **Artist radio and "This Is" on artist pages.** Done in phase 2: a "Start
+   here" section at the top of an artist page.
+4. **Full-screen screensaver** (least important). Not started. A procedural,
+   shader-like animation, possibly Spore themed, for people who keep the
+   screen on and want to avoid burn-in from a static window: nothing may
+   stay in one place for long. Fits with the tide-pool idea in
+   [05-visuals.md](05-visuals.md); Omarchy already has a screensaver hook it
+   might plug into.
 
 ## M5 · Replace Spotify
 
