@@ -112,8 +112,9 @@ Built:
 | `player.volume_step` | `delta` | `{}` |
 | `player.shuffle` `player.repeat` | `on` | `{}` |
 | `player.play_context` | `uri`, optional `track_uri` | `{}` |
-| `library.playlists` | | `{items, stale}`: the sidebar, Liked Songs first. An item is `{uri, name, length, depth}` or a folder `{kind:"folder", id, name, depth}` |
+| `library.playlists` | | `{items, stale}`: the sidebar, Liked Songs first. An item is `{uri, name, length, depth, editable}` or a folder `{kind:"folder", id, name, depth}` |
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
+| `playlist.add` `playlist.remove` | `playlist_uri`, `track_uri` | `{playlist, changed, total}` plus `reason` when nothing changed (already there / not in the playlist). Remove takes out every occurrence |
 | `library.made_for_you` | optional `refresh` | `{items}`: the playlists Spotify generates for this user, as `{uri, name, owner, art_url}` |
 | `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}`; cached library only, never the network |
 | `search` | `query`, optional `limit` per section (max 50) | `{query, tracks, artists, albums, playlists}`; all of Spotify |
