@@ -179,7 +179,14 @@ user's own playlists were compared before and after and were identical.
 Not built: moving a track further than one step at a time, reordering by
 dragging, editing a playlist's description or picture, folders.
 
-## M5 · Replace Spotify
+## M5 · Replace Spotify (install path built, see phase 3 in 07-plan.md)
+
+Built: `scripts/setup.sh` and `scripts/uninstall.sh` for users, the release
+workflow, the changelog, and a README written for people who are not the
+author. Not built: `spotify:` links, an icon, screenshots. No release has
+been tagged.
+
+Original scope:
 
 - `sporetify.desktop`, `spotify:` URI handling, icon
 - Install and uninstall scripts that touch nothing outside the project's own

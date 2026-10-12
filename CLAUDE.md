@@ -86,10 +86,14 @@ App.qml              entry point of the full app (`qs -p App.qml`); at the root 
                      that app/ and common/ are both inside its config folder
 app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
-                     Loadable.js, Pages.js, Position.js, HintBar, KeyCap, Organism
+                     Loadable.js, Pages.js, Position.js, Faults.js, HintBar, KeyCap,
+                     Organism
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
-scripts/             test.sh, install-dev.sh, uninstall-dev.sh, env.sh
+scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
+                     uninstall-dev.sh (for a checkout), test.sh, env.sh, lib.sh
+.github/workflows/   ci.yml (every push), release.yml (builds the daemon on a tag)
+CHANGELOG.md         one section per version
 bin/sporetify        launcher: focus the running app or start it
 tests/               qmltestrunner tests (tst_*.qml) and lint.sh
 .claude/architecture/  architecture plan, protocol draft, visual language, roadmap
@@ -278,6 +282,8 @@ Technical limits for all visuals:
 scripts/test.sh          # clippy, daemon tests, QML tests, lint: run before calling work done
 scripts/install-dev.sh   # release build to ~/.local/bin, systemd user units, plugin symlink
 scripts/uninstall-dev.sh # undo the above
+scripts/setup.sh         # what a user runs after `omarchy plugin add`: download (or build) the daemon, install it
+scripts/uninstall.sh     # what a user runs to remove it; --purge also removes caches and the sign-in
 
 omarchy plugin enable namelessnovice.sporetify   # put the widget in the bar
 omarchy shell sporetify status                   # ask the running plugin for its state
@@ -294,8 +300,21 @@ CI: `.github/workflows/ci.yml` runs `scripts/test.sh` and a release build in
 an Arch container on every push to `main` and every pull request. Anything a
 check needs must therefore be in `scripts/test.sh`, not only run by hand.
 
+Releasing: the version lives in `manifest.json` and `daemon/Cargo.toml`
+(the lint fails if they differ or `CHANGELOG.md` has no section for it).
+Pushing a tag `v<version>` makes `.github/workflows/release.yml` publish a
+GitHub release with the daemon attached, which is what `scripts/setup.sh`
+downloads. Tagging is the owner's call; never tag or publish unasked.
+
 Things that bite:
 
+- **Never run `setup.sh`, `uninstall.sh` or the dev install scripts as a
+  test on this machine.** They stop the daemon and `--purge` deletes the
+  caches and the sign-in. Test them in a throwaway `HOME` with every `XDG_*`
+  variable pointed inside it and stand-ins for `systemctl` and `secret-tool`
+  first on `PATH`.
+- In a script with `pipefail`, `cmd | grep -q` fails when `grep` stops
+  reading early. Capture the output and test it instead.
 - **Never build into the checkout.** It is symlinked into
   `~/.config/omarchy/plugins/`, where the shell reloads on every file change.
   The scripts set `CARGO_TARGET_DIR` to `~/.cache/sporetify/target`; when

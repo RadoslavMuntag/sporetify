@@ -74,30 +74,48 @@ Original list:
 Done when: the heart and the artist-page rows are in, and "For you" is
 either built or closed with a written reason.
 
-## Phase 3 · Ready for other people
+## Phase 3 · Ready for other people (built, not released)
 
-Only worth starting once the owner decides to release. The blocker is that
 `omarchy plugin add` clones a repository and runs nothing, while Sporetify
-also needs a daemon binary, systemd units and a launcher.
+also needs a daemon binary, systemd units and a launcher. So:
 
-- **Install path.** CI builds the daemon on a version tag and attaches it to
-  a GitHub release. A `scripts/setup.sh` downloads the binary matching the
-  checkout's version (or builds it if Rust is present), installs the units
-  and the launcher, and checks for what it needs (`secret-tool`, PulseAudio
-  libraries, `jq`, `hyprctl`).
-- **First run without the daemon.** The bar widget and the app say what to
-  run, in place of "daemon not reachable".
-- **Updates.** The plugin already detects a daemon of another protocol
-  version; make that message name the command that fixes it, and tell the
-  user when a shell restart is needed.
-- **Uninstall for end users**, including caches and the keyring entry.
-- **Versioning.** Tag `v0.1.0`, start a changelog, bump the protocol version
-  the first time it changes incompatibly.
-- **README for strangers:** what it is, the unofficial-API caveat up front,
-  install, screenshots.
-- **Decisions the owner has to make first:** make the repository public;
-  keep or change the name; keep or change the plugin id.
-- **Find out whether Omarchy has a plugin directory** and what it asks for.
+- **Install path.** Built. `scripts/setup.sh` downloads the daemon for the
+  plugin's version from the GitHub release, checks its checksum, and falls
+  back to building it (or builds at once with `--build`); it then installs
+  the daemon, the units and the launcher, after checking for `jq`,
+  `systemctl`, `secret-tool`, `qs`, `hyprctl` and libpulse.
+  `.github/workflows/release.yml` builds and attaches that daemon when a tag
+  `v<version>` is pushed.
+- **First run without the daemon, and updates.** Built. The app and the
+  mini-player say the daemon is missing or of another version and show the
+  setup command (`common/Faults.js`); setup ends by saying a shell restart
+  is needed.
+- **Uninstall for end users.** Built: `scripts/uninstall.sh`, with `--purge`
+  for caches, saved state, preferences and the keyring entry.
+- **Versioning.** `CHANGELOG.md` started; the lint checks that the manifest,
+  the daemon and the changelog name the same version.
+- **README for strangers.** Rewritten: the unofficial-API caveat first,
+  requirements, install, update, remove. No screenshots yet.
+
+Tested: setup and uninstall in a throwaway home folder with stand-ins for
+`systemctl` and the keyring: download with a good checksum, a bad checksum
+(falls back to building), no release (builds), uninstall with and without
+`--purge`.
+
+Not tested, because each needs the owner's go-ahead or another machine:
+
+- The release workflow has never run (a workflow can only be started by
+  hand once it is on `main`, and a real release needs a tag).
+- Downloading from GitHub itself: the repository is private, so an
+  anonymous download fails and setup builds from source.
+- A clean Omarchy install from `plugin add` to music.
+
+Left for the owner to decide: make the repository public; keep the name;
+tag `v0.1.0`. Omarchy has no plugin directory to submit to: `omarchy plugin
+add` takes any git URL, and its catalogue only lists what is installed.
+
+Also still open from M5 in the roadmap: opening `spotify:` links, an icon
+of our own, screenshots.
 
 Done when: on a clean Omarchy install, `plugin add`, one setup command and a
 sign-in give a working Sporetify.

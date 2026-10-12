@@ -14,6 +14,7 @@ cannot be rebuilt from the daemon.
 | `Pages.js` | Which pages of a long list still need fetching for the rows on screen |
 | `Keymap.js` | The key table and lookups: `actionFor`, `keyLabel`, `hints` |
 | `Position.js` | Interpolates playback position; formats `m:ss` |
+| `Faults.js` | What to say when Sporetify cannot work, and the command that fixes it |
 | `KeyCap.qml` | Keycap badge shown beside a control |
 | `HintBar.qml` | Footer listing the actions valid in the current scopes |
 
@@ -189,7 +190,10 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   The font family is `monospace`, which fontconfig resolves to the Omarchy
   font. Not read yet: the theme's own `shell.toml` overrides.
 - **Faults:** signed out, offline or no daemon replaces the list with a
-  one-line explanation and the key that fixes it.
+  one-line explanation and the key that fixes it. When the daemon is
+  missing or of another version, the app and the mini-player also show the
+  setup command to run (`Faults.js`), and the bar's tooltip says to click
+  for it.
 
 Planned: a devices view, reordering the queue.
 
@@ -217,7 +221,7 @@ scopes used together never bind the same key twice.
 ## Tests
 
 - `tests/tst_client_core.qml`, `tst_loadable.qml`, `tst_keymap.qml`,
-  `tst_pages.qml`, `tst_organism.qml`: 45 tests, run with the Qt 6 `qmltestrunner`.
+  `tst_pages.qml`, `tst_organism.qml`, `tst_faults.qml`: 60 tests, run with the Qt 6 `qmltestrunner`.
 - `tests/lint.sh`: no colour literals, no network calls in QML, valid manifest.
 - UI checks are manual: drive with `wtype`, capture with `grim`.
 - Not automated: `DaemonClient.qml` against a real socket, and any view.

@@ -2,27 +2,77 @@
 
 A fast, keyboard-first Spotify client for [Omarchy](https://omarchy.org/):
 transport and volume in the bar, a mini-player under it, and a full app
-window for your library. Needs Spotify Premium. No Spotify developer app or
-client ID is required.
+window for your library.
 
-Status: early. Playback, your playlists, Liked Songs, library search, artist
-and album pages, likes, add to queue, an up-next list and search across all
-of Spotify work, with cover art, playlist folders, your made-for-you
-playlists, artist radio, and a library that still opens when you are offline.
+**Before you install, know that Sporetify is unofficial.** It is not made or
+endorsed by Spotify. It signs in the way Spotify's own desktop app does and
+talks to the same internal services, which are undocumented and may change
+or be closed at any time, and using them may be against Spotify's terms of
+service. Use it at your own risk.
 
-## Install (development)
+What it does: playback, your playlists and folders, Liked Songs, the
+playlists Spotify makes for you, artist and album pages with artist radio,
+search across all of Spotify and across your library, likes, add to queue,
+playlist editing, cover art, and a library that still opens when you are
+offline.
+
+## Requirements
+
+- Omarchy 4 (Hyprland with the Quickshell-based shell).
+- A Spotify Premium account.
+- An x86-64 machine, or Rust installed to build the daemon yourself.
+
+No Spotify developer app or client ID is needed.
+
+## Install
+
+```bash
+omarchy plugin add https://github.com/RadoslavMuntag/sporetify.git --enable
+~/.config/omarchy/plugins/namelessnovice.sporetify/scripts/setup.sh
+omarchy restart shell
+```
+
+The first command adds the bar widget. Omarchy only copies a plugin's files,
+so the second installs the rest: the daemon that plays the music
+(`sporetifyd`, into `~/.local/bin`), two systemd user units that start it on
+demand, and the `sporetify` command with a menu entry. It downloads the
+daemon built for the plugin's version and checks its checksum; if there is
+none for your machine it builds it, which needs Rust (`--build` forces
+that). It changes nothing else, and never your Hyprland config.
+
+Then click the bar icon and choose **Sign in to Spotify**. The login is kept
+in your desktop keyring.
+
+### Update
+
+```bash
+omarchy plugin update namelessnovice.sporetify
+~/.config/omarchy/plugins/namelessnovice.sporetify/scripts/setup.sh
+omarchy restart shell
+```
+
+The plugin and the daemon must be the same version. If they are not, the
+bar icon and the app say so and show the setup command.
+
+### Remove
+
+```bash
+~/.config/omarchy/plugins/namelessnovice.sporetify/scripts/uninstall.sh --purge
+omarchy plugin remove namelessnovice.sporetify
+```
+
+`--purge` also deletes the caches, the saved resume point, the app's
+preferences and the Spotify sign-in; leave it out to keep them.
+
+### From a checkout
 
 ```bash
 scripts/install-dev.sh
 omarchy plugin enable namelessnovice.sporetify
 ```
 
-This builds the daemon into `~/.local/bin`, installs two systemd user units,
-links the checkout as an Omarchy shell plugin and adds a `sporetify` launcher.
-`scripts/uninstall-dev.sh` removes all of it.
-
-The first time, click the bar icon and choose **Sign in to Spotify**; the
-login is kept in your desktop keyring.
+This builds the daemon here and links the checkout as the plugin.
+`scripts/uninstall-dev.sh` undoes it.
 
 ## Use
 
@@ -75,9 +125,8 @@ Other commands the same way: `playPause`, `next`, `previous`, `volumeUp`,
 
 ## Licence
 
-MIT, see `LICENSE`. Sporetify is not affiliated with Spotify. It signs in
-through librespot and uses Spotify's internal API, which is unofficial and can
-stop working at any time.
+MIT, see `LICENSE`. Sporetify is not affiliated with Spotify; see the note
+at the top. Changes are listed in `CHANGELOG.md`.
 
 ## Development
 

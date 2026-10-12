@@ -4,6 +4,7 @@ import Quickshell.Io
 
 import "../common"
 import "../common/Keymap.js" as Keymap
+import "../common/Faults.js" as Faults
 
 // The app window: sidebar, track list, now-playing bar and the hint bar.
 // One key handler serves the whole window; what a key means comes from
@@ -584,12 +585,7 @@ FloatingWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         textFormat: Text.PlainText
         text: {
-          switch (player.phase) {
-          case "signed_out": return "Sign in to Spotify to start listening"
-          case "no_premium": return "Spotify Premium is required to play"
-          case "incompatible": return "Daemon and app versions differ. Rebuild the daemon"
-          default: return "The Sporetify daemon is not reachable"
-          }
+          return Faults.title(player.phase) || Faults.title("unavailable")
         }
         color: player.scope === "fault" ? Theme.urgent : Theme.foreground
         font.family: Theme.font.family
@@ -601,6 +597,17 @@ FloatingWindow {
         text: "Press " + Keymap.keyLabel(player.scope === "signedOut" ? "signIn" : "retry")
           + " to " + (player.scope === "signedOut" ? "sign in" : "retry")
         color: Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.body
+      }
+      // A missing or outdated daemon: the command that installs the right one.
+      Text {
+        visible: Faults.command(player.phase) !== ""
+        anchors.horizontalCenter: parent.horizontalCenter
+        horizontalAlignment: Text.AlignHCenter
+        textFormat: Text.PlainText
+        text: Faults.advice(player.phase) + "\n" + Faults.command(player.phase)
+        color: Theme.foreground
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
       }
