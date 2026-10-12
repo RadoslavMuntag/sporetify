@@ -170,10 +170,14 @@ app verified complete with visuals off.
 
 ## Playlist editing (added 2026-10-12)
 
-Add a track to one of the user's playlists (`A`, a picker) and remove one
-from the playlist on screen (`x`, two presses). Both verified against a real
-playlist, which was left as it was found. Not built: creating, renaming and
-deleting playlists, reordering tracks, adding several tracks at once.
+Add tracks to a playlist (one or a selection), create a playlist (empty, or
+from the picker with tracks), rename, delete, remove tracks, and move a
+track up or down. All of it was run through the daemon and through the app
+on scratch playlists that the tests create and delete themselves; the
+user's own playlists were compared before and after and were identical.
+
+Not built: moving a track further than one step at a time, reordering by
+dragging, editing a playlist's description or picture, folders.
 
 ## M5 · Replace Spotify
 

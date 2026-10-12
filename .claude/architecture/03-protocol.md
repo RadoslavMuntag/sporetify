@@ -114,7 +114,12 @@ Built:
 | `player.play_context` | `uri`, optional `track_uri` | `{}` |
 | `library.playlists` | | `{items, stale}`: the sidebar, Liked Songs first. An item is `{uri, name, length, depth, editable}` or a folder `{kind:"folder", id, name, depth}` |
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
-| `playlist.add` `playlist.remove` | `playlist_uri`, `track_uri` | `{playlist, changed, total}` plus `reason` when nothing changed (already there / not in the playlist). Remove takes out every occurrence |
+| `playlist.add` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, added, skipped}`; tracks already there are skipped |
+| `playlist.remove` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, removed}`; every occurrence goes |
+| `playlist.move` | `playlist_uri`, `from`, `to` (0-based; `to` is where the track ends up) | `{playlist, changed, total}` |
+| `playlist.rename` | `playlist_uri`, `name` | `{playlist, changed, total}` |
+| `playlist.create` | `name`, optional `track_uris` | `{uri, playlist, total}`; placed first among the user's playlists |
+| `playlist.delete` | `playlist_uri` | `{changed}`; removes it from the user's playlists |
 | `library.made_for_you` | optional `refresh` | `{items}`: the playlists Spotify generates for this user, as `{uri, name, owner, art_url}` |
 | `library.search` | `query`, optional `limit` (max 500) | `{query, items, total, indexing}`; cached library only, never the network |
 | `search` | `query`, optional `limit` per section (max 50) | `{query, tracks, artists, albums, playlists}`; all of Spotify |

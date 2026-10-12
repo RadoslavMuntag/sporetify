@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use crate::catalog::{self, Catalog};
+use crate::catalog::{self, Catalog, PlaylistEdit};
 use crate::player::{Command, PlayRequest, Playback};
 use crate::proto::{OpError, OpResult};
 use crate::state::Shared;
@@ -32,6 +32,14 @@ fn text(args: &Value, key: &str) -> Result<String, OpError> {
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .ok_or_else(|| OpError::bad_request(format!("'args.{key}' must be a non-empty string")))
+}
+
+/// The tracks an op is about: `track_uris`, or a single `track_uri`.
+fn track_list(args: &Value) -> Result<Vec<String>, OpError> {
+    if let Some(list) = args.get("track_uris").and_then(Value::as_array) {
+        return Ok(list.iter().filter_map(Value::as_str).map(str::to_owned).collect());
+    }
+    text(args, "track_uri").map(|uri| vec![uri])
 }
 
 fn flag(args: &Value, key: &str) -> Result<bool, OpError> {
@@ -83,11 +91,35 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             ctx.playback.settle().await;
             return ctx.catalog.search_spotify(&ctx.playback.connected_session()?, &query, limit).await;
         }
-        "playlist.add" | "playlist.remove" => {
+        "playlist.add" | "playlist.remove" | "playlist.move" | "playlist.rename" => {
             ctx.playback.settle().await;
             let session = ctx.playback.connected_session()?;
-            let (playlist, track) = (text(&args, "playlist_uri")?, text(&args, "track_uri")?);
-            return ctx.catalog.edit_playlist(&session, &playlist, &track, op == "playlist.add").await;
+            let playlist = text(&args, "playlist_uri")?;
+            let edit = match op.as_str() {
+                "playlist.add" => PlaylistEdit::Add(track_list(&args)?),
+                "playlist.remove" => PlaylistEdit::Remove(track_list(&args)?),
+                "playlist.move" => PlaylistEdit::Move {
+                    from: number(&args, "from")?.max(0.0) as usize,
+                    to: number(&args, "to")?.max(0.0) as usize,
+                },
+                _ => PlaylistEdit::Rename(text(&args, "name")?),
+            };
+            return ctx.catalog.edit_playlist(&session, &playlist, edit).await;
+        }
+        "playlist.create" => {
+            ctx.playback.settle().await;
+            let session = ctx.playback.connected_session()?;
+            let tracks = if args.get("track_uris").is_some() || args.get("track_uri").is_some() {
+                track_list(&args)?
+            } else {
+                Vec::new()
+            };
+            return ctx.catalog.create_playlist(&session, &text(&args, "name")?, tracks).await;
+        }
+        "playlist.delete" => {
+            ctx.playback.settle().await;
+            let session = ctx.playback.connected_session()?;
+            return ctx.catalog.delete_playlist(&session, &text(&args, "playlist_uri")?).await;
         }
         "library.made_for_you" => {
             ctx.playback.settle().await;

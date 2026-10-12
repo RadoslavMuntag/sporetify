@@ -802,100 +802,218 @@ impl Catalog {
         Ok(json!({ "track": self.decorate(vec![row]).pop() }))
     }
 
-    /// Add a track to the end of a playlist, or remove it (every occurrence),
-    /// through the playlist service the official clients use.
+    /// Change one of the user's playlists through the playlist service the
+    /// official clients use: add tracks, remove tracks, move one, or rename.
     ///
-    /// Adding a track that is already there does nothing and says so, and so
-    /// does removing one that is not: both are answered from the playlist as
-    /// it is on Spotify right now, not from the cache.
-    pub async fn edit_playlist(&self, session: &Session, playlist_uri: &str, track_uri: &str, add: bool) -> OpResult {
-        use librespot_protocol::playlist4_external::{
-            op::Kind, source_info::Client, Add, ChangeInfo, Delta, Item, ItemAttributes, ListChanges, Op, Rem,
-            SourceInfo,
-        };
+    /// The playlist is read from Spotify first, not from the cache, so the
+    /// change is based on what is really there: tracks already in it are not
+    /// added again, tracks not in it are not "removed", and a move is checked
+    /// against the real length.
+    pub async fn edit_playlist(&self, session: &Session, playlist_uri: &str, edit: PlaylistEdit) -> OpResult {
+        use librespot_protocol::playlist4_external::{op::Kind, Add, Item, ItemAttributes, Mov, Op, Rem};
 
-        let id = playlist_uri
-            .strip_prefix("spotify:playlist:")
-            .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric()))
-            .ok_or_else(|| OpError::bad_request(format!("not a playlist: '{playlist_uri}'")))?;
-        if !track_uri.starts_with("spotify:track:") {
-            return Err(OpError::bad_request(format!("not a track: '{track_uri}'")));
-        }
-
+        let id = playlist_id(playlist_uri)?;
         let spotify_uri = SpotifyUri::from_uri(playlist_uri).map_err(|_| OpError::bad_request("not a playlist"))?;
         let playlist = Playlist::get(session, &spotify_uri).await.map_err(|e| upstream("the playlist", e))?;
-        let name = playlist.name().to_owned();
+        let mut name = playlist.name().to_owned();
         let mut uris: Vec<String> = playlist.tracks().filter_map(|t| t.to_uri().ok()).collect();
-        let present = uris.iter().any(|uri| uri == track_uri);
-        if add == present {
-            return Ok(json!({
-                "playlist": name, "changed": false, "total": uris.len(),
-                "reason": if add { "already there" } else { "not in the playlist" },
-            }));
+        let unchanged = |name: &str, total: usize, reason: &str| {
+            Ok(json!({ "playlist": name, "changed": false, "total": total, "reason": reason }))
+        };
+
+        let mut op = Op::new();
+        let mut detail = json!({});
+        match edit {
+            PlaylistEdit::Add(tracks) => {
+                require_tracks(&tracks)?;
+                // Each track once, and only those not already in the playlist.
+                let mut seen: HashSet<&String> = uris.iter().collect();
+                let fresh: Vec<String> = tracks.iter().filter(|t| seen.insert(t)).cloned().collect();
+                detail = json!({ "added": fresh.len(), "skipped": tracks.len() - fresh.len() });
+                if fresh.is_empty() {
+                    return unchanged(&name, uris.len(), "already there");
+                }
+                let mut change = Add::new();
+                for track in &fresh {
+                    let mut attributes = ItemAttributes::new();
+                    attributes.set_added_by(session.username());
+                    attributes.set_timestamp(now_ms());
+                    let mut item = Item::new();
+                    item.set_uri(track.clone());
+                    item.attributes = Some(attributes).into();
+                    change.items.push(item);
+                }
+                change.set_add_last(true);
+                op.set_kind(Kind::ADD);
+                op.add = Some(change).into();
+                uris.extend(fresh);
+            }
+            PlaylistEdit::Remove(tracks) => {
+                require_tracks(&tracks)?;
+                let gone: HashSet<&String> = tracks.iter().filter(|t| uris.contains(t)).collect();
+                detail = json!({ "removed": gone.len() });
+                if gone.is_empty() {
+                    return unchanged(&name, uris.len(), "not in the playlist");
+                }
+                let mut change = Rem::new();
+                for track in &gone {
+                    let mut item = Item::new();
+                    item.set_uri((*track).clone());
+                    change.items.push(item);
+                }
+                // Match by uri, wherever the tracks sit.
+                change.set_items_as_key(true);
+                op.set_kind(Kind::REM);
+                op.rem = Some(change).into();
+                let gone: HashSet<String> = gone.into_iter().cloned().collect();
+                uris.retain(|uri| !gone.contains(uri));
+            }
+            PlaylistEdit::Move { from, to } => {
+                if from >= uris.len() || to >= uris.len() {
+                    return Err(OpError::bad_request("the playlist is shorter than that"));
+                }
+                if from == to {
+                    return unchanged(&name, uris.len(), "already there");
+                }
+                let mut change = Mov::new();
+                change.set_from_index(from as i32);
+                change.set_length(1);
+                // Spotify counts the destination in the list as it is before
+                // the track is taken out: "insert before the item now at N".
+                change.set_to_index(if to > from { to as i32 + 1 } else { to as i32 });
+                op.set_kind(Kind::MOV);
+                op.mov = Some(change).into();
+                let track = uris.remove(from);
+                uris.insert(to, track);
+            }
+            PlaylistEdit::Rename(new_name) => {
+                let new_name = new_name.trim().to_owned();
+                if new_name.is_empty() {
+                    return Err(OpError::bad_request("a playlist needs a name"));
+                }
+                if new_name == name {
+                    return unchanged(&name, uris.len(), "already called that");
+                }
+                op = rename_op(&new_name);
+                name = new_name;
+            }
         }
 
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
-        let mut item = Item::new();
-        item.set_uri(track_uri.to_owned());
-        let mut op = Op::new();
-        if add {
-            let mut attributes = ItemAttributes::new();
-            attributes.set_added_by(session.username());
-            attributes.set_timestamp(now_ms);
-            item.attributes = Some(attributes).into();
-            let mut change = Add::new();
-            change.items.push(item);
-            change.set_add_last(true);
-            op.set_kind(Kind::ADD);
-            op.add = Some(change).into();
-        } else {
-            let mut change = Rem::new();
-            change.items.push(item);
-            // Match by uri, wherever the track sits.
-            change.set_items_as_key(true);
-            op.set_kind(Kind::REM);
-            op.rem = Some(change).into();
-        }
-        let mut source = SourceInfo::new();
-        source.set_client(Client::CLIENT);
-        let mut info = ChangeInfo::new();
-        info.set_user(session.username());
-        info.set_timestamp(now_ms);
-        info.source = Some(source).into();
-        let mut delta = Delta::new();
-        delta.ops.push(op);
-        delta.info = Some(info).into();
-        let mut changes = ListChanges::new();
         // Based on the revision just read, so a change made elsewhere in the
         // meantime is merged by Spotify rather than overwritten.
-        changes.set_base_revision(playlist.revision.clone());
-        changes.deltas.push(delta);
-        changes.set_want_resulting_revisions(true);
-        changes.set_want_sync_result(true);
+        send_changes(session, &format!("/playlist/v2/playlist/{id}/changes"), playlist.revision.clone(), op).await?;
 
-        session
-            .spclient()
-            .request_with_protobuf(&http::Method::POST, &format!("/playlist/v2/playlist/{id}/changes"), None, &changes)
-            .await
-            .map_err(|e| upstream("the change to the playlist", e))?;
-
-        if add {
-            uris.push(track_uri.to_owned());
-        } else {
-            uris.retain(|uri| uri != track_uri);
-        }
         let total = uris.len();
         let art_url = self.lists.lock().expect("lists lock").get(playlist_uri).and_then(|l| l.art_url.clone());
         self.lists
             .lock()
             .expect("lists lock")
             .insert(playlist_uri.to_owned(), Arc::new(List { name: name.clone(), uris, art_url }));
+        self.rename_in_sidebar(playlist_uri, &name, total);
         self.library_unsaved.store(true, Ordering::Relaxed);
         self.flush();
-        Ok(json!({ "playlist": name, "changed": true, "total": total }))
+        let mut answer = json!({ "playlist": name, "changed": true, "total": total });
+        if let (Some(answer), Some(detail)) = (answer.as_object_mut(), detail.as_object()) {
+            answer.extend(detail.clone());
+        }
+        Ok(answer)
+    }
+
+    /// Keep the saved sidebar's entry for a playlist in step with an edit.
+    fn rename_in_sidebar(&self, playlist_uri: &str, name: &str, total: usize) {
+        let mut sidebar = self.sidebar.lock().expect("sidebar lock");
+        if let Some(entry) = sidebar.iter_mut().find(|entry| entry["uri"] == playlist_uri) {
+            entry["name"] = json!(name);
+            entry["length"] = json!(total);
+        }
+    }
+
+    /// Create a playlist, optionally with tracks, and put it at the top of
+    /// the user's playlists.
+    pub async fn create_playlist(&self, session: &Session, name: &str, tracks: Vec<String>) -> OpResult {
+        use librespot_protocol::playlist4_external::{op::Kind, Add, CreateListReply, Item, Op};
+
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(OpError::bad_request("a playlist needs a name"));
+        }
+        if !tracks.is_empty() {
+            require_tracks(&tracks)?;
+        }
+
+        // 1. The playlist itself. Whatever name is sent along is ignored and
+        //    it comes out nameless, so it is named with a rename right after.
+        let bytes = post_changes(session, "/playlist/v2/playlist", Vec::new(), rename_op(name)).await?;
+        let reply = CreateListReply::parse_from_bytes(&bytes).map_err(|e| upstream("the new playlist", e))?;
+        let uri = reply.uri().to_owned();
+        playlist_id(&uri).map_err(|_| upstream("the new playlist", "Spotify did not say where it is"))?;
+        self.edit_playlist(session, &uri, PlaylistEdit::Rename(name.to_owned())).await?;
+
+        // 2. Into the user's list of playlists, or it would exist unseen.
+        let root = self.rootlist(session).await?;
+        let mut item = Item::new();
+        item.set_uri(uri.clone());
+        let mut change = Add::new();
+        change.items.push(item);
+        change.set_add_first(true);
+        let mut op = Op::new();
+        op.set_kind(Kind::ADD);
+        op.add = Some(change).into();
+        send_changes(session, &rootlist_changes(session), root.revision().to_vec(), op).await?;
+
+        // 3. Its tracks.
+        let mut total = 0;
+        if !tracks.is_empty() {
+            let added = self.edit_playlist(session, &uri, PlaylistEdit::Add(tracks)).await?;
+            total = added["total"].as_u64().unwrap_or(0);
+        }
+        self.refresh_sidebar(session).await;
+        Ok(json!({ "uri": uri, "playlist": name, "total": total }))
+    }
+
+    /// Take a playlist out of the user's list of playlists. For a playlist
+    /// the user owns this is what Spotify calls deleting it.
+    pub async fn delete_playlist(&self, session: &Session, playlist_uri: &str) -> OpResult {
+        use librespot_protocol::playlist4_external::{op::Kind, Item, Op, Rem};
+
+        playlist_id(playlist_uri)?;
+        let root = self.rootlist(session).await?;
+        let listed = root.contents.as_ref().is_some_and(|c| c.items.iter().any(|item| item.uri() == playlist_uri));
+        if !listed {
+            return Ok(json!({ "changed": false, "reason": "not among your playlists" }));
+        }
+        let mut item = Item::new();
+        item.set_uri(playlist_uri.to_owned());
+        let mut change = Rem::new();
+        change.items.push(item);
+        change.set_items_as_key(true);
+        let mut op = Op::new();
+        op.set_kind(Kind::REM);
+        op.rem = Some(change).into();
+        send_changes(session, &rootlist_changes(session), root.revision().to_vec(), op).await?;
+
+        self.lists.lock().expect("lists lock").remove(playlist_uri);
+        self.library_unsaved.store(true, Ordering::Relaxed);
+        self.refresh_sidebar(session).await;
+        Ok(json!({ "changed": true }))
+    }
+
+    async fn rootlist(&self, session: &Session) -> Result<SelectedListContent, OpError> {
+        let bytes = session
+            .spclient()
+            .get_rootlist(0, Some(1000))
+            .await
+            .map_err(|e| upstream("your playlists", e))?;
+        SelectedListContent::parse_from_bytes(&bytes).map_err(|e| upstream("your playlists", e))
+    }
+
+    /// Re-read the sidebar after the list of playlists changed.
+    async fn refresh_sidebar(&self, session: &Session) {
+        if let Ok(items) = self.fetch_sidebar(session).await {
+            *self.sidebar.lock().expect("sidebar lock") = items;
+            self.library_unsaved.store(true, Ordering::Relaxed);
+        }
+        self.flush();
     }
 
     /// The playlist Spotify itself publishes under exactly this name, such
@@ -1069,6 +1187,109 @@ fn collection_write(username: &str, uri: &str, now_secs: u64, remove: bool) -> V
     bytes(&mut request, 3, &item);
     bytes(&mut request, 4, format!("{now_secs:016x}{:08x}", uri.len()).as_bytes());
     request
+}
+
+/// A change to one playlist.
+#[derive(Debug, Clone)]
+pub enum PlaylistEdit {
+    /// Append these tracks, skipping any already there.
+    Add(Vec<String>),
+    /// Take out every occurrence of these tracks.
+    Remove(Vec<String>),
+    /// Move the track at `from` so that it ends up at `to` (both 0-based).
+    Move { from: usize, to: usize },
+    Rename(String),
+}
+
+/// The id in `spotify:playlist:<id>`, or a refusal for anything else.
+fn playlist_id(uri: &str) -> Result<&str, OpError> {
+    uri.strip_prefix("spotify:playlist:")
+        .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .ok_or_else(|| OpError::bad_request(format!("not a playlist: '{uri}'")))
+}
+
+fn require_tracks(uris: &[String]) -> Result<(), OpError> {
+    match uris.iter().find(|uri| !uri.starts_with("spotify:track:")) {
+        _ if uris.is_empty() => Err(OpError::bad_request("no tracks given")),
+        Some(bad) => Err(OpError::bad_request(format!("not a track: '{bad}'"))),
+        None => Ok(()),
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// Who made a change and when, as the playlist service wants it.
+fn change_info(session: &Session) -> librespot_protocol::playlist4_external::ChangeInfo {
+    use librespot_protocol::playlist4_external::{source_info::Client, ChangeInfo, SourceInfo};
+    let mut source = SourceInfo::new();
+    source.set_client(Client::CLIENT);
+    let mut info = ChangeInfo::new();
+    info.set_user(session.username());
+    info.set_timestamp(now_ms());
+    info.source = Some(source).into();
+    info
+}
+
+fn rootlist_changes(session: &Session) -> String {
+    format!("/playlist/v2/user/{}/rootlist/changes", session.username())
+}
+
+/// The operation that gives a list its name.
+fn rename_op(name: &str) -> librespot_protocol::playlist4_external::Op {
+    use librespot_protocol::playlist4_external::{
+        op::Kind, ListAttributes, ListAttributesPartialState, Op, UpdateListAttributes,
+    };
+    let mut values = ListAttributes::new();
+    values.set_name(name.to_owned());
+    let mut state = ListAttributesPartialState::new();
+    state.values = Some(values).into();
+    let mut change = UpdateListAttributes::new();
+    change.new_attributes = Some(state).into();
+    let mut op = Op::new();
+    op.set_kind(Kind::UPDATE_LIST_ATTRIBUTES);
+    op.update_list_attributes = Some(change).into();
+    op
+}
+
+/// Send one operation on a list (a playlist, or the list of playlists).
+async fn send_changes(
+    session: &Session,
+    endpoint: &str,
+    base_revision: Vec<u8>,
+    op: librespot_protocol::playlist4_external::Op,
+) -> Result<(), OpError> {
+    post_changes(session, endpoint, base_revision, op).await.map(|_| ())
+}
+
+/// As `send_changes`, returning what the service answered. With no base
+/// revision (creating a list) none is sent.
+async fn post_changes(
+    session: &Session,
+    endpoint: &str,
+    base_revision: Vec<u8>,
+    op: librespot_protocol::playlist4_external::Op,
+) -> Result<bytes::Bytes, OpError> {
+    use librespot_protocol::playlist4_external::{Delta, ListChanges};
+    let mut delta = Delta::new();
+    delta.ops.push(op);
+    delta.info = Some(change_info(session)).into();
+    let mut changes = ListChanges::new();
+    if !base_revision.is_empty() {
+        changes.set_base_revision(base_revision);
+    }
+    changes.deltas.push(delta);
+    changes.set_want_resulting_revisions(true);
+    changes.set_want_sync_result(true);
+    session
+        .spclient()
+        .request_with_protobuf(&http::Method::POST, endpoint, None, &changes)
+        .await
+        .map_err(|e| upstream("the change", e))
 }
 
 /// Names of the playlists Spotify generates per user, in the order shown.
