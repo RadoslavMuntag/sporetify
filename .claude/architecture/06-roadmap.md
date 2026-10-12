@@ -168,6 +168,13 @@ app verified complete with visuals off.
    [05-visuals.md](05-visuals.md); Omarchy already has a screensaver hook it
    might plug into.
 
+## Playlist editing (added 2026-10-12)
+
+Add a track to one of the user's playlists (`A`, a picker) and remove one
+from the playlist on screen (`x`, two presses). Both verified against a real
+playlist, which was left as it was found. Not built: creating, renaming and
+deleting playlists, reordering tracks, adding several tracks at once.
+
 ## M5 · Replace Spotify
 
 - `sporetify.desktop`, `spotify:` URI handling, icon

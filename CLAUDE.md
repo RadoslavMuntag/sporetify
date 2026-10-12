@@ -341,6 +341,16 @@ Things that bite:
   offline behaviour.
   `debug.mercury` and `debug.spclient` make raw internal-API calls.
 - Never `pkill -f` a pattern that also appears in your own command line.
+- **A write test names its target explicitly and stops on any surprise.**
+  On 2026-10-12 a test added the wrong track to one of the owner's playlists
+  and then removed the right one, because it relied on "whatever the cursor
+  or the player points at" after the screen had changed, and carried on when
+  a lookup returned nothing. Since then: pass the track uri and the playlist
+  by name or uri; read the target back from Spotify before and after; check
+  every precondition and abort the whole script if one fails; drive it from
+  one script that restores the original state in a `finally`. Prefer the
+  daemon's ops over the UI for the write itself, and use the UI only to
+  check what it shows.
 - **Tests that write to the Spotify account need care.** Like, unlike and
   queue change the owner's real library and queue. Before sending one, read
   `describe`'s `subject` to confirm exactly which track it will hit, only

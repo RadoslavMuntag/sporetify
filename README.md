@@ -49,6 +49,7 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `m` | Mute | `Tab` | Switch pane |
 | `a` / `d` | Artist / album of a track | `u` | Up next |
 | `f` | Like / unlike | `e` | Add to queue |
+| `A` | Add to a playlist | `x` | Remove from this playlist (press twice) |
 | `Backspace` | Back | `?` | Every shortcut |
 | `←` / `→` | Seek 10 s | `Esc` | Cancel search (closes the mini-player) |
 | `Ctrl C` | Quit the app | | |

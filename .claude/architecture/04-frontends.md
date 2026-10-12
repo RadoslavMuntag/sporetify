@@ -114,6 +114,13 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   sidebar pane, and from the heart in the now-playing bar, they act on the
   playing track. A like shows at once and is put back if Spotify refuses. A
   one-line toast names the track that was affected.
+- **Editing playlists:** `A` opens a picker of the user's own playlists for
+  the track under the cursor (or the playing track, from the sidebar); type
+  to narrow, arrows to move, `Enter` to add. `x` or `Delete` removes the
+  track under the cursor from the playlist on screen, and takes two presses:
+  the first names what would go, the second, within a few seconds, does it.
+  It refuses on playlists that are not the user's, and on Liked Songs points
+  to `f`.
 - **Lists:** a playlist has a row for every track as soon as the total is
   known; a row is a placeholder until its page arrives, at the same height.
   `Library.ensure` claims pages for the visible rows plus one screen ahead
@@ -157,7 +164,7 @@ bin/sporetify        focus the window if it exists, otherwise start the app
 - **Help:** `?` shows every key valid right now; the footer shows only the
   ones marked `primary` in the keymap. Any key closes the overlay.
 - **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>`,
-  `searchLibrary <text>`, `searchType <kind>` and
+  `searchLibrary <text>`, `searchType <kind>`, `addTo <playlist> <track uri>` and
   `describe` (what is on screen, as JSON, including the `subject` that like
   and queue would act on). Tests drive the app through it,
   which needs no key injection and works with the screen off.
@@ -177,7 +184,7 @@ Planned: a devices view, reordering the queue.
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
 | `mini` | mini-player | `o` `f` |
-| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `c` `?` |
+| `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `A` `x` `⌫` `[` `]` `R` `v` `c` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |
 | `popup` | mini-player | `Esc` `q` close |

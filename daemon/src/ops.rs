@@ -83,6 +83,12 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
             ctx.playback.settle().await;
             return ctx.catalog.search_spotify(&ctx.playback.connected_session()?, &query, limit).await;
         }
+        "playlist.add" | "playlist.remove" => {
+            ctx.playback.settle().await;
+            let session = ctx.playback.connected_session()?;
+            let (playlist, track) = (text(&args, "playlist_uri")?, text(&args, "track_uri")?);
+            return ctx.catalog.edit_playlist(&session, &playlist, &track, op == "playlist.add").await;
+        }
         "library.made_for_you" => {
             ctx.playback.settle().await;
             let refresh = args.get("refresh").and_then(Value::as_bool).unwrap_or(false);

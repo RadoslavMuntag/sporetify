@@ -694,6 +694,90 @@ Item {
     })
   }
 
+  // ---- Playlists the user can change
+
+  // [{ uri, name, length }] of the user's own (or collaborative) playlists.
+  readonly property var editablePlaylists: {
+    var out = []
+    var all = Loadable.hasData(playlists) ? playlists.data : []
+    for (var i = 0; i < all.length; i++) if (all[i].editable === true) out.push(all[i])
+    return out
+  }
+
+  function isEditable(playlistUri) {
+    for (var i = 0; i < editablePlaylists.length; i++) if (editablePlaylists[i].uri === playlistUri) return true
+    return false
+  }
+
+  // Add `track` ({ uri, title }) to a playlist. Says what happened.
+  function addToPlaylist(playlist, track) {
+    player.request("playlist.add", { playlist_uri: playlist.uri, track_uri: track.uri }, {
+      deadline: 8000,
+      onDone: function(result) {
+        if (!result.ok) {
+          root.notice(result.error.message, true)
+          return
+        }
+        root.notice(result.data.changed
+          ? "Added " + track.title + " to " + result.data.playlist
+          : track.title + " is already in " + result.data.playlist, false)
+        // If that playlist is on screen, show the new row.
+        if (result.data.changed && root.kind === "playlist" && root.uri === playlist.uri && root.historyIndex >= 0)
+          root.show(root.history[root.historyIndex], true)
+      }
+    })
+  }
+
+  // Removing takes two presses: the first names what would go, the second,
+  // within a few seconds, does it.
+  property string removeArmed: ""
+  Timer {
+    id: disarm
+    interval: 3500
+    onTriggered: root.removeArmed = ""
+  }
+
+  function removeFromPlaylist(index) {
+    if (kind !== "playlist") {
+      notice("Open a playlist to remove a track from it", true)
+      return
+    }
+    if (uri.indexOf(":collection") !== -1) {
+      notice("Liked Songs: press f on a track to unlike it", true)
+      return
+    }
+    if (!isEditable(uri)) {
+      notice("This playlist is not yours to change", true)
+      return
+    }
+    var track = subjectOrExplain(index)
+    if (!track) return
+    if (removeArmed !== track.uri) {
+      removeArmed = track.uri
+      disarm.restart()
+      notice("Press again to remove " + track.title + " from " + name, false)
+      return
+    }
+    removeArmed = ""
+    var playlistUri = uri
+    player.request("playlist.remove", { playlist_uri: playlistUri, track_uri: track.uri }, {
+      deadline: 8000,
+      onDone: function(result) {
+        if (!result.ok) {
+          root.notice(result.error.message, true)
+          return
+        }
+        root.notice(result.data.changed ? "Removed " + track.title + " from " + result.data.playlist
+          : track.title + " was not in " + result.data.playlist, false)
+        // Show the playlist without it, keeping the cursor where it was.
+        if (root.kind === "playlist" && root.uri === playlistUri && root.historyIndex >= 0) {
+          root.history[root.historyIndex].cursor = Math.max(0, index)
+          root.show(root.history[root.historyIndex], true)
+        }
+      }
+    })
+  }
+
   function enqueue(index) {
     var track = subjectOrExplain(index)
     if (!track) return

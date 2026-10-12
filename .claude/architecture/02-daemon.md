@@ -132,6 +132,13 @@ Lines longer than 64 KiB end the connection.
   `browse.artist` adds "This Is <artist>" the same way. Artist radio comes
   from `/inspiredby-mix/v2/seed_to_playlist/<uri>`, which returns the radio
   playlist's uri. All of them open as ordinary playlists.
+- Playlist edits: `playlist.add` appends a track and `playlist.remove`
+  takes one out, through the playlist service
+  (`POST /playlist/v2/playlist/<id>/changes`, a `ListChanges` message based
+  on the revision just read). The playlist is re-read from Spotify first, so
+  adding a track that is there, or removing one that is not, is reported and
+  not sent. The sidebar marks which playlists the user may change, from the
+  capabilities Spotify reports.
 - Likes: `library.save` / `unsave` write to the collection service; every
   track row carries `liked`, taken from the cached Liked Songs list. A song
   exists under several uris, so "liked" is matched by uri and, failing that,

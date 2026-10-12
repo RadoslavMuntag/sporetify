@@ -148,11 +148,11 @@ fn write_atomically(path: &std::path::Path, bytes: &[u8]) {
 
 /// The sidebar from the rootlist's entries, in order. Playlists carry the
 /// depth of the folders they sit in; a folder is an entry of its own.
-/// `entries` are (uri, name, length).
-fn sidebar_entries(liked_uri: &str, entries: &[(String, String, Option<i32>)]) -> Vec<Value> {
+/// `entries` are (uri, name, length, whether the user may change its tracks).
+fn sidebar_entries(liked_uri: &str, entries: &[(String, String, Option<i32>, bool)]) -> Vec<Value> {
     let mut items = vec![json!({ "uri": liked_uri, "name": "Liked Songs", "length": null, "depth": 0 })];
     let mut depth = 0usize;
-    for (uri, name, length) in entries {
+    for (uri, name, length, editable) in entries {
         if let Some(rest) = uri.strip_prefix("spotify:start-group:") {
             // spotify:start-group:<id>:<name, url-encoded with + for spaces>
             let (id, raw) = rest.split_once(':').unwrap_or((rest, ""));
@@ -166,6 +166,7 @@ fn sidebar_entries(liked_uri: &str, entries: &[(String, String, Option<i32>)]) -
                 "name": if name.is_empty() { "Untitled playlist" } else { name },
                 "length": length,
                 "depth": depth,
+                "editable": editable,
             }));
         }
     }
@@ -246,7 +247,8 @@ impl Catalog {
         let contents = root.contents.as_ref();
         let uris = contents.map(|c| c.items.as_slice()).unwrap_or_default();
         let metas = contents.map(|c| c.meta_items.as_slice()).unwrap_or_default();
-        let entries: Vec<(String, String, Option<i32>)> = uris
+        let me = session.username();
+        let entries: Vec<(String, String, Option<i32>, bool)> = uris
             .iter()
             .enumerate()
             .map(|(index, item)| {
@@ -255,6 +257,12 @@ impl Catalog {
                     item.uri().to_owned(),
                     meta.map(|m| m.attributes.name().to_owned()).unwrap_or_default(),
                     meta.and_then(|m| m.length),
+                    // Spotify says whether the tracks may be changed; failing
+                    // that, the user's own playlists can be.
+                    meta.is_some_and(|m| match m.capabilities.as_ref() {
+                        Some(capabilities) if capabilities.has_can_edit_items() => capabilities.can_edit_items(),
+                        _ => m.owner_username() == me,
+                    }),
                 )
             })
             .collect();
@@ -794,6 +802,102 @@ impl Catalog {
         Ok(json!({ "track": self.decorate(vec![row]).pop() }))
     }
 
+    /// Add a track to the end of a playlist, or remove it (every occurrence),
+    /// through the playlist service the official clients use.
+    ///
+    /// Adding a track that is already there does nothing and says so, and so
+    /// does removing one that is not: both are answered from the playlist as
+    /// it is on Spotify right now, not from the cache.
+    pub async fn edit_playlist(&self, session: &Session, playlist_uri: &str, track_uri: &str, add: bool) -> OpResult {
+        use librespot_protocol::playlist4_external::{
+            op::Kind, source_info::Client, Add, ChangeInfo, Delta, Item, ItemAttributes, ListChanges, Op, Rem,
+            SourceInfo,
+        };
+
+        let id = playlist_uri
+            .strip_prefix("spotify:playlist:")
+            .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric()))
+            .ok_or_else(|| OpError::bad_request(format!("not a playlist: '{playlist_uri}'")))?;
+        if !track_uri.starts_with("spotify:track:") {
+            return Err(OpError::bad_request(format!("not a track: '{track_uri}'")));
+        }
+
+        let spotify_uri = SpotifyUri::from_uri(playlist_uri).map_err(|_| OpError::bad_request("not a playlist"))?;
+        let playlist = Playlist::get(session, &spotify_uri).await.map_err(|e| upstream("the playlist", e))?;
+        let name = playlist.name().to_owned();
+        let mut uris: Vec<String> = playlist.tracks().filter_map(|t| t.to_uri().ok()).collect();
+        let present = uris.iter().any(|uri| uri == track_uri);
+        if add == present {
+            return Ok(json!({
+                "playlist": name, "changed": false, "total": uris.len(),
+                "reason": if add { "already there" } else { "not in the playlist" },
+            }));
+        }
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let mut item = Item::new();
+        item.set_uri(track_uri.to_owned());
+        let mut op = Op::new();
+        if add {
+            let mut attributes = ItemAttributes::new();
+            attributes.set_added_by(session.username());
+            attributes.set_timestamp(now_ms);
+            item.attributes = Some(attributes).into();
+            let mut change = Add::new();
+            change.items.push(item);
+            change.set_add_last(true);
+            op.set_kind(Kind::ADD);
+            op.add = Some(change).into();
+        } else {
+            let mut change = Rem::new();
+            change.items.push(item);
+            // Match by uri, wherever the track sits.
+            change.set_items_as_key(true);
+            op.set_kind(Kind::REM);
+            op.rem = Some(change).into();
+        }
+        let mut source = SourceInfo::new();
+        source.set_client(Client::CLIENT);
+        let mut info = ChangeInfo::new();
+        info.set_user(session.username());
+        info.set_timestamp(now_ms);
+        info.source = Some(source).into();
+        let mut delta = Delta::new();
+        delta.ops.push(op);
+        delta.info = Some(info).into();
+        let mut changes = ListChanges::new();
+        // Based on the revision just read, so a change made elsewhere in the
+        // meantime is merged by Spotify rather than overwritten.
+        changes.set_base_revision(playlist.revision.clone());
+        changes.deltas.push(delta);
+        changes.set_want_resulting_revisions(true);
+        changes.set_want_sync_result(true);
+
+        session
+            .spclient()
+            .request_with_protobuf(&http::Method::POST, &format!("/playlist/v2/playlist/{id}/changes"), None, &changes)
+            .await
+            .map_err(|e| upstream("the change to the playlist", e))?;
+
+        if add {
+            uris.push(track_uri.to_owned());
+        } else {
+            uris.retain(|uri| uri != track_uri);
+        }
+        let total = uris.len();
+        let art_url = self.lists.lock().expect("lists lock").get(playlist_uri).and_then(|l| l.art_url.clone());
+        self.lists
+            .lock()
+            .expect("lists lock")
+            .insert(playlist_uri.to_owned(), Arc::new(List { name: name.clone(), uris, art_url }));
+        self.library_unsaved.store(true, Ordering::Relaxed);
+        self.flush();
+        Ok(json!({ "playlist": name, "changed": true, "total": total }))
+    }
+
     /// The playlist Spotify itself publishes under exactly this name, such
     /// as "This Is Radiohead" or "Discover Weekly", found through search.
     /// Playlists by anyone else with the same name are ignored.
@@ -1107,7 +1211,7 @@ mod tests {
 
     #[test]
     fn sidebar_keeps_folders_and_depth() {
-        let entry = |uri: &str, name: &str| (uri.to_owned(), name.to_owned(), Some(3));
+        let entry = |uri: &str, name: &str| (uri.to_owned(), name.to_owned(), Some(3), uri.ends_with(":a"));
         let items = super::sidebar_entries(
             "spotify:user:u:collection",
             &[
@@ -1137,6 +1241,8 @@ mod tests {
         assert_eq!(items[2]["kind"], "folder");
         assert_eq!(items[2]["id"], "f1");
         assert!(items[1]["kind"].is_null());
+        assert_eq!(items[1]["editable"], true);
+        assert_eq!(items[3]["editable"], false);
     }
 
     #[test]

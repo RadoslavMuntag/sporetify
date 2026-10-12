@@ -72,6 +72,11 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_Question, "?", ["browse", "player"]), "help")
     compare(Keymap.actionFor(Qt.Key_F, "f", ["browse", "player"]), "like")
     compare(Keymap.actionFor(Qt.Key_E, "e", ["browse", "player"]), "enqueue")
+    // Capital A adds to a playlist; plain a still opens the artist.
+    compare(Keymap.actionFor(Qt.Key_A, "A", ["browse", "player"]), "addToPlaylist")
+    compare(Keymap.actionFor(Qt.Key_A, "a", ["browse", "player"]), "artist")
+    compare(Keymap.actionFor(Qt.Key_Delete, "", ["browse", "player"]), "removeFromPlaylist")
+    compare(Keymap.actionFor(Qt.Key_X, "x", ["browse", "player"]), "removeFromPlaylist")
   }
 
   function test_ctrl_chords_are_their_own_keys() {

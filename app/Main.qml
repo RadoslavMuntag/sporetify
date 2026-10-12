@@ -128,6 +128,37 @@ FloatingWindow {
 
   property bool helpOpen: false
 
+  // ---- Choosing a playlist to add a track to
+  property bool pickerOpen: false
+  // { uri, title } of the track being added.
+  property var pickerTrack: null
+  readonly property var pickerChoices: {
+    var words = pickerFilter.text.toLowerCase().split(/\s+/)
+    return library.editablePlaylists.filter(function(playlist) {
+      var name = playlist.name.toLowerCase()
+      for (var i = 0; i < words.length; i++) if (words[i] !== "" && name.indexOf(words[i]) === -1) return false
+      return true
+    })
+  }
+  function openPicker(index) {
+    var track = library.subjectOrExplain(index)
+    if (!track) return
+    pickerTrack = track
+    pickerFilter.text = ""
+    pickerList.currentIndex = 0
+    pickerOpen = true
+    pickerFilter.forceActiveFocus()
+  }
+  function closePicker() {
+    pickerOpen = false
+    keys.forceActiveFocus()
+  }
+  function confirmPicker() {
+    var playlist = pickerChoices[pickerList.currentIndex]
+    if (playlist && pickerTrack) library.addToPlaylist(playlist, pickerTrack)
+    closePicker()
+  }
+
   // One line of feedback for actions with no other visible effect.
   property string noticeText: ""
   property bool noticeIsError: false
@@ -166,6 +197,8 @@ FloatingWindow {
     case "forward": library.forward(tracks.currentIndex); pane = "list"; return
     case "queue": library.go({ kind: "queue" }, tracks.currentIndex); pane = "list"; return
     case "like": library.toggleLike(pane === "list" ? tracks.currentIndex : -1); return
+    case "addToPlaylist": openPicker(pane === "list" ? tracks.currentIndex : -1); return
+    case "removeFromPlaylist": library.removeFromPlaylist(pane === "list" ? tracks.currentIndex : -1); return
     case "enqueue": library.enqueue(pane === "list" ? tracks.currentIndex : -1); return
     case "artist":
     case "album":
@@ -215,6 +248,19 @@ FloatingWindow {
       window.pane = "list"
       return "ok"
     }
+    // Add one track to the user's playlist of this exact name. The track is
+    // named by uri and never taken from the cursor or the player: a test
+    // must say exactly what it writes to a real account.
+    function addTo(playlistName: string, trackUri: string): string {
+      if (trackUri.indexOf("spotify:track:") !== 0) return "not a track uri"
+      for (var i = 0; i < library.editablePlaylists.length; i++) {
+        if (library.editablePlaylists[i].name === playlistName) {
+          library.addToPlaylist(library.editablePlaylists[i], { uri: trackUri, title: trackUri })
+          return "ok"
+        }
+      }
+      return "no such playlist"
+    }
     // all | songs | artists | albums | playlists
     function searchType(filter: string): string {
       library.setSearchFilter(filter)
@@ -236,6 +282,7 @@ FloatingWindow {
         phase: player.phase, help: window.helpOpen, searchOpen: window.searchOpen, notice: window.noticeText,
         playingLiked: library.playingLiked, rows: rows,
         artPath: library.artPath, offline: player.offline, sidebar: sidebar.count,
+        picker: window.pickerOpen ? window.pickerChoices.length : -1, editable: library.editablePlaylists.length,
         playingArt: player.track && player.track.art_path ? player.track.art_path : "",
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
@@ -505,6 +552,150 @@ FloatingWindow {
         fontFamily: Theme.font.family
         fontSize: Theme.font.caption
         gap: Theme.spacing.xs
+      }
+    }
+
+    // ---- Playlist picker: type to narrow, arrows to move, Enter to add.
+    Rectangle {
+      visible: window.pickerOpen
+      anchors.fill: parent
+      color: Theme.alpha(Theme.background, 0.88)
+      z: 8
+
+      MouseArea { anchors.fill: parent; onClicked: window.closePicker() }
+
+      Rectangle {
+        anchors.centerIn: parent
+        width: Math.min(parent.width - Theme.spacing.huge * 4, Theme.space(460))
+        height: Math.min(parent.height - Theme.spacing.huge * 4, Theme.space(480))
+        color: Theme.raised
+        border.width: 1
+        border.color: Theme.border
+        radius: Theme.spacing.sm
+
+        MouseArea { anchors.fill: parent }
+
+        Column {
+          id: pickerHead
+          x: Theme.spacing.huge
+          y: Theme.spacing.xxl
+          width: parent.width - Theme.spacing.huge * 2
+          spacing: Theme.spacing.md
+
+          Text {
+            width: parent.width
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            text: window.pickerTrack ? "Add \u201C" + window.pickerTrack.title + "\u201D to\u2026" : ""
+            color: Theme.foreground
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.title
+            font.bold: true
+          }
+          Rectangle {
+            width: parent.width
+            height: Theme.spacing.rowHeight
+            color: Theme.sunken
+            radius: Theme.spacing.xs
+
+            TextInput {
+              id: pickerFilter
+              anchors.verticalCenter: parent.verticalCenter
+              x: Theme.spacing.lg
+              width: parent.width - Theme.spacing.lg * 2
+              clip: true
+              color: Theme.foreground
+              selectionColor: Theme.selectedFill
+              selectedTextColor: Theme.foreground
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.body
+              onTextEdited: pickerList.currentIndex = 0
+              Keys.onEscapePressed: window.closePicker()
+              Keys.onReturnPressed: window.confirmPicker()
+              Keys.onDownPressed: pickerList.currentIndex = Math.min(pickerList.count - 1, pickerList.currentIndex + 1)
+              Keys.onUpPressed: pickerList.currentIndex = Math.max(0, pickerList.currentIndex - 1)
+            }
+            Text {
+              visible: pickerFilter.text === ""
+              anchors.verticalCenter: parent.verticalCenter
+              x: Theme.spacing.lg
+              textFormat: Text.PlainText
+              text: "Type to narrow the list"
+              color: Theme.muted
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.body
+            }
+          }
+        }
+
+        ListView {
+          id: pickerList
+          anchors.top: pickerHead.bottom
+          anchors.topMargin: Theme.spacing.lg
+          anchors.bottom: pickerFoot.top
+          anchors.bottomMargin: Theme.spacing.lg
+          width: parent.width
+          clip: true
+          model: window.pickerChoices.length
+          boundsBehavior: Flickable.StopAtBounds
+          highlightMoveDuration: 0
+
+          delegate: Rectangle {
+            id: choice
+            required property int index
+            readonly property var playlist: window.pickerChoices[index]
+            width: pickerList.width
+            height: Theme.spacing.rowHeight
+            color: ListView.isCurrentItem ? Theme.selectedFill
+              : (choiceArea.containsMouse ? Theme.hoverFill : "transparent")
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              x: Theme.spacing.huge
+              width: parent.width - Theme.spacing.huge * 2 - choiceCount.width
+              elide: Text.ElideRight
+              textFormat: Text.PlainText
+              text: choice.playlist ? choice.playlist.name : ""
+              color: Theme.foreground
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.body
+            }
+            Text {
+              id: choiceCount
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.right: parent.right
+              anchors.rightMargin: Theme.spacing.huge
+              textFormat: Text.PlainText
+              text: choice.playlist && choice.playlist.length !== null && choice.playlist.length !== undefined
+                ? String(choice.playlist.length) : ""
+              color: Theme.muted
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.bodySmall
+            }
+            MouseArea {
+              id: choiceArea
+              anchors.fill: parent
+              hoverEnabled: true
+              onClicked: {
+                pickerList.currentIndex = choice.index
+                window.confirmPicker()
+              }
+            }
+          }
+        }
+
+        Text {
+          id: pickerFoot
+          anchors.bottom: parent.bottom
+          anchors.bottomMargin: Theme.spacing.xl
+          x: Theme.spacing.huge
+          textFormat: Text.PlainText
+          text: window.pickerChoices.length === 0 ? "No playlist of yours matches"
+            : "\u2191 \u2193 move \u00b7 \u23ce add \u00b7 Esc cancel"
+          color: Theme.muted
+          font.family: Theme.font.family
+          font.pixelSize: Theme.font.caption
+        }
       }
     }
 
