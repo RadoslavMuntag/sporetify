@@ -1,17 +1,15 @@
 #!/bin/bash
 
-# Undo scripts/install-dev.sh.
+# Undo scripts/install-dev.sh: the plugin link as well as everything
+# uninstall.sh removes. Caches and the sign-in are kept.
 
 set -o pipefail
 source "$(dirname "$0")/env.sh"
+source "$ROOT/scripts/lib.sh"
 
 omarchy plugin disable "$PLUGIN_ID" >/dev/null 2>&1 || true
 [[ -L $PLUGIN_LINK ]] && rm "$PLUGIN_LINK"
 omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
-
-systemctl --user disable --now sporetifyd.socket sporetifyd.service 2>/dev/null || true
-rm -f "$BIN_DIR/sporetify" "$APP_DIR/sporetify.desktop"
-rm -f "$UNIT_DIR/sporetifyd.socket" "$UNIT_DIR/sporetifyd.service" "$BIN_DIR/sporetifyd"
-systemctl --user daemon-reload
+remove_installed
 
 echo "Removed."

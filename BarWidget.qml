@@ -49,8 +49,8 @@ BarWidget {
     case "signed_out": return "Not signed in · click to sign in"
     case "offline": return "Offline"
     case "no_premium": return "Spotify Premium is required to play"
-    case "incompatible": return "Daemon and plugin versions differ · rebuild the daemon"
-    default: return "Daemon not reachable"
+    case "incompatible": return "Daemon is out of date · click for the fix"
+    default: return "Daemon not installed or not running · click for the fix"
     }
   }
   readonly property string tooltip: {

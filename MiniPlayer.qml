@@ -5,6 +5,7 @@ import qs.Ui
 
 import "common"
 import "common/Keymap.js" as Keymap
+import "common/Faults.js" as Faults
 import "common/Position.js" as Position
 
 // The popup under the bar icon: what is playing, transport, seek, volume,
@@ -33,14 +34,12 @@ KeyboardPanel {
     if (!service) return "The Sporetify service is not loaded"
     if (service.lastError !== "") return service.lastError
     switch (service.phase) {
-    case "signed_out": return "Sign in to Spotify to start listening"
-    case "offline": return "Offline. Playback resumes when Spotify is reachable"
-    case "no_premium": return "Spotify Premium is required to play"
-    case "unavailable": return "The Sporetify daemon is not reachable"
-    case "incompatible": return "Daemon and plugin versions differ. Rebuild the daemon"
     case "starting": return "Starting…"
+    case "unavailable":
+    case "incompatible":
+      return Faults.title(service.phase) + ". " + Faults.advice(service.phase) + "\n" + Faults.command(service.phase)
     }
-    return ""
+    return Faults.title(service.phase)
   }
   readonly property bool messageIsError: service && (service.lastError !== "" || scope === "fault")
 
