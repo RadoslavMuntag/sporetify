@@ -43,6 +43,41 @@ Item {
   readonly property bool playing: playingIntent !== undefined ? playingIntent : !!(player && player.playing)
   readonly property real volume: volumeIntent !== undefined ? volumeIntent : (player ? player.volume : 0.5)
 
+  // Whether the playing track is in Liked Songs. Asked of the daemon on
+  // every track change; shown at once when the user flips it.
+  property bool playingLiked: false
+  readonly property string trackId: track ? track.id : ""
+  onTrackIdChanged: refreshLiked()
+
+  function refreshLiked() {
+    if (trackId === "") {
+      playingLiked = false
+      return
+    }
+    var uri = trackId
+    client.request("library.is_saved", { uri: uri }, {
+      deadline: 5000,
+      scope: "playing-liked",
+      onDone: function(result) {
+        if (result.ok && root.trackId === uri) root.playingLiked = result.data.liked
+      }
+    })
+  }
+
+  // Like or unlike the playing track. `done(ok, liked, title)` is optional.
+  function toggleLikePlaying(done) {
+    if (!track) return
+    var uri = trackId
+    var title = track.title
+    var want = !playingLiked
+    playingLiked = want
+    send(want ? "library.save" : "library.unsave", { uri: uri }, function(result) {
+      // Put it back if Spotify refused, unless the track has moved on.
+      if (!result.ok && root.trackId === uri) root.playingLiked = !want
+      if (done) done(result.ok, want, title)
+    })
+  }
+
   readonly property real volumeStep: 0.05
   readonly property int seekStepMs: 10000
   property real volumeBeforeMute: 0.5
@@ -118,6 +153,7 @@ Item {
     case "seekBack": seekTo(positionMs() - seekStepMs); return true
     case "shuffle": send("player.shuffle", { on: !(player && player.shuffle) }); return true
     case "repeat": send("player.repeat", { on: !(player && player.repeat) }); return true
+    case "likePlaying": toggleLikePlaying(); return true
     case "signIn": send("auth.begin"); return true
     case "retry": send("auth.retry"); return true
     }

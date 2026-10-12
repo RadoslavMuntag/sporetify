@@ -70,7 +70,8 @@ MiniPlayer.qml    KeyboardPanel: title, seek, transport, volume, keycaps, hint b
   `volumeDown`, `mute`, `toggleMini`, `toggleApp`, `signIn`, `status`,
   `nowPlaying`, `wake`. All return at once.
 - **Mini-player:** one `Keys.onPressed` asks `Keymap.actionFor` with scopes
-  `["mini", "player"]`. `o` opens the full app. Built on `KeyboardPanel`,
+  `["mini", "player", "popup"]`. `o` opens the full app and `f` likes the
+  playing track (a heart beside the transport buttons shows the state). Built on `KeyboardPanel`,
   `Button`, `PanelSlider` and `PanelSeparator` from `qs.Ui`.
 - With several monitors a bar exists per monitor; `toggleMini` opens the
   popup on the first one only.
@@ -171,7 +172,7 @@ Planned: a devices view, reordering the queue.
 | Scope | Used by | Keys |
 | --- | --- | --- |
 | `player` | everywhere playback is possible | `Space` `n` `p` `+` `-` `m` `←` `→` `s` `r` |
-| `mini` | mini-player | `o` |
+| `mini` | mini-player | `o` `f` |
 | `browse` | app | `j` `k` arrows `Enter` `Tab` `g` `G` `PgUp` `PgDn` `/` `Ctrl F` `t` `a` `d` `u` `f` `e` `⌫` `[` `]` `R` `v` `c` `?` |
 | `signedOut` | signed out | `Enter` signs in |
 | `fault` | offline / no daemon | `Enter` retries |

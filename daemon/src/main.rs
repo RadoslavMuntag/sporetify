@@ -151,6 +151,9 @@ async fn run(options: Options) -> io::Result<()> {
         }
     };
 
+    // Off the main path: it only lists one folder, but there is no hurry.
+    std::thread::spawn(sporetifyd::art::prune);
+
     let shared = Shared::new(Status::Starting);
     let playback = Playback::new(shared.clone());
     let (clients_tx, clients_rx) = watch::channel(0usize);

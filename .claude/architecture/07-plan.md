@@ -10,7 +10,16 @@ must feel right and work, then the wishlist, then getting it into other
 people's hands. The larger Spore scenes come last because nothing else
 waits on them.
 
-## Phase 1 · Make what exists trustworthy
+## Phase 1 · Make what exists trustworthy (done on `phase-1-trustworthy`)
+
+Outcome: the owner did the hand checks on 2026-10-12 and reported everything
+working. The liked-state fix, the cover cache limit, tests for `persist`,
+library search, the offline fallback, liked matching, cache eviction and
+player state, and the mini-player's like button are in. One change from the
+list below: the mini-player got like but not queue, because the only track
+it knows is the one already playing.
+
+Original list:
 
 Nothing new for the user to learn; the point is that everything already
 there is known to work.

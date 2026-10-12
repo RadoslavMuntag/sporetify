@@ -72,6 +72,7 @@ KeyboardPanel {
     property string icon
     property real iconSize: Style.font.icon
     property bool enabled: true
+    property color tint: panel.fg
     spacing: Style.spacing.sm
 
     // Same slot height for every button, so the keycaps line up under
@@ -86,7 +87,7 @@ KeyboardPanel {
         anchors.centerIn: parent
         iconText: control.icon
         iconSize: control.iconSize
-        foreground: panel.fg
+        foreground: control.tint
         enabled: control.enabled
         opacity: enabled ? 1 : Style.normalBorderAlpha
         onClicked: panel.act(control.action)
@@ -251,6 +252,13 @@ KeyboardPanel {
         spacing: Style.spacing.huge
 
         // nf-md-skip_previous, nf-md-pause / nf-md-play, nf-md-skip_next
+        // nf-md-heart when the playing track is liked, nf-md-heart_outline when not.
+        Control {
+          action: "likePlaying"
+          icon: panel.service && panel.service.playingLiked ? "󰋑" : "󰋕"
+          tint: panel.service && panel.service.playingLiked ? Color.accent : panel.fg
+          enabled: panel.track !== null
+        }
         Control { action: "previous"; icon: "󰒮"; enabled: panel.track !== null }
         Control {
           action: "playPause"

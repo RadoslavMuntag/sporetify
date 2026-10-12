@@ -56,8 +56,8 @@ Item {
   property int restoreCursor: -1
   signal cursorRestoreRequested(int index)
 
-  // Whether the playing track is in Liked Songs.
-  property bool playingLiked: false
+  // Whether the playing track is in Liked Songs; kept by the shared player.
+  readonly property bool playingLiked: player.playingLiked
   // Something worth telling the user once ("Added to queue", a failure).
   signal notice(string text, bool isError)
 
@@ -646,7 +646,7 @@ Item {
       rows = next
       revision++
     }
-    if (player.track && player.track.id === uri) playingLiked = liked
+    if (player.track && player.track.id === uri) player.playingLiked = liked
   }
 
   function toggleLike(index) {
@@ -684,21 +684,6 @@ Item {
     })
   }
 
-  function refreshPlayingLiked() {
-    if (!player.track) {
-      playingLiked = false
-      return
-    }
-    var uri = player.track.id
-    player.request("library.is_saved", { uri: uri }, {
-      deadline: 5000,
-      scope: "playing-liked",
-      onDone: function(result) {
-        if (result.ok && root.player.track && root.player.track.id === uri) root.playingLiked = result.data.liked
-      }
-    })
-  }
-
   // Up next follows the music. The track object is replaced on every player
   // event, so compare ids rather than reacting to each one.
   property string lastTrackId: ""
@@ -708,7 +693,6 @@ Item {
       var id = root.player.track ? root.player.track.id : ""
       if (id === root.lastTrackId) return
       root.lastTrackId = id
-      root.refreshPlayingLiked()
       if (root.kind === "queue" && root.historyIndex >= 0) root.show(root.history[root.historyIndex], false)
     }
   }
