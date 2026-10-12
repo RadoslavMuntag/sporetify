@@ -15,6 +15,7 @@ cannot be rebuilt from the daemon.
 | `Keymap.js` | The key table and lookups: `actionFor`, `keyLabel`, `hints` |
 | `Position.js` | Interpolates playback position; formats `m:ss` |
 | `Faults.js` | What to say when Sporetify cannot work, and the command that fixes it |
+| `Links.js` | Turns `spotify:` uris and `open.spotify.com` addresses into something to open |
 | `KeyCap.qml` | Keycap badge shown beside a control |
 | `HintBar.qml` | Footer listing the actions valid in the current scopes |
 
@@ -179,8 +180,15 @@ bin/sporetify        focus the window if it exists, otherwise start the app
   playlists, App) laid out in up to three columns, with every key that
   triggers an action shown. Sections and their order come from `group` in
   the keymap. The footer shows only the actions marked `primary`. Any key
-  closes the overlay.
-- **IPC:** target `sporetify.app` with `act <action>`, `searchFor <text>`,
+  closes the overlay, except that when it does not fit the window the
+  moving keys (`j` `k`, arrows, page keys, `g` `G`) scroll it.
+- **Links:** `bin/sporetify <link>` hands a `spotify:` uri or an
+  `open.spotify.com` address to the running app (IPC `open`) or starts the
+  app with it (`SPORETIFY_OPEN`). Albums, artists and playlists open as
+  places; a track opens its album. Nothing is played.
+- **Row numbers:** in a list with sections (an artist page, search
+  results) tracks are numbered within their section (`Pages.numberTracks`).
+- **IPC:** target `sporetify.app` with `act <action>`, `open <link>`, `searchFor <text>`,
   `searchLibrary <text>`, `searchType <kind>`, `addTo <playlist> <track uris>`,
   `answer <text>` (for the open picker or prompt), `sidebarTo <name>` and
   `describe` (what is on screen, as JSON, including the `subject` that like
@@ -223,7 +231,7 @@ scopes used together never bind the same key twice.
 ## Tests
 
 - `tests/tst_client_core.qml`, `tst_loadable.qml`, `tst_keymap.qml`,
-  `tst_pages.qml`, `tst_organism.qml`, `tst_faults.qml`: 60 tests, run with the Qt 6 `qmltestrunner`.
+  `tst_pages.qml`, `tst_organism.qml`, `tst_faults.qml`, `tst_links.qml`: 66 tests, run with the Qt 6 `qmltestrunner`.
 - `tests/lint.sh`: no colour literals, no network calls in QML, valid manifest.
 - UI checks are manual: drive with `wtype`, capture with `grim`.
 - Not automated: `DaemonClient.qml` against a real socket, and any view.

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Sporetify: a small creature in a cell, with a play mark for a body. -->
+  <defs>
+    <linearGradient id="pool" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f3a3a"/>
+      <stop offset="1" stop-color="#12201f"/>
+    </linearGradient>
+    <radialGradient id="body" cx="0.38" cy="0.32" r="0.8">
+      <stop offset="0" stop-color="#a6f0c6"/>
+      <stop offset="1" stop-color="#3fb98a"/>
+    </radialGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#pool)"/>
+  <!-- feelers -->
+  <g fill="none" stroke="#3fb98a" stroke-width="5" stroke-linecap="round">
+    <path d="M46 44 Q36 30 30 26"/>
+    <path d="M82 44 Q92 30 98 26"/>
+    <path d="M38 88 Q28 96 24 104"/>
+    <path d="M90 88 Q100 96 104 104"/>
+  </g>
+  <g fill="#a6f0c6">
+    <circle cx="29" cy="25" r="5"/>
+    <circle cx="99" cy="25" r="5"/>
+  </g>
+  <!-- body: a soft, slightly uneven blob -->
+  <path fill="url(#body)" d="M64 30c20 0 36 13 37 33 1 21-15 36-37 36S26 84 27 63c1-20 17-33 37-33z"/>
+  <!-- play mark -->
+  <path fill="#12201f" d="M56 50v30a3 3 0 0 0 4.6 2.5l23-15a3 3 0 0 0 0-5l-23-15A3 3 0 0 0 56 50z"/>
+  <!-- eye glint -->
+  <circle cx="46" cy="50" r="4" fill="#f4fff9"/>
+</svg>

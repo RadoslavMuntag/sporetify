@@ -5,6 +5,7 @@ import Quickshell.Io
 import "../common"
 import "../common/Keymap.js" as Keymap
 import "../common/Faults.js" as Faults
+import "../common/Links.js" as Links
 
 // The app window: sidebar, track list, now-playing bar and the hint bar.
 // One key handler serves the whole window; what a key means comes from
@@ -48,8 +49,44 @@ FloatingWindow {
     if (loadedIn === "ready" && phase === "offline") return
     loadedIn = phase
     library.loadPlaylists()
+    if (pendingLink !== "") {
+      var link = pendingLink
+      pendingLink = ""
+      openLink(link)
+    }
   }
   Component.onCompleted: loadWhenReady()
+
+  // A Spotify link to show: given when the app was started for one
+  // (SPORETIFY_OPEN, set by bin/sporetify), or over IPC while it runs.
+  property string pendingLink: Quickshell.env("SPORETIFY_OPEN") || ""
+  function openLink(text) {
+    var link = Links.parse(text)
+    if (!link) return "not a Spotify link Sporetify can open"
+    if (loadedIn === "") {
+      pendingLink = text
+      return "opening " + link.uri + " once connected"
+    }
+    if (link.kind !== "track") {
+      library.go({ kind: link.kind, uri: link.uri }, tracks.currentIndex)
+      pane = "list"
+      return "opened " + link.uri
+    }
+    // A track is shown in its album.
+    player.request("library.track", { uri: link.uri }, {
+      deadline: 5000, scope: "open-link",
+      onDone: function(result) {
+        var row = result.ok ? result.data.track : null
+        if (!row || !row.album_uri) {
+          library.notice("Could not open that track" + (result.ok ? "" : ": " + result.error.message), true)
+          return
+        }
+        library.go({ kind: "album", uri: row.album_uri, name: row.album }, tracks.currentIndex)
+        window.pane = "list"
+      }
+    })
+    return "opening " + link.uri
+  }
 
   function openSelected() {
     var item = sidebar.itemAt(sidebar.currentIndex)
@@ -318,7 +355,11 @@ FloatingWindow {
 
     // Run a Keymap action by id, as if its key had been pressed.
     function act(action: string): string {
-      window.helpOpen = false
+      // Like a key press: an open help overlay takes it (scrolls or closes).
+      if (window.helpOpen) {
+        if (!help.scroll(action)) window.helpOpen = false
+        return "ok"
+      }
       window.act(action)
       return "ok"
     }
@@ -369,6 +410,8 @@ FloatingWindow {
       }
       return "nothing open"
     }
+    // Show a Spotify link (spotify:album:..., https://open.spotify.com/...).
+    function open(link: string): string { return window.openLink(link) }
     // Put the sidebar's cursor on the entry of this exact name.
     function sidebarTo(name: string): string {
       for (var i = 0; i < sidebar.count; i++) {
@@ -400,6 +443,7 @@ FloatingWindow {
         state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
         history: library.historyIndex + 1 + "/" + library.history.length,
         phase: player.phase, help: window.helpOpen, sidebarShown: prefs.sidebar,
+        helpScroll: Math.round(helpScroll.contentY), helpScrollable: help.scrollable,
         helpColumns: help.columns.map(function(column) {
           return column.map(function(section) { return section.title + " (" + section.items.length + ")" })
         }), searchOpen: window.searchOpen, notice: window.noticeText,
@@ -424,10 +468,12 @@ FloatingWindow {
     focus: true
 
     Keys.onPressed: function(event) {
-      // The help overlay swallows one key: whichever closes it.
+      // The help overlay swallows every key: the moving keys scroll it when
+      // it does not fit, any other key closes it.
       if (window.helpOpen) {
-        window.helpOpen = false
         event.accepted = true
+        var moving = Keymap.actionFor(event.key, event.text, ["browse"], event.modifiers)
+        if (!help.scroll(moving)) window.helpOpen = false
         return
       }
       var action = Keymap.actionFor(event.key, event.text, window.scopes, event.modifiers)
@@ -919,6 +965,28 @@ FloatingWindow {
       // As many columns as fit, three at most.
       readonly property int columnCount: Math.max(1, Math.min(3, Math.floor((width - Theme.spacing.huge * 2) / Theme.space(300))))
       readonly property var columns: window.helpOpen ? Keymap.columns(window.scopes, columnCount) : []
+      readonly property bool scrollable: helpScroll.contentHeight > helpScroll.height + 1
+      onVisibleChanged: helpScroll.contentY = 0
+
+      // Scroll for a moving action. False when the key should close instead:
+      // it is not a moving key, or everything is already on screen.
+      function scroll(action) {
+        if (!scrollable) return false
+        var end = helpScroll.contentHeight - helpScroll.height
+        var step = Theme.space(80)
+        var to
+        switch (action) {
+        case "down": to = helpScroll.contentY + step; break
+        case "up": to = helpScroll.contentY - step; break
+        case "pageDown": to = helpScroll.contentY + helpScroll.height * 0.8; break
+        case "pageUp": to = helpScroll.contentY - helpScroll.height * 0.8; break
+        case "top": to = 0; break
+        case "bottom": to = end; break
+        default: return false
+        }
+        helpScroll.contentY = Math.max(0, Math.min(end, to))
+        return true
+      }
 
       Flickable {
         id: helpScroll
@@ -948,7 +1016,8 @@ FloatingWindow {
               anchors.baseline: parent.children[0].baseline
               leftPadding: Theme.spacing.xxl
               textFormat: Text.PlainText
-              text: "press any key to close"
+              text: help.scrollable ? Keymap.keyLabel("down") + " " + Keymap.keyLabel("up") + " scroll · any other key closes"
+                : "press any key to close"
               color: Theme.muted
               font.family: Theme.font.family
               font.pixelSize: Theme.font.bodySmall

@@ -114,8 +114,9 @@ Left for the owner to decide: make the repository public; keep the name;
 tag `v0.1.0`. Omarchy has no plugin directory to submit to: `omarchy plugin
 add` takes any git URL, and its catalogue only lists what is installed.
 
-Also still open from M5 in the roadmap: opening `spotify:` links, an icon
-of our own.
+Done since: opening `spotify:` links, an icon of our own
+(`assets/sporetify.svg`), and a look at the app in a light theme
+(catppuccin-latte: correct; secondary text is faint but readable).
 
 Done when: on a clean Omarchy install, `plugin add`, one setup command and a
 sign-in give a working Sporetify.

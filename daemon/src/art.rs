@@ -12,7 +12,15 @@ use std::time::{Duration, SystemTime};
 use librespot_core::Session;
 
 /// Covers are only ever fetched from Spotify's image hosts.
-const HOSTS: [&str; 3] = ["https://i.scdn.co/", "https://image-cdn-ak.spotifycdn.com/", "https://image-cdn-fa.spotifycdn.com/"];
+/// The last two serve the pictures of playlists Spotify generates ("This
+/// Is", radio, the daily mixes, daylist).
+const HOSTS: [&str; 5] = [
+    "https://i.scdn.co/",
+    "https://image-cdn-ak.spotifycdn.com/",
+    "https://image-cdn-fa.spotifycdn.com/",
+    "https://pickasso.spotifycdn.com/",
+    "https://daylist.spotifycdn.com/",
+];
 
 /// Refuse anything that is not plausibly a picture.
 const MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -159,6 +167,9 @@ mod tests {
     fn only_spotify_image_hosts_are_accepted() {
         assert!(path_for("https://i.scdn.co/image/ab67616d0000b273").is_some());
         assert!(path_for("https://image-cdn-ak.spotifycdn.com/image/x").is_some());
+        assert!(path_for("https://pickasso.spotifycdn.com/image/x/dt/v1/img/radio/artist/y/en").is_some());
+        assert!(path_for("https://daylist.spotifycdn.com/playlist-covers/x.jpg").is_some());
+        assert!(path_for("https://spotifycdn.com.evil.example/image/x").is_none());
         assert!(path_for("https://example.com/image/x").is_none());
         assert!(path_for("file:///etc/passwd").is_none());
         assert!(path_for("https://i.scdn.co.evil.example/image/x").is_none());

@@ -61,6 +61,16 @@ that). It changes nothing else, and never your Hyprland config.
 Then click the bar icon and choose **Sign in to Spotify**. The login is kept
 in your desktop keyring.
 
+To make links such as `spotify:album:…` open in Sporetify, make it the
+handler yourself (setup does not change your defaults):
+
+```bash
+xdg-mime default sporetify.desktop x-scheme-handler/spotify
+```
+
+`sporetify <link>` does the same from a terminal, and also takes
+`https://open.spotify.com/…` addresses.
+
 ### Update
 
 ```bash
