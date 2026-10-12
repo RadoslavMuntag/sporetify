@@ -131,7 +131,10 @@ Lines longer than 64 KiB end the connection.
   Mix 1 to 6) and keeps the answer for the daemon's lifetime;
   `browse.artist` adds "This Is <artist>" the same way. Artist radio comes
   from `/inspiredby-mix/v2/seed_to_playlist/<uri>`, which returns the radio
-  playlist's uri. All of them open as ordinary playlists.
+  playlist's uri; its picture is not returned, but its address depends
+  only on the artist, so it is built (`radio_art`). All of them open as
+  ordinary playlists. Their pictures come from `pickasso.spotifycdn.com`
+  and `daylist.spotifycdn.com`, which `art` accepts beside the cover hosts.
 - Playlist edits go through the playlist service as `ListChanges`
   messages, each based on the revision just read:
   - add, remove, move and rename post to

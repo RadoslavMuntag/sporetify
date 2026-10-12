@@ -37,4 +37,24 @@ TestCase {
     pages.reset()
     compare(pages.claim(0, 10, 100), [0])
   }
+
+  function test_tracks_are_numbered_within_their_section() {
+    var rows = Pages.numberTracks([
+      { kind: "heading", title: "Start here" }, { kind: "playlist" },
+      { kind: "heading", title: "Popular" }, { uri: "a" }, { uri: "b" },
+      { kind: "heading", title: "Albums" }, { kind: "album" }, { uri: "c" }
+    ])
+    compare(rows[3].n, 1)
+    compare(rows[4].n, 2)
+    compare(rows[7].n, 1)
+    compare(rows[1].n, undefined)
+    compare(rows[6].n, undefined)
+  }
+
+  function test_a_list_without_headings_counts_straight_through() {
+    var rows = Pages.numberTracks([{ uri: "a" }, { kind: "artist" }, { uri: "b" }, null, { uri: "c" }])
+    compare(rows[0].n, 1)
+    compare(rows[2].n, 2)
+    compare(rows[4].n, 3)
+  }
 }

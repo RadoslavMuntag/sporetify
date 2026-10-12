@@ -430,7 +430,7 @@ Item {
         return { kind: "playlist", uri: p.uri, title: p.name, by: p.owner, art_url: p.art_url }
       })
     }
-    rows = out
+    rows = Pages.numberTracks(out)
     total = out.length
 
     if (term === "") {
@@ -497,7 +497,7 @@ Item {
         out.push({ kind: "heading", title: "Singles and EPs" })
         albumRows(data.singles)
       }
-      rows = out
+      rows = Pages.numberTracks(out)
       total = out.length
       subtitle = "Artist · " + count(data.albums.length, "album", "albums")
         + " · " + count(data.singles.length, "single", "singles")

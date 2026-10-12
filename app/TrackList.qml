@@ -228,7 +228,8 @@ Item {
           case "artist": return "󰠃"
           case "playlist": return "󰲸"
           }
-          return String(row.index + 1)
+          // A list with sections numbers its tracks itself (see Pages.numberTracks).
+          return String(row.track && row.track.n ? row.track.n : row.index + 1)
         }
         color: row.isPlaying || row.marked ? Theme.accent : Theme.muted
         font.family: Theme.font.family

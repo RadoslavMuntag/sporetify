@@ -20,5 +20,7 @@ First version.
   stopped.
 - A creature generated for every track.
 - `b` hides and shows the sidebar.
+- Opens `spotify:` links and `open.spotify.com` addresses
+  (`sporetify <link>`); has its own icon.
 - `scripts/setup.sh` and `scripts/uninstall.sh` for installing from the
   plugin folder.

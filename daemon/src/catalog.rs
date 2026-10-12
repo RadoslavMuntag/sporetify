@@ -1025,6 +1025,7 @@ impl Catalog {
     }
 
     /// The radio playlist Spotify generates for an artist or a track.
+    /// (Its picture: see `radio_art`.)
     async fn radio_playlist(&self, session: &Session, seed_uri: &str, seed_name: &str) -> Option<Value> {
         let endpoint = format!("/inspiredby-mix/v2/seed_to_playlist/{seed_uri}?response-format=json");
         let bytes = session
@@ -1034,7 +1035,7 @@ impl Catalog {
             .ok()?;
         let answer: Value = serde_json::from_slice(&bytes).ok()?;
         let uri = answer["mediaItems"][0]["uri"].as_str()?;
-        Some(json!({ "uri": uri, "name": format!("{seed_name} Radio"), "owner": "Spotify", "art_url": null }))
+        Some(json!({ "uri": uri, "name": format!("{seed_name} Radio"), "owner": "Spotify", "art_url": radio_art(seed_uri) }))
     }
 
     /// The playlists Spotify makes for this user: Discover Weekly, the daily
@@ -1405,9 +1406,29 @@ pub fn page_args(args: &Value) -> (usize, usize) {
     (read("offset", 0), read("limit", 50))
 }
 
+/// Where Spotify serves the picture of an artist's radio. The radio lookup
+/// does not return one, but the address only depends on the artist.
+fn radio_art(seed_uri: &str) -> Option<String> {
+    let id = seed_uri.strip_prefix("spotify:artist:")?;
+    if id.is_empty() || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return None;
+    }
+    Some(format!("https://pickasso.spotifycdn.com/image/ab67c0de0000deef/dt/v1/img/radio/artist/{id}/en"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::collection_write;
+
+    #[test]
+    fn radio_art_is_built_only_for_a_plain_artist_uri() {
+        let art = super::radio_art("spotify:artist:0k17h0D3J5VfsdmQ1iZtE9").unwrap();
+        assert!(art.ends_with("/img/radio/artist/0k17h0D3J5VfsdmQ1iZtE9/en"));
+        assert!(crate::art::path_for(&art).is_some());
+        assert!(super::radio_art("spotify:track:0k17h0D3J5VfsdmQ1iZtE9").is_none());
+        assert!(super::radio_art("spotify:artist:../../x").is_none());
+        assert!(super::radio_art("spotify:artist:").is_none());
+    }
 
     #[test]
     fn collection_write_encodes_the_documented_fields() {

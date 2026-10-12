@@ -31,20 +31,26 @@ install_daemon() {
   systemctl --user enable --now sporetifyd.socket
 }
 
-# The `sporetify` command and its entry in the application menu.
+# The `sporetify` command, its icon and its entry in the application menu.
+# The entry says Sporetify can open spotify: links; whether it is the one
+# that does is the user's choice (see the README), never made here.
 install_launcher() {
-  mkdir -p "$BIN_DIR" "$APP_DIR"
+  mkdir -p "$BIN_DIR" "$APP_DIR" "$ICON_DIR"
   ln -sfn "$ROOT/bin/sporetify" "$BIN_DIR/sporetify"
+  install -m 644 "$ROOT/assets/sporetify.svg" "$ICON_DIR/sporetify.svg"
   cat >"$APP_DIR/sporetify.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=Sporetify
 Comment=Keyboard-first Spotify client
-Exec=$BIN_DIR/sporetify
-Icon=audio-x-generic
+Exec=$BIN_DIR/sporetify %u
+Icon=sporetify
 Categories=AudioVideo;Audio;Player;
+MimeType=x-scheme-handler/spotify;
 StartupWMClass=sporetify
 DESKTOP
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q "$APP_DIR" 2>/dev/null
+  return 0
 }
 
 # Build the daemon from this checkout. Prints the binary's path.
@@ -78,6 +84,7 @@ download_daemon() {
 remove_installed() {
   systemctl --user disable --now sporetifyd.socket sporetifyd.service 2>/dev/null || true
   rm -f "$UNIT_DIR/sporetifyd.socket" "$UNIT_DIR/sporetifyd.service" \
-    "$BIN_DIR/sporetifyd" "$BIN_DIR/sporetify" "$APP_DIR/sporetify.desktop"
+    "$BIN_DIR/sporetifyd" "$BIN_DIR/sporetify" "$APP_DIR/sporetify.desktop" "$ICON_DIR/sporetify.svg"
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q "$APP_DIR" 2>/dev/null
   systemctl --user daemon-reload
 }

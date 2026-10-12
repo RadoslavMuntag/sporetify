@@ -86,7 +86,7 @@ App.qml              entry point of the full app (`qs -p App.qml`); at the root 
                      that app/ and common/ are both inside its config folder
 app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
-                     Loadable.js, Pages.js, Position.js, Faults.js, HintBar, KeyCap,
+                     Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
                      Organism
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
@@ -94,6 +94,7 @@ scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
                      uninstall-dev.sh (for a checkout), test.sh, env.sh, lib.sh,
                      demo-daemon.py (a stand-in daemon with a made-up library)
 .github/workflows/   ci.yml (every push), release.yml (builds the daemon on a tag)
+assets/sporetify.svg the icon, installed for the menu entry
 CHANGELOG.md         one section per version
 docs/screenshots/    the pictures the README shows
 bin/sporetify        launcher: focus the running app or start it
@@ -234,9 +235,10 @@ from code or an install script. Media keys already work through MPRIS.
 
 **Replacing Spotify**
 
-- `sporetify.desktop` with `MimeType=x-scheme-handler/spotify` so `spotify:`
-  links open here; `bin/sporetify` focuses the existing window instead of
-  starting a second one.
+- `sporetify.desktop` declares `MimeType=x-scheme-handler/spotify`, and
+  `bin/sporetify <link>` shows a link in the running app (or starts it with
+  the link). Making Sporetify the default handler is the user's choice
+  (`xdg-mime default`, in the README); setup never does it.
 - Requires Spotify Premium (librespot and the Web API both need it). Tokens are
   stored with `secret-tool` in the keyring: never in `shell.json`, the cache,
   logs or the repo.
@@ -372,6 +374,14 @@ Things that bite:
   one script that restores the original state in a `finally`. Prefer the
   daemon's ops over the UI for the write itself, and use the UI only to
   check what it shows.
+- **To see the app in another theme without changing the desktop's**, start
+  the test app with `HOME` pointed at a folder holding only
+  `.local/state/omarchy/current/theme/colors.toml` (copied from
+  `/usr/share/omarchy/themes/<name>/`). The app reads its theme and its
+  preferences through `HOME`; everything else still comes from the real
+  `XDG_*` variables.
+- The app's IPC `act` behaves like a key press: with the help overlay open
+  it scrolls or closes the overlay and does nothing else.
 - **Pictures for the README must not show the owner's library.** Take the
   views that show a library (a playlist with the sidebar, the shortcut
   overlay) against `scripts/demo-daemon.py`, which serves invented names
