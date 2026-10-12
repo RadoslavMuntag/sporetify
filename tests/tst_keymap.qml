@@ -99,6 +99,45 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_Slash, "/", scopes, Qt.NoModifier), "search")
   }
 
+  function test_every_action_belongs_to_one_known_section() {
+    var known = {}
+    for (var g = 0; g < Keymap.groups.length; g++) known[Keymap.groups[g].id] = true
+    for (var i = 0; i < Keymap.actions.length; i++)
+      verify(known[Keymap.actions[i].group] === true, Keymap.actions[i].id + " has no section")
+  }
+
+  function test_help_sections_hold_everything_once_and_in_order() {
+    var scopes = ["browse", "player", "app"]
+    var sections = Keymap.sections(scopes)
+    var labels = []
+    for (var s = 0; s < sections.length; s++) {
+      verify(sections[s].items.length > 0)
+      for (var i = 0; i < sections[s].items.length; i++) labels.push(sections[s].items[i].label)
+    }
+    // The same actions the flat list has, none missing, none twice.
+    compare(labels.length, Keymap.hints(scopes, false).length)
+    compare(sections[0].title, "Playback")
+    compare(sections[0].items[0].label, "Play / pause")
+    // Every key of an action is shown, not only the first.
+    compare(sections[1].items[0].keys.join(" "), "j ↓")
+    // The mini-player's scopes give a shorter set with no playlist section.
+    var mini = Keymap.sections(["mini", "player", "popup"])
+    for (var m = 0; m < mini.length; m++) verify(mini[m].title !== "Your playlists")
+  }
+
+  function test_columns_keep_sections_whole_and_in_order() {
+    var scopes = ["browse", "player", "app"]
+    var columns = Keymap.columns(scopes, 3)
+    compare(columns.length, 3)
+    var titles = []
+    for (var c = 0; c < columns.length; c++)
+      for (var s = 0; s < columns[c].length; s++) titles.push(columns[c][s].title)
+    var expected = Keymap.sections(scopes).map(function(section) { return section.title })
+    compare(titles.join("|"), expected.join("|"))
+    // No column is left nearly empty.
+    for (var k = 0; k < columns.length; k++) verify(columns[k].length >= 1)
+  }
+
   function test_unknown_keys_do_nothing() {
     compare(Keymap.actionFor(Qt.Key_F5, "", "player"), null)
     compare(Keymap.actionFor(Qt.Key_Z, "z", "player"), null)
@@ -121,7 +160,7 @@ TestCase {
   function test_hints_come_from_the_same_table() {
     var hints = Keymap.hints(["player", "popup"])
     compare(hints[0].key, "␣")
-    compare(hints[0].label, "Play/Pause")
+    compare(hints[0].label, "Play / pause")
     compare(hints[hints.length - 1].label, "Close")
     compare(Keymap.keyLabel("next"), "n")
     compare(Keymap.keyLabel("seekForward"), "→")

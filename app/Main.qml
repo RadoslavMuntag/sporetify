@@ -388,7 +388,10 @@ FloatingWindow {
         filter: library.searching ? library.searchFilter : "", name: library.name, subtitle: library.subtitle, total: library.total,
         state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
         history: library.historyIndex + 1 + "/" + library.history.length,
-        phase: player.phase, help: window.helpOpen, searchOpen: window.searchOpen, notice: window.noticeText,
+        phase: player.phase, help: window.helpOpen,
+        helpColumns: help.columns.map(function(column) {
+          return column.map(function(section) { return section.title + " (" + section.items.length + ")" })
+        }), searchOpen: window.searchOpen, notice: window.noticeText,
         playingLiked: library.playingLiked, rows: rows,
         artPath: library.artPath, offline: player.offline, sidebar: sidebar.count,
         picker: window.pickerOpen ? window.pickerChoices.length : -1, editable: library.editablePlaylists.length,
@@ -885,75 +888,138 @@ FloatingWindow {
       }
     }
 
-    // ---- Every key, on demand. Any key or click closes it.
+    // ---- Every key, on demand, in sections. Any key or click closes it.
     Rectangle {
       id: help
       visible: window.helpOpen
       anchors.fill: parent
-      color: Theme.alpha(Theme.background, 0.92)
+      color: Theme.alpha(Theme.background, 0.94)
+      z: 10
 
       MouseArea { anchors.fill: parent; onClicked: window.helpOpen = false }
 
-      Column {
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Theme.spacing.huge * 4, Theme.space(620))
-        spacing: Theme.spacing.xxl
+      // As many columns as fit, three at most.
+      readonly property int columnCount: Math.max(1, Math.min(3, Math.floor((width - Theme.spacing.huge * 2) / Theme.space(300))))
+      readonly property var columns: window.helpOpen ? Keymap.columns(window.scopes, columnCount) : []
 
-        Text {
-          textFormat: Text.PlainText
-          text: "Keyboard"
-          color: Theme.foreground
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.heading
-          font.bold: true
-        }
+      Flickable {
+        id: helpScroll
+        anchors.fill: parent
+        anchors.margins: Theme.spacing.huge
+        contentHeight: helpBody.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
 
-        Grid {
-          width: parent.width
-          columns: 2
-          columnSpacing: Theme.spacing.huge * 2
-          rowSpacing: Theme.spacing.md
+        Column {
+          id: helpBody
+          width: Math.min(helpScroll.width, Theme.space(1000))
+          anchors.horizontalCenter: parent.horizontalCenter
+          spacing: Theme.spacing.huge
 
-          Repeater {
-            model: window.helpOpen ? Keymap.hints(window.scopes, false) : []
+          Row {
+            width: parent.width
+            Text {
+              textFormat: Text.PlainText
+              text: "Keyboard"
+              color: Theme.foreground
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.heading
+              font.bold: true
+            }
+            Text {
+              anchors.baseline: parent.children[0].baseline
+              leftPadding: Theme.spacing.xxl
+              textFormat: Text.PlainText
+              text: "press any key to close"
+              color: Theme.muted
+              font.family: Theme.font.family
+              font.pixelSize: Theme.font.bodySmall
+            }
+          }
 
-            Row {
-              required property var modelData
-              width: (parent.width - parent.columnSpacing) / 2
-              spacing: Theme.spacing.xl
+          Row {
+            id: helpColumns
+            width: parent.width
+            spacing: Theme.spacing.huge * 2
+            readonly property real columnWidth: (width - spacing * (help.columnCount - 1)) / help.columnCount
 
-              Item {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Theme.space(44)
-                height: cap.implicitHeight
-                KeyCap {
-                  id: cap
-                  anchors.right: parent.right
-                  label: parent.parent.modelData.key
-                  foreground: Theme.foreground
-                  fontFamily: Theme.font.family
-                  fontSize: Theme.font.bodySmall
-                  padding: Theme.spacing.sm
+            Repeater {
+              model: help.columns
+
+              Column {
+                id: helpColumn
+                required property var modelData
+                width: helpColumns.columnWidth
+                spacing: Theme.spacing.huge
+
+                Repeater {
+                  model: helpColumn.modelData
+
+                  // One section: a title, then its keys.
+                  Column {
+                    id: section
+                    required property var modelData
+                    width: helpColumn.width
+                    spacing: Theme.spacing.md
+
+                    Text {
+                      textFormat: Text.PlainText
+                      text: section.modelData.title.toUpperCase()
+                      color: Theme.accent
+                      font.family: Theme.font.family
+                      font.pixelSize: Theme.font.caption
+                      font.letterSpacing: 1
+                    }
+                    Rectangle { width: parent.width; height: 1; color: Theme.line }
+
+                    Repeater {
+                      model: section.modelData.items
+
+                      Row {
+                        id: entry
+                        required property var modelData
+                        width: section.width
+                        spacing: Theme.spacing.xl
+
+                        // Every key that does it, right-aligned in a fixed
+                        // column so the labels line up.
+                        Item {
+                          width: Theme.space(92)
+                          height: caps.implicitHeight
+                          Row {
+                            id: caps
+                            anchors.right: parent.right
+                            spacing: Theme.spacing.xs
+                            Repeater {
+                              model: entry.modelData.keys
+                              KeyCap {
+                                required property string modelData
+                                label: modelData
+                                foreground: Theme.foreground
+                                fontFamily: Theme.font.family
+                                fontSize: Theme.font.bodySmall
+                                padding: Theme.spacing.sm
+                              }
+                            }
+                          }
+                        }
+                        Text {
+                          width: entry.width - Theme.space(92) - entry.spacing
+                          anchors.verticalCenter: parent.verticalCenter
+                          wrapMode: Text.WordWrap
+                          textFormat: Text.PlainText
+                          text: entry.modelData.label
+                          color: Theme.foreground
+                          font.family: Theme.font.family
+                          font.pixelSize: Theme.font.body
+                        }
+                      }
+                    }
+                  }
                 }
-              }
-              Text {
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
-                text: parent.modelData.label
-                color: Theme.foreground
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.body
               }
             }
           }
-        }
-
-        Text {
-          textFormat: Text.PlainText
-          text: "Press any key to close"
-          color: Theme.muted
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.bodySmall
         }
       }
     }
