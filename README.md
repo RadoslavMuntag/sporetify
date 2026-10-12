@@ -21,7 +21,7 @@ offline.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/library.png" alt="Your library: Liked Songs" width="49%">
+  <img src="docs/screenshots/library.png" alt="A playlist in the library" width="49%">
   <img src="docs/screenshots/search.png" alt="Search results from all of Spotify" width="49%">
   <br>
   <sub>Your library, and search across all of Spotify.</sub>
@@ -121,6 +121,7 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `V` | Select several tracks | `J` / `K` | Move a track down / up |
 | `N` | New playlist | `F2` | Rename a playlist |
 | `Backspace` | Back | `?` | Every shortcut |
+| `b` | Show / hide the sidebar | `c` | Covers in lists on / off |
 | `←` / `→` | Seek 10 s | `Esc` | Cancel search (closes the mini-player) |
 | `Ctrl C` | Quit the app | | |
 

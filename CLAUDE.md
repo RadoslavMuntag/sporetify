@@ -91,7 +91,8 @@ common/              QML shared by plugin and app: DaemonClient, Player, Keymap.
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
 scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
-                     uninstall-dev.sh (for a checkout), test.sh, env.sh, lib.sh
+                     uninstall-dev.sh (for a checkout), test.sh, env.sh, lib.sh,
+                     demo-daemon.py (a stand-in daemon with a made-up library)
 .github/workflows/   ci.yml (every push), release.yml (builds the daemon on a tag)
 CHANGELOG.md         one section per version
 docs/screenshots/    the pictures the README shows
@@ -371,6 +372,12 @@ Things that bite:
   one script that restores the original state in a `finally`. Prefer the
   daemon's ops over the UI for the write itself, and use the UI only to
   check what it shows.
+- **Pictures for the README must not show the owner's library.** Take the
+  views that show a library (a playlist with the sidebar, the shortcut
+  overlay) against `scripts/demo-daemon.py`, which serves invented names
+  and drawn covers. Take search, artist and album pages on the real daemon
+  with the sidebar hidden (`act sidebar`, and put it back afterwards: it is
+  a saved preference). The now-playing bar shows whatever is loaded.
 - **Tests that write to the Spotify account need care.** Like, unlike and
   queue change the owner's real library and queue. Before sending one, read
   `describe`'s `subject` to confirm exactly which track it will hit, only

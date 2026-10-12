@@ -19,5 +19,6 @@ First version.
 - Media keys and `playerctl` through MPRIS; playback resumes where it
   stopped.
 - A creature generated for every track.
+- `b` hides and shows the sidebar.
 - `scripts/setup.sh` and `scripts/uninstall.sh` for installing from the
   plugin folder.
