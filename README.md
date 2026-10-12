@@ -54,9 +54,11 @@ The first command adds the bar widget. Omarchy only copies a plugin's files,
 so the second installs the rest: the daemon that plays the music
 (`sporetifyd`, into `~/.local/bin`), two systemd user units that start it on
 demand, and the `sporetify` command with a menu entry. It downloads the
-daemon built for the plugin's version and checks its checksum; if there is
-none for your machine it builds it, which needs Rust (`--build` forces
-that). It changes nothing else, and never your Hyprland config.
+daemon built for the plugin's version and installs it only if its SHA-256
+matches the digest committed in this repository (`scripts/daemon.sha256`),
+so a release changed after the fact is never installed. If there is no
+pinned build for your machine, or the download does not match, it builds
+the daemon from source instead, which needs Rust (`--build` forces that). It changes nothing else, and never your Hyprland config.
 
 Then click the bar icon and choose **Sign in to Spotify**. The login is kept
 in your desktop keyring.
@@ -73,7 +75,9 @@ user's permissions, so read this before you enable it.
   when something connects to its socket and exits after 15 minutes idle
   unless music is playing. It is a Rust program built from `daemon/` in
   this repository; setup downloads the build attached to the matching
-  GitHub release and checks its checksum, or builds it on your machine.
+  GitHub release and installs it only if its SHA-256 equals the digest
+  committed in `scripts/daemon.sha256`; otherwise it builds it on your
+  machine.
 - **A second window process:** the full app is its own Quickshell process
   (`qs -p App.qml`), started when you open it and gone when you close it.
   It is separate so a heavy view can never stall your bar or lock screen.

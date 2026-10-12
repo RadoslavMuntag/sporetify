@@ -60,24 +60,40 @@ build_daemon() {
   echo "$CARGO_TARGET_DIR/release/sporetifyd"
 }
 
-# Download the released daemon for this version and check it against the
-# published checksum. Prints the binary's path. Fails when there is no
-# release for this version and machine, or when the checksum does not match.
+# The SHA-256 this checkout expects for a released archive, from
+# scripts/daemon.sha256. Prints nothing when the archive is not listed.
+pinned_digest() {
+  awk -v name="$1" '!/^#/ && $2 == name && $1 ~ /^[0-9a-f]{64}$/ { print $1; exit }' "$ROOT/scripts/daemon.sha256" 2>/dev/null
+}
+
+# Download the released daemon for this version. It is used only if its
+# SHA-256 equals the one committed in scripts/daemon.sha256: the release can
+# be changed after the fact, the digest in this checkout cannot. Prints the
+# binary's path. Fails when no digest is committed for this version, there is
+# nothing to download, or the download is not the pinned file.
 download_daemon() {
-  local name="sporetifyd-$VERSION-x86_64-linux"
-  local base="$REPOSITORY/releases/download/v$VERSION"
+  local name="sporetifyd-$VERSION-x86_64-linux.tar.gz"
   local dir="${XDG_CACHE_HOME:-$HOME/.cache}/sporetify/download"
+  local expected actual
   [[ $(uname -m) == x86_64 ]] || return 1
   command -v curl >/dev/null 2>&1 || return 1
-  rm -rf "$dir"
-  mkdir -p "$dir"
-  curl -fsSL -o "$dir/$name.tar.gz" "$base/$name.tar.gz" 2>/dev/null || return 1
-  curl -fsSL -o "$dir/$name.tar.gz.sha256" "$base/$name.tar.gz.sha256" 2>/dev/null || return 1
-  if ! (cd "$dir" && sha256sum --check --quiet "$name.tar.gz.sha256") >&2; then
-    echo "sporetify: the downloaded daemon does not match its checksum; not using it" >&2
+  expected="$(pinned_digest "$name")"
+  if [[ -z $expected ]]; then
+    echo "sporetify: this version has no pinned daemon build" >&2
     return 1
   fi
-  tar -xzf "$dir/$name.tar.gz" -C "$dir" sporetifyd || return 1
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  curl -fsSL -o "$dir/$name" "$REPOSITORY/releases/download/v$VERSION/$name" 2>/dev/null || return 1
+  actual="$(sha256sum "$dir/$name" | cut -d' ' -f1)"
+  if [[ $actual != "$expected" ]]; then
+    echo "sporetify: the downloaded daemon is not the build this version was reviewed with; not using it" >&2
+    echo "sporetify:   expected $expected" >&2
+    echo "sporetify:   got      $actual" >&2
+    rm -rf "$dir"
+    return 1
+  fi
+  tar -xzf "$dir/$name" -C "$dir" sporetifyd || return 1
   echo "$dir/sporetifyd"
 }
 

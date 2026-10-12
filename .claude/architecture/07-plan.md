@@ -80,7 +80,8 @@ either built or closed with a written reason.
 also needs a daemon binary, systemd units and a launcher. So:
 
 - **Install path.** Built. `scripts/setup.sh` downloads the daemon for the
-  plugin's version from the GitHub release, checks its checksum, and falls
+  plugin's version from the GitHub release, installs it only if its SHA-256
+  is the one committed in `scripts/daemon.sha256`, and otherwise falls
   back to building it (or builds at once with `--build`); it then installs
   the daemon, the units and the launcher, after checking for `jq`,
   `systemctl`, `secret-tool`, `qs`, `hyprctl` and libpulse.
@@ -110,9 +111,11 @@ Not tested, because each needs the owner's go-ahead or another machine:
   anonymous download fails and setup builds from source.
 - A clean Omarchy install from `plugin add` to music.
 
-Left for the owner to decide: make the repository public; keep the name;
-tag `v0.1.0`. Omarchy has no plugin directory to submit to: `omarchy plugin
-add` takes any git URL, and its catalogue only lists what is installed.
+Released as `v0.1.0` on 2026-10-12 and submitted to the marketplace
+(plugins.omarchy.org; issue 11287 on `omacom/omarchy-plugin-marketplace`).
+An earlier note here said Omarchy had no plugin directory; that was wrong.
+The reviewer asked that the downloaded daemon be bound to the reviewed
+source, which `scripts/daemon.sha256` now does.
 
 Done since: opening `spotify:` links, an icon of our own
 (`assets/sporetify.svg`), and a look at the app in a light theme

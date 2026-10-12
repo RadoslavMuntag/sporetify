@@ -32,7 +32,7 @@ binary=""
 if ((build == 0)); then
   say "fetching the daemon for version $VERSION"
   binary="$(download_daemon)" || binary=""
-  [[ -n $binary ]] || say "no usable released daemon for $VERSION here"
+  [[ -n $binary ]] || say "no usable released daemon for $VERSION here; it will be built from source"
 fi
 if [[ -z $binary ]]; then
   say "building the daemon (this takes a few minutes the first time)"
