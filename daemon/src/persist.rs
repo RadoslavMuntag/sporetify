@@ -42,13 +42,9 @@ fn load_from(path: &std::path::Path) -> Saved {
 }
 
 fn save_to(path: &std::path::Path, saved: &Saved) {
-    let Some(dir) = path.parent() else { return };
     let Ok(bytes) = serde_json::to_vec_pretty(saved) else { return };
-    let temporary = path.with_extension("json.tmp");
-    // Write beside the target and rename, so a crash never leaves half a file.
-    if std::fs::create_dir_all(dir).is_ok() && std::fs::write(&temporary, bytes).is_ok() {
-        let _ = std::fs::rename(&temporary, path);
-    }
+    // It names what was last played, so only the user may read it.
+    let _ = crate::private::write(path, &bytes);
 }
 
 #[cfg(test)]

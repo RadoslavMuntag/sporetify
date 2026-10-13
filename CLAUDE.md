@@ -370,6 +370,10 @@ Things that bite:
 - librespot-core 0.8.0 needs `vergen` 9.0.4 and `vergen-gitcl` 1.0.5 (pinned
   in `daemon/Cargo.lock`); newer ones break its build script. Do not
   `cargo update` blindly.
+- Anything the daemon writes goes through `private::write` or into a folder
+  made with `private::dir` (`daemon/src/private.rs`): mode 0600 in 0700.
+  A plain `std::fs::write` or `create_dir_all` there leaks the user's
+  library to other local users.
 - The daemon runs on a `LocalSet` because MPRIS callbacks are not `Send`.
   Request handlers run under `tokio::spawn`, where `spawn_local` panics; use
   `tokio::spawn` from them.

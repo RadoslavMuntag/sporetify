@@ -9,5 +9,6 @@ pub mod mpris;
 pub mod ops;
 pub mod persist;
 pub mod player;
+pub mod private;
 pub mod proto;
 pub mod state;

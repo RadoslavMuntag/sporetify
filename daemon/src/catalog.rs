@@ -137,13 +137,10 @@ fn load_library() -> LibraryFile {
         .unwrap_or_default()
 }
 
-/// Write `bytes` beside `path` and rename, so a crash never leaves half a file.
+/// Write `bytes` to `path` whole or not at all, readable by the user alone:
+/// these files hold the user's playlists and what is in them.
 fn write_atomically(path: &std::path::Path, bytes: &[u8]) {
-    let Some(dir) = path.parent() else { return };
-    let temporary = path.with_extension("json.tmp");
-    if std::fs::create_dir_all(dir).is_ok() && std::fs::write(&temporary, bytes).is_ok() {
-        let _ = std::fs::rename(&temporary, path);
-    }
+    let _ = crate::private::write(path, bytes);
 }
 
 /// The sidebar from the rootlist's entries, in order. Playlists carry the

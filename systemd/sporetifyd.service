@@ -4,5 +4,8 @@ Requires=sporetifyd.socket
 
 [Service]
 ExecStart=%h/.local/bin/sporetifyd
+# Its caches and resume point name what the user listens to: nothing it
+# writes is readable by other users. (The daemon sets the same mask itself.)
+UMask=0077
 # The daemon exits cleanly when idle; only a crash should bring it back.
 Restart=on-failure

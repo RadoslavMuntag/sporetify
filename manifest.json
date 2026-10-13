@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "namelessnovice.sporetify",
   "name": "Sporetify",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "namelessnovice",
   "description": "Keyboard-first Spotify for Omarchy: transport and volume in the bar, the full player a key away",
   "kinds": [
