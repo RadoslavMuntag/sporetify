@@ -71,7 +71,8 @@ pub async fn fetch(session: &Session, url: &str) -> Option<PathBuf> {
     if bytes.is_empty() || bytes.len() > MAX_BYTES {
         return None;
     }
-    std::fs::create_dir_all(path.parent()?).ok()?;
+    // Which covers are here says what was listened to: the folder is private.
+    crate::private::dir(path.parent()?).ok()?;
     // Write beside the target and rename, so a reader never sees half a picture.
     let temporary = path.with_extension("part");
     std::fs::write(&temporary, &bytes).ok()?;

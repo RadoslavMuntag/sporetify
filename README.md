@@ -85,6 +85,7 @@ user's permissions, so read this before you enable it.
   in `~/.config/systemd/user`, a menu entry and icon under
   `~/.local/share`, caches in `~/.cache/sporetify`, a resume point in
   `~/.local/state/sporetify`, preferences in `~/.config/sporetify`.
+  The caches and the resume point are readable by your user only.
 - **Your Spotify sign-in:** a refresh token in the desktop keyring
   (through `secret-tool`), nowhere else.
 

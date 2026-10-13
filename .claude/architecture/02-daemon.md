@@ -20,6 +20,7 @@ Built:
 | `catalog` | Playlists, track lists, track metadata, library search (session internal API) |
 | `persist` | Volume and resume point on disk |
 | `art` | Cover images fetched once and kept as files |
+| `private` | Writes files only the user may read, and closes older ones at start |
 | `mpris` | MPRIS server mirroring `state`, calling the same commands as the socket |
 
 Planned, not built:
@@ -163,6 +164,14 @@ Lines longer than 64 KiB end the connection.
 `$XDG_STATE_HOME/sporetify/state.json`: volume, last context, last track,
 position. Written on track change, pause, seek, volume change, session end
 and daemon exit; write-then-rename so a crash cannot leave half a file.
+
+Everything the daemon writes is private to the user (`private.rs`): the
+resume point and the library cache say what they listen to, name their
+playlists and hold their Spotify user id. Files are created 0600 in folders
+of mode 0700 regardless of the umask, the daemon sets its umask to 077 at
+start (the unit says `UMask=0077` too), and at start it also closes the
+folders and files an earlier version left readable by others. Asked for in
+the marketplace review, 2026-10-12.
 
 ## MPRIS
 

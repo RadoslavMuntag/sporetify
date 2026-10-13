@@ -204,6 +204,8 @@ async fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // Before anything is read or written: files are the user's alone.
+    sporetifyd::private::secure_at_start();
     // MPRIS callbacks are not `Send`, so everything runs on a LocalSet.
     match tokio::task::LocalSet::new().run_until(run(options)).await {
         Ok(()) => ExitCode::SUCCESS,
