@@ -101,6 +101,7 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
                 "playlist.move" => PlaylistEdit::Move {
                     from: number(&args, "from")?.max(0.0) as usize,
                     to: number(&args, "to")?.max(0.0) as usize,
+                    track: args.get("track_uri").and_then(Value::as_str).map(str::to_owned),
                 },
                 _ => PlaylistEdit::Rename(text(&args, "name")?),
             };

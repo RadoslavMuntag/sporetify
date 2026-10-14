@@ -813,7 +813,9 @@ impl Catalog {
         let spotify_uri = SpotifyUri::from_uri(playlist_uri).map_err(|_| OpError::bad_request("not a playlist"))?;
         let playlist = Playlist::get(session, &spotify_uri).await.map_err(|e| upstream("the playlist", e))?;
         let mut name = playlist.name().to_owned();
-        let mut uris: Vec<String> = playlist.tracks().filter_map(|t| t.to_uri().ok()).collect();
+        // Every entry keeps its place (an unreadable one as ""), so positions
+        // match the ones Spotify counts in.
+        let mut uris: Vec<String> = playlist.tracks().map(|t| t.to_uri().unwrap_or_default()).collect();
         let unchanged = |name: &str, total: usize, reason: &str| {
             Ok(json!({ "playlist": name, "changed": false, "total": total, "reason": reason }))
         };
@@ -865,19 +867,14 @@ impl Catalog {
                 let gone: HashSet<String> = gone.into_iter().cloned().collect();
                 uris.retain(|uri| !gone.contains(uri));
             }
-            PlaylistEdit::Move { from, to } => {
-                if from >= uris.len() || to >= uris.len() {
-                    return Err(OpError::bad_request("the playlist is shorter than that"));
-                }
-                if from == to {
+            PlaylistEdit::Move { from, to, track } => {
+                let Some(to_index) = move_target(&uris, from, to, track.as_deref())? else {
                     return unchanged(&name, uris.len(), "already there");
-                }
+                };
                 let mut change = Mov::new();
                 change.set_from_index(from as i32);
                 change.set_length(1);
-                // Spotify counts the destination in the list as it is before
-                // the track is taken out: "insert before the item now at N".
-                change.set_to_index(if to > from { to as i32 + 1 } else { to as i32 });
+                change.set_to_index(to_index);
                 op.set_kind(Kind::MOV);
                 op.mov = Some(change).into();
                 let track = uris.remove(from);
@@ -900,6 +897,7 @@ impl Catalog {
         // meantime is merged by Spotify rather than overwritten.
         send_changes(session, &format!("/playlist/v2/playlist/{id}/changes"), playlist.revision.clone(), op).await?;
 
+        uris.retain(|uri| !uri.is_empty());
         let total = uris.len();
         let art_url = self.lists.lock().expect("lists lock").get(playlist_uri).and_then(|l| l.art_url.clone());
         self.lists
@@ -946,7 +944,17 @@ impl Catalog {
         playlist_id(&uri).map_err(|_| upstream("the new playlist", "Spotify did not say where it is"))?;
         self.edit_playlist(session, &uri, PlaylistEdit::Rename(name.to_owned())).await?;
 
-        // 2. Into the user's list of playlists, or it would exist unseen.
+        // 2. Its tracks.
+        let mut total = 0;
+        if !tracks.is_empty() {
+            let added = self.edit_playlist(session, &uri, PlaylistEdit::Add(tracks)).await?;
+            total = added["total"].as_u64().unwrap_or(0);
+        }
+
+        // 3. Last, into the user's list of playlists. A playlist that is not
+        //    in that list is what Spotify calls deleted, so if anything above
+        //    failed or was cut off by the deadline, nothing appears and trying
+        //    again cannot leave a half-made duplicate behind.
         let root = self.rootlist(session).await?;
         let mut item = Item::new();
         item.set_uri(uri.clone());
@@ -958,12 +966,6 @@ impl Catalog {
         op.add = Some(change).into();
         send_changes(session, &rootlist_changes(session), root.revision().to_vec(), op).await?;
 
-        // 3. Its tracks.
-        let mut total = 0;
-        if !tracks.is_empty() {
-            let added = self.edit_playlist(session, &uri, PlaylistEdit::Add(tracks)).await?;
-            total = added["total"].as_u64().unwrap_or(0);
-        }
         self.refresh_sidebar(session).await;
         Ok(json!({ "uri": uri, "playlist": name, "total": total }))
     }
@@ -1195,7 +1197,8 @@ pub enum PlaylistEdit {
     /// Take out every occurrence of these tracks.
     Remove(Vec<String>),
     /// Move the track at `from` so that it ends up at `to` (both 0-based).
-    Move { from: usize, to: usize },
+    /// `track`, when given, must be the one at `from`, or nothing moves.
+    Move { from: usize, to: usize, track: Option<String> },
     Rename(String),
 }
 
@@ -1204,6 +1207,28 @@ fn playlist_id(uri: &str) -> Result<&str, OpError> {
     uri.strip_prefix("spotify:playlist:")
         .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric()))
         .ok_or_else(|| OpError::bad_request(format!("not a playlist: '{uri}'")))
+}
+
+/// Where Spotify should put a track moved from `from` to `to`, or `None`
+/// when it is already there. Spotify counts the destination in the list as
+/// it is before the track is taken out ("insert before the item now at N").
+/// With `track`, the entry at `from` must be that track: the screen the move
+/// came from may be older than the playlist, and moving by position alone
+/// would then move a different track.
+fn move_target(uris: &[String], from: usize, to: usize, track: Option<&str>) -> Result<Option<i32>, OpError> {
+    if from >= uris.len() || to >= uris.len() {
+        return Err(OpError::bad_request("the playlist is shorter than that"));
+    }
+    if track.is_some_and(|track| uris[from] != track) {
+        return Err(OpError::new(
+            crate::proto::ErrorCode::NotFound,
+            "the playlist changed since it was shown; reload it and try again",
+        ));
+    }
+    if from == to {
+        return Ok(None);
+    }
+    Ok(Some(if to > from { to as i32 + 1 } else { to as i32 }))
 }
 
 fn require_tracks(uris: &[String]) -> Result<(), OpError> {
@@ -1416,6 +1441,23 @@ fn radio_art(seed_uri: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::collection_write;
+
+    #[test]
+    fn a_move_names_spotifys_destination_and_checks_the_track() {
+        use super::move_target;
+        let uris: Vec<String> = ["a", "b", "", "c"].iter().map(|u| u.to_string()).collect();
+        // Up: the destination is the position itself.
+        assert_eq!(move_target(&uris, 3, 1, Some("c")).unwrap(), Some(1));
+        // Down: one further, counted before the track is taken out.
+        assert_eq!(move_target(&uris, 0, 1, Some("a")).unwrap(), Some(2));
+        // An unreadable entry still counts, so "c" is at 3, not 2.
+        assert!(move_target(&uris, 2, 3, Some("c")).is_err());
+        // The list changed under the screen: refuse, do not move "b".
+        assert!(move_target(&uris, 1, 0, Some("a")).is_err());
+        assert_eq!(move_target(&uris, 1, 1, Some("b")).unwrap(), None);
+        assert!(move_target(&uris, 0, 4, None).is_err());
+        assert_eq!(move_target(&uris, 1, 0, None).unwrap(), Some(0));
+    }
 
     #[test]
     fn radio_art_is_built_only_for_a_plain_artist_uri() {

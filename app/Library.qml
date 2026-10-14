@@ -950,7 +950,7 @@ Item {
     next[to] = moved
     rows = next
     revision++
-    moveQueue.push({ playlist: uri, from: index, to: to })
+    moveQueue.push({ playlist: uri, from: index, to: to, track: moved.uri })
     pumpMoves()
     return to
   }
@@ -959,7 +959,7 @@ Item {
     if (moving || moveQueue.length === 0) return
     var move = moveQueue.shift()
     moving = true
-    player.request("playlist.move", { playlist_uri: move.playlist, from: move.from, to: move.to }, {
+    player.request("playlist.move", { playlist_uri: move.playlist, from: move.from, to: move.to, track_uri: move.track }, {
       deadline: 10000,
       onDone: function(result) {
         root.moving = false
