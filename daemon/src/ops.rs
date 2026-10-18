@@ -34,6 +34,16 @@ fn text(args: &Value, key: &str) -> Result<String, OpError> {
         .ok_or_else(|| OpError::bad_request(format!("'args.{key}' must be a non-empty string")))
 }
 
+/// A string that may be left out (absent or null), but is never ignored
+/// when it is something else.
+fn optional_text(args: &Value, key: &str) -> Result<Option<String>, OpError> {
+    match args.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.clone())),
+        Some(_) => Err(OpError::bad_request(format!("'args.{key}' must be a string"))),
+    }
+}
+
 /// The tracks an op is about: `track_uris`, or a single `track_uri`.
 fn track_list(args: &Value) -> Result<Vec<String>, OpError> {
     if let Some(list) = args.get("track_uris").and_then(Value::as_array) {
@@ -67,7 +77,7 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
 
         "player.play_context" => {
             let context_uri = text(&args, "uri")?;
-            let track_uri = args.get("track_uri").and_then(Value::as_str).map(str::to_owned);
+            let track_uri = optional_text(&args, "track_uri")?;
             ctx.playback.settle().await;
             ctx.playback.play_context(PlayRequest { context_uri, track_uri })?;
             return Ok(json!({}));
@@ -101,7 +111,7 @@ pub async fn dispatch(op: String, args: Value, ctx: Context) -> OpResult {
                 "playlist.move" => PlaylistEdit::Move {
                     from: number(&args, "from")?.max(0.0) as usize,
                     to: number(&args, "to")?.max(0.0) as usize,
-                    track: args.get("track_uri").and_then(Value::as_str).map(str::to_owned),
+                    track: optional_text(&args, "track_uri")?,
                 },
                 _ => PlaylistEdit::Rename(text(&args, "name")?),
             };

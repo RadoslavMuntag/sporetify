@@ -4,6 +4,18 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
+## 0.1.2 (not released yet)
+
+Fixes to editing playlists.
+
+- Moving a track never moves the wrong one. If the playlist changed since
+  it was shown, nothing moves and the list is reloaded.
+- A new playlist appears only once it is complete: a create cut off
+  part-way leaves nothing behind, and trying again does not make a
+  duplicate.
+- Creating or deleting a playlist is no longer reported as failed when
+  only the reload of your playlists afterwards was slow.
+
 ## 0.1.1 (2026-10-13)
 
 Two fixes asked for in the marketplace review.

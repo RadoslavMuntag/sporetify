@@ -144,7 +144,9 @@ Lines longer than 64 KiB end the connection.
     there are not "removed", and a move is checked against the real length
     and refused unless the track at `from` is the `track_uri` the app sent.
     A move's destination is sent the way Spotify counts it (the position in
-    the list before the track is taken out).
+    the list before the track is taken out). The app's positions skip
+    entries that cannot be read, as its list does, and are mapped to
+    Spotify's, which count them.
   - create posts to `/playlist/v2/playlist`, which answers with the new uri
     but ignores any name sent along, so the playlist is renamed straight
     after and filled, and only then added first in the user's list of
@@ -153,6 +155,9 @@ Lines longer than 64 KiB end the connection.
     fails or times out part-way leaves nothing visible behind.
   - delete removes it from that list, which for an owned playlist is what
     Spotify calls deleting.
+  - after a create or delete the saved sidebar is re-read in the
+    background, so a slow read cannot turn a change already made into a
+    timeout (and a create tried again into a duplicate).
   The sidebar marks which playlists the user may change, from the
   capabilities Spotify reports.
 - Likes: `library.save` / `unsave` write to the collection service; every

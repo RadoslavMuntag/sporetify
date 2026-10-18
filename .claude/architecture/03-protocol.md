@@ -62,7 +62,7 @@ Errors are always final:
 | `unauthorized` | Signed out or token rejected | Prompt sign-in |
 | `no_premium` | Account cannot play | Explain once, keep browsing enabled |
 | `no_audio` | No output device | Explain, offer device picker |
-| `not_found` | Entity gone | Remove from view |
+| `not_found` | Entity gone, or no longer where the client saw it | Reload / remove from view |
 | `cancelled` | Client cancelled or superseded | Silent |
 | `bad_request` | Malformed or missing field | Bug: log it |
 | `internal` | Daemon fault | Toast, log |
@@ -116,7 +116,7 @@ Built:
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
 | `playlist.add` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, added, skipped}`; tracks already there are skipped |
 | `playlist.remove` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, removed}`; every occurrence goes |
-| `playlist.move` | `playlist_uri`, `from`, `to` (0-based; `to` is where the track ends up), optional `track_uri` (the track expected at `from`; `not_found` if it is not) | `{playlist, changed, total}` |
+| `playlist.move` | `playlist_uri`, `from`, `to` (0-based, counted in the list `library.tracks` returns; `to` is where the track ends up), optional `track_uri` (the track expected at `from`) | `{playlist, changed, total}`; `not_found` if a position is past the end or `track_uri` is not at `from` |
 | `playlist.rename` | `playlist_uri`, `name` | `{playlist, changed, total}` |
 | `playlist.create` | `name`, optional `track_uris` | `{uri, playlist, total}`; placed first among the user's playlists |
 | `playlist.delete` | `playlist_uri` | `{changed}`; removes it from the user's playlists |

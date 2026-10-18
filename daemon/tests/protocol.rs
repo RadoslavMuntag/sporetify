@@ -151,6 +151,10 @@ async fn transport_ops_validate_their_arguments() {
     assert_eq!(error_code(&client.recv().await), "bad_request");
     client.send(json!({"id": 24, "op": "player.seek", "args": {}, "deadline_ms": 1000})).await;
     assert_eq!(error_code(&client.recv().await), "bad_request");
+    // A track_uri that is not a string is refused, not ignored.
+    let args = json!({"uri": "spotify:album:x", "track_uri": 5});
+    client.send(json!({"id": 25, "op": "player.play_context", "args": args, "deadline_ms": 1000})).await;
+    assert_eq!(error_code(&client.recv().await), "bad_request");
 }
 
 #[tokio::test]
