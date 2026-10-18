@@ -155,9 +155,9 @@ Lines longer than 64 KiB end the connection.
     fails or times out part-way leaves nothing visible behind.
   - delete removes it from that list, which for an owned playlist is what
     Spotify calls deleting.
-  - after a create or delete the saved sidebar is re-read in the
-    background, so a slow read cannot turn a change already made into a
-    timeout (and a create tried again into a duplicate).
+  - nothing runs after a create or delete has been sent, so a slow step
+    cannot turn a change already made into a timeout (and a create tried
+    again into a duplicate). The app re-reads the sidebar afterwards.
   The sidebar marks which playlists the user may change, from the
   capabilities Spotify reports.
 - Likes: `library.save` / `unsave` write to the collection service; every

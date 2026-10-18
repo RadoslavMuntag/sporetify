@@ -116,7 +116,7 @@ Built:
 | `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
 | `playlist.add` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, added, skipped}`; tracks already there are skipped |
 | `playlist.remove` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, removed}`; every occurrence goes |
-| `playlist.move` | `playlist_uri`, `from`, `to` (0-based, counted in the list `library.tracks` returns; `to` is where the track ends up), optional `track_uri` (the track expected at `from`) | `{playlist, changed, total}`; `not_found` if a position is past the end or `track_uri` is not at `from` |
+| `playlist.move` | `playlist_uri`, `from`, `to` (0-based, counted in the list `library.tracks` returns; `to` is where the track ends up), `track_uri` (the track expected at `from`) | `{playlist, changed, total}`; `not_found` if a position is past the end or `track_uri` is not at `from` |
 | `playlist.rename` | `playlist_uri`, `name` | `{playlist, changed, total}` |
 | `playlist.create` | `name`, optional `track_uris` | `{uri, playlist, total}`; placed first among the user's playlists |
 | `playlist.delete` | `playlist_uri` | `{changed}`; removes it from the user's playlists |
