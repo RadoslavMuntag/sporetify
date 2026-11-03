@@ -105,6 +105,8 @@ ShellRoot {
             seed: window.ids[3 - index]
             progress: 0.8
             creature: index === 0
+            // Any picture will do to show a cover filling the lens.
+            coverPath: Quickshell.shellDir + "/preview.png"
             palette: Theme.creatureColors
             ground: Theme.sunken
             ink: Theme.foreground
