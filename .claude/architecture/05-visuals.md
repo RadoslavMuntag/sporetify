@@ -19,8 +19,14 @@ fonts, sounds or recognisable creature designs.
 - Shown in the bar icon, the mini-player and the app's now-playing bar. It
   breathes only while its track plays and its surface is visible, and dozes
   when paused.
-- Off switches: the `creatures` widget setting for the plugin, the `v` key in
-  the app (kept in `~/.config/sporetify/app.json`).
+- Off switches: the `creatures` widget setting for the plugin; in the app
+  the `v` key cycles `visuals` between full, reduced (drawn, still) and off
+  (kept in `~/.config/sporetify/app.json`, and read by the compact player).
+- Line art (`lineArt` on `Organism.qml`) and the lens (`common/Lens.qml`)
+  for the Field Guide direction chosen in [08-design.md](08-design.md);
+  shown in the compact player.
+- Animations stop when the window's workspace is not shown
+  (`common/OnScreen.qml`), not only when the window is closed.
 
 Everything below this section is the plan for the rest. Where it says
 "shader", plain items turned out to be enough for the organism; the tide
@@ -107,9 +113,16 @@ input.
 
 ## Audio reactivity
 
-- Source: the daemon's `viz` events (band energies + beat), about 30 Hz.
-- QML feeds them straight into shader uniforms through a smoothing
-  `Behavior`; the shader does the rest.
+- Source: the daemon's `viz` events (16 band energies + beat), 30 Hz, from
+  `daemon/src/viz.rs`: a 4096-point FFT of the audio as it goes to the
+  sound server, summed into bands spaced evenly in pitch, levels relative to the loudest recent band (so volume
+  does not matter), a beat when the bass jumps above its recent average.
+  Frames are held until their audio is heard.
+- A surface raises `Player.vizWanted` only while visible, playing and at
+  full visuals; the daemon analyses nothing otherwise. Built in the compact
+  player: a fine-line spectrum (`common/Spectrum.qml`, bands read between
+  neighbours so 16 bands draw as many lines) and the creature swelling on
+  the beat (`Lens.pulse`). Smoothing is a short `Behavior` on each line.
 - When playback is on another device there is no audio tap; scenes fall back
   to a tempo-free idle drift.
 

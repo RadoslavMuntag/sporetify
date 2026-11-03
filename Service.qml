@@ -30,9 +30,15 @@ Player {
 
   signal toggleMiniRequested()
 
+  readonly property string launcher: Qt.resolvedUrl("bin/sporetify").toString().replace("file://", "")
+
   // Focus the full app's window, or start it.
   function openApp() {
-    Quickshell.execDetached([Qt.resolvedUrl("bin/sporetify").toString().replace("file://", "")])
+    Quickshell.execDetached([launcher])
+  }
+  // Close the compact player, or start it.
+  function toggleCompact() {
+    Quickshell.execDetached([launcher, "--compact-toggle"])
   }
 
   IpcHandler {
@@ -49,6 +55,7 @@ Player {
     function signIn(): string { root.run("signIn"); return "ok" }
     function toggleMini(): string { root.toggleMiniRequested(); return "ok" }
     function toggleApp(): string { root.openApp(); return "ok" }
+    function toggleCompact(): string { root.toggleCompact(); return "ok" }
     function nowPlaying(): string {
       return root.track ? root.track.title + " — " + root.track.artists.join(", ") : ""
     }

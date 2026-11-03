@@ -11,8 +11,9 @@ Rectangle {
   required property var player
   // Whether the window is showing, so the clock only ticks when seen.
   property bool live: true
-  // Whether creatures are drawn at all.
+  // Whether creatures are drawn at all, and whether they may move.
   property bool visuals: true
+  property bool motion: true
   // The user clicked the title (album) or the artist line.
   signal albumRequested()
   signal artistRequested()
@@ -80,7 +81,7 @@ Rectangle {
       width: visible ? Theme.space(46) : 0
       height: Theme.space(46)
       seed: root.track ? root.track.id : ""
-      alive: visible && root.live && root.player.playing
+      alive: visible && root.live && root.player.playing && root.motion
       awake: root.player.playing
       palette: Theme.creatureColors
       eye: Theme.foreground

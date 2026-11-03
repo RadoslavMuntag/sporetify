@@ -46,7 +46,8 @@ TestCase {
   }
 
   function test_scopes_shown_together_share_no_key() {
-    var together = [["browse", "player", "app"], ["mini", "player", "popup"]]
+    var together = [["browse", "player", "app"], ["mini", "player", "popup"], ["compact", "mini", "player"],
+      ["signedOut", "compact"], ["fault", "compact"]]
     for (var t = 0; t < together.length; t++) {
       var seen = {}
       for (var i = 0; i < Keymap.actions.length; i++) {
@@ -58,6 +59,17 @@ TestCase {
         }
       }
     }
+  }
+
+  // The compact player is a window: q and Ctrl C close it, Esc does not.
+  function test_compact_player_keys() {
+    var scopes = ["compact", "mini", "player"]
+    compare(Keymap.actionFor(Qt.Key_Q, "q", scopes), "compactClose")
+    compare(Keymap.actionFor(Qt.Key_C, "\u0003", scopes, Qt.ControlModifier), "compactClose")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", scopes), null)
+    compare(Keymap.actionFor(Qt.Key_Question, "?", scopes), "compactKeys")
+    compare(Keymap.actionFor(Qt.Key_Space, " ", scopes), "playPause")
+    compare(Keymap.actionFor(Qt.Key_O, "o", scopes), "openApp")
   }
 
   function test_primary_hints_are_a_subset() {
@@ -82,7 +94,7 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_J, "j", ["browse", "player"]), "down")
     compare(Keymap.actionFor(Qt.Key_K, "K", ["browse", "player"]), "moveUp")
     compare(Keymap.actionFor(Qt.Key_V, "V", ["browse", "player"]), "mark")
-    compare(Keymap.actionFor(Qt.Key_V, "v", ["browse", "player"]), "creatures")
+    compare(Keymap.actionFor(Qt.Key_V, "v", ["browse", "player"]), "visuals")
     compare(Keymap.actionFor(Qt.Key_N, "N", ["browse", "player"]), "newPlaylist")
     compare(Keymap.actionFor(Qt.Key_N, "n", ["browse", "player"]), "next")
     compare(Keymap.actionFor(Qt.Key_F2, "", ["browse", "player"]), "rename")

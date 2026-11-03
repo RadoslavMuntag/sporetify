@@ -6,6 +6,7 @@ import "../common"
 import "../common/Keymap.js" as Keymap
 import "../common/Faults.js" as Faults
 import "../common/Links.js" as Links
+import "../common/Visuals.js" as Visuals
 
 // The app window: sidebar, track list, now-playing bar and the hint bar.
 // One key handler serves the whole window; what a key means comes from
@@ -33,6 +34,12 @@ FloatingWindow {
   Library {
     id: library
     player: player
+  }
+
+  // On a workspace being shown; the creature only moves then.
+  OnScreen {
+    id: screen
+    appClass: "sporetify"
   }
 
   // The library can only load once the daemon is connected to Spotify.
@@ -114,7 +121,10 @@ FloatingWindow {
 
     JsonAdapter {
       id: prefs
-      // Draw each track's creature.
+      // full | reduced | off; see common/Visuals.js. Empty in files
+      // written before it existed, where `creatures` still decides.
+      property string visuals: ""
+      // Draw each track's creature (the older on/off form of `visuals`).
       property bool creatures: true
       // Show covers on the rows of lists.
       property bool covers: true
@@ -124,6 +134,8 @@ FloatingWindow {
       property string foldedFolders: ""
     }
   }
+
+  readonly property string visuals: Visuals.level(prefs.visuals, prefs.creatures)
 
   readonly property var foldedFolders: {
     var out = {}
@@ -314,7 +326,10 @@ FloatingWindow {
       library.openRelated(action, pane === "list" ? tracks.currentIndex : -1)
       pane = "list"
       return
-    case "creatures": prefs.creatures = !prefs.creatures; return
+    case "visuals":
+      prefs.visuals = Visuals.next(visuals)
+      library.notice("Visuals: " + prefs.visuals, false)
+      return
     case "covers": prefs.covers = !prefs.covers; return
     case "sidebar":
       prefs.sidebar = !prefs.sidebar
@@ -704,8 +719,9 @@ FloatingWindow {
       anchors.bottom: hints.top
       width: parent.width
       player: player
-      live: window.visible
-      visuals: prefs.creatures
+      live: window.visible && screen.shown
+      visuals: Visuals.drawn(window.visuals)
+      motion: Visuals.moving(window.visuals)
       liked: library.playingLiked
       onLikeRequested: library.toggleLike(-1)
       onAlbumRequested: { library.openRelated("album", -1); window.pane = "list" }
