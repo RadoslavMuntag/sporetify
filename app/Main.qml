@@ -29,6 +29,8 @@ FloatingWindow {
   Player {
     id: player
     wanted: window.visible
+    // The daemon analyses the audio only while the plate shows it.
+    vizWanted: plate.visible && window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
   }
 
   Library {
@@ -37,10 +39,7 @@ FloatingWindow {
   }
 
   // On a workspace being shown; the creature only moves then.
-  OnScreen {
-    id: screen
-    appClass: "sporetify"
-  }
+  OnScreen { id: screen }
 
   // The library can only load once the daemon is connected to Spotify.
   Connections {
@@ -129,6 +128,8 @@ FloatingWindow {
       // Show covers on the rows of lists.
       property bool covers: true
       property bool sidebar: true
+      // The specimen plate on the right (when the window is wide enough).
+      property bool plate: true
       onSidebarChanged: if (!sidebar) window.pane = "list"
       // Ids of sidebar folders that are folded shut, comma separated.
       property string foldedFolders: ""
@@ -331,6 +332,13 @@ FloatingWindow {
       library.notice("Visuals: " + prefs.visuals, false)
       return
     case "covers": prefs.covers = !prefs.covers; return
+    case "plate":
+      if (!plate.room) {
+        library.notice("The window is too narrow for the specimen plate", true)
+        return
+      }
+      prefs.plate = !prefs.plate
+      return
     case "sidebar":
       prefs.sidebar = !prefs.sidebar
       // Focus follows: into the sidebar when it appears, out when it goes.
@@ -444,6 +452,13 @@ FloatingWindow {
       library.setSearchFilter(filter)
       return library.searchFilter
     }
+    // Save a picture of the window as PNG. For tests; runs offscreen too
+    // (QT_QPA_PLATFORM=offscreen). Areas the window colour fills come out
+    // transparent: flatten onto the theme's background to view.
+    function capture(path: string): string {
+      keys.grabToImage(function(result) { result.saveToFile(path) })
+      return "ok"
+    }
     // What is on screen, as JSON. For tests.
     function describe(): string {
       var rows = []
@@ -470,6 +485,7 @@ FloatingWindow {
         prompt: window.promptOpen ? window.promptTitle : "", marked: library.markedCount,
         selection: library.markedCount > 0 ? library.selection(-1).map(function(t) { return t.uri }) : [],
         sidebarItem: sidebar.itemAt(sidebar.currentIndex) ? sidebar.itemAt(sidebar.currentIndex).name : "",
+        plate: plate.visible, viz: player.vizOn,
         playingArt: player.track && player.track.art_path ? player.track.art_path : "",
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
@@ -481,6 +497,9 @@ FloatingWindow {
     id: keys
     anchors.fill: parent
     focus: true
+
+    // Under everything, so pictures taken with `capture` have it too.
+    Rectangle { anchors.fill: parent; color: Theme.background }
 
     Keys.onPressed: function(event) {
       // The help overlay swallows every key: the moving keys scroll it when
@@ -635,7 +654,7 @@ FloatingWindow {
       anchors.top: searchBar.bottom
       anchors.bottom: nowPlaying.top
       anchors.left: sidebar.right
-      anchors.right: parent.right
+      anchors.right: plate.left
       visible: player.scope === "player"
       library: library
       player: player
@@ -714,6 +733,21 @@ FloatingWindow {
       }
     }
 
+    // ---- The playing track as a specimen, when there is room and visuals are on.
+    SpecimenPlate {
+      id: plate
+      // Wide enough that the list keeps most of the window.
+      readonly property bool room: window.width >= Theme.space(1000)
+      visible: room && prefs.plate && Visuals.drawn(window.visuals) && player.scope === "player"
+      anchors.top: searchBar.bottom
+      anchors.bottom: nowPlaying.top
+      anchors.right: parent.right
+      width: visible ? Theme.space(260) : 0
+      player: player
+      moving: Visuals.moving(window.visuals)
+      live: window.visible && screen.shown
+    }
+
     NowPlayingBar {
       id: nowPlaying
       anchors.bottom: hints.top
@@ -749,6 +783,7 @@ FloatingWindow {
         fontFamily: Theme.font.family
         fontSize: Theme.font.caption
         gap: Theme.spacing.xs
+        corner: 0
       }
     }
 

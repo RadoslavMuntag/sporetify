@@ -51,6 +51,14 @@ Rectangle {
   }
   readonly property int rowsPerPage: Math.max(1, Math.floor(list.height / Theme.spacing.rowHeight) - 1)
 
+  // Ruled off from the list, as a hairline.
+  Rectangle {
+    anchors.right: parent.right
+    width: Theme.stroke.hair
+    height: parent.height
+    color: Theme.line
+  }
+
   Text {
     id: heading
     x: Theme.spacing.xxl
