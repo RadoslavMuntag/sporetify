@@ -76,6 +76,27 @@ impl Outbox {
             self.overflow.notify_one();
         }
     }
+
+    /// For frames that may be skipped (`viz`): a client that is behind
+    /// misses some, but is not dropped for it.
+    fn send_lossy(&self, line: Arc<str>) {
+        let _ = self.lines.try_send(line);
+    }
+}
+
+/// The next `viz` frame, or never when not subscribed. Skips frames the
+/// connection was too slow to take.
+async fn next_viz(viz: &mut Option<broadcast::Receiver<Arc<str>>>) -> Arc<str> {
+    let Some(receiver) = viz else {
+        return std::future::pending().await;
+    };
+    loop {
+        match receiver.recv().await {
+            Ok(line) => return line,
+            Err(broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(broadcast::error::RecvError::Closed) => return std::future::pending().await,
+        }
+    }
 }
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<()>>>>;
@@ -117,12 +138,19 @@ async fn connection(
     let ctx = Context { shared, playback, catalog, debug_ops: config.debug_ops };
     let pending: Pending = Arc::default();
     let mut topics: HashSet<String> = HashSet::new();
+    let mut viz: Option<broadcast::Receiver<Arc<str>>> = None;
     let mut reader = LineReader::new(read_half);
 
     loop {
         tokio::select! {
             line = reader.next() => match line {
-                Ok(Some(line)) => handle_line(&line, &ctx, &outbox, &pending, &mut topics),
+                Ok(Some(line)) => {
+                    handle_line(&line, &ctx, &outbox, &pending, &mut topics);
+                    // Holding a receiver is what makes the tap analyse.
+                    if topics.contains("viz") != viz.is_some() {
+                        viz = topics.contains("viz").then(|| ctx.shared.viz.subscribe());
+                    }
+                }
                 // EOF, an I/O error or an oversized line all end the connection.
                 Ok(None) | Err(_) => break,
             },
@@ -136,6 +164,7 @@ async fn connection(
                 Err(broadcast::error::RecvError::Lagged(_)) => break,
                 Err(broadcast::error::RecvError::Closed) => break,
             },
+            line = next_viz(&mut viz) => outbox.send_lossy(line),
             _ = outbox.overflow.notified() => break,
         }
     }

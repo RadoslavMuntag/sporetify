@@ -8,6 +8,7 @@ use serde_json::json;
 use tokio::sync::broadcast;
 
 use crate::proto;
+use crate::viz;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -74,6 +75,9 @@ struct Inner {
 pub struct Shared {
     inner: Mutex<Inner>,
     events: broadcast::Sender<Event>,
+    /// Audio analysis for `viz` subscribers; a stream of its own because it
+    /// is frequent and lossy.
+    pub viz: Arc<viz::Hub>,
 }
 
 impl Shared {
@@ -82,6 +86,7 @@ impl Shared {
         Arc::new(Self {
             inner: Mutex::new(Inner { status, player: PlayerState::default() }),
             events,
+            viz: Arc::default(),
         })
     }
 
