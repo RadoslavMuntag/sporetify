@@ -19,10 +19,13 @@ fonts, sounds or recognisable creature designs.
 - Shown in the bar icon, the mini-player and the app's now-playing bar. It
   breathes only while its track plays and its surface is visible, and dozes
   when paused.
-- Off switches: the `creatures` widget setting for the plugin; in the app
-  the `v` key cycles `visuals` between full, reduced (drawn, still) and off
-  (kept in `~/.config/sporetify/app.json`, and read by the compact player).
-- Line art (`lineArt` on `Organism.qml`) and the lens (`common/Lens.qml`)
+- Off switches, in `~/.config/sporetify/app.json`: `creatures` (`Shift C` in
+  the app) turns every creature off on every surface, the plugin included
+  (its service reads the file), and a lens shows the cover instead;
+  `visuals` (`v`) is full, reduced (drawn, still) or off for the scenes.
+  The bar widget's own `creatures` setting turns them off in the bar only.
+- Line art (`lineArt` on `Organism.qml`; the nucleus is a thin ring, after
+  a stippled one looked bad to the owner) and the lens (`common/Lens.qml`)
   for the Field Guide direction chosen in [08-design.md](08-design.md);
   shown in the compact player.
 - Animations stop when the window's workspace is not shown

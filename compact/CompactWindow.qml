@@ -37,6 +37,7 @@ FloatingWindow {
   // The visuals setting is the app's (~/.config/sporetify/app.json, `v` in
   // the app). Only read here, so the two processes never both write it.
   property string visuals: "full"
+  property bool creatures: true
   FileView {
     path: Quickshell.env("HOME") + "/.config/sporetify/app.json"
     watchChanges: true
@@ -46,9 +47,11 @@ FloatingWindow {
     onLoaded: {
       try {
         var saved = JSON.parse(text())
-        window.visuals = Visuals.level(saved.visuals, saved.creatures)
+        window.visuals = Visuals.level(saved.visuals)
+        window.creatures = Visuals.creatures(saved.creatures)
       } catch (e) {
         window.visuals = "full"
+        window.creatures = true
       }
     }
   }
@@ -89,7 +92,7 @@ FloatingWindow {
       return JSON.stringify({
         arrangement: view.arrangement, width: view.width, height: view.height, zoom: view.zoom,
         phase: player.phase, scope: player.scope, playing: player.playing,
-        title: view.headline, byline: view.byline, visuals: window.visuals, keys: window.keysOpen,
+        title: view.headline, byline: view.byline, visuals: window.visuals, creatures: window.creatures, keys: window.keysOpen,
         shown: screen.shown, viz: player.vizOn, bands: player.bands.length, beat: player.beat, workspace: screen.toplevel && screen.toplevel.workspace ? screen.toplevel.workspace.name : ""
       })
     }
@@ -117,6 +120,7 @@ FloatingWindow {
       anchors.fill: parent
       player: player
       visuals: window.visuals
+      creatures: window.creatures
       live: window.visible && screen.shown
       onLensClicked: player.run("playPause")
     }

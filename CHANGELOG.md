@@ -17,7 +17,9 @@ the daemon that matches.
   catalogue number for every track, a ruler for the seek bar, square
   keycaps, and a specimen plate on the right with the playing track's
   creature, its traits and the music (`i` hides it).
-- `v` in the app now cycles the creatures between moving, still and off.
+- `v` in the app now cycles the visuals between moving, still and off, and
+  `Shift C` turns the creatures off everywhere: the app, the compact
+  player, the bar and the mini-player.
 - Creatures stop animating while their window is on a workspace that is
   not shown, not only when it is closed.
 

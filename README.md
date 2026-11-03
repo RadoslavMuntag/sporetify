@@ -144,8 +144,11 @@ This builds the daemon here and links the checkout as the plugin.
 | Volume | scroll on the bar icon |
 
 Each track has its own small creature, grown from the track itself, shown
-beside it while it plays. `v` in the app switches them between moving,
-still and off; the bar widget has a Creatures setting.
+beside it while it plays. `Shift C` in the app turns the creatures off
+everywhere (app, compact player, bar and mini-player); a lens then shows
+the album cover. `v` sets the other visuals (lens, spectrum, plate) to
+moving, still or off. The bar widget's Creatures setting turns them off in
+the bar only.
 
 ### Compact player
 
@@ -187,7 +190,8 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `N` | New playlist | `F2` | Rename a playlist |
 | `Backspace` | Back | `?` | Every shortcut |
 | `b` | Show / hide the sidebar | `c` | Covers in lists on / off |
-| `i` | Specimen plate on / off | `v` | Creatures: moving / still / off |
+| `i` | Specimen plate on / off | `v` | Visuals: moving / still / off |
+| `Shift C` | Creatures on / off, everywhere | | |
 | `←` / `→` | Seek 10 s | `Esc` | Cancel search (closes the mini-player) |
 | `Ctrl C` | Quit the app | | |
 
