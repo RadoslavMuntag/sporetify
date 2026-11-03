@@ -26,6 +26,11 @@ var actions = [
   { id: "openApp",     keys: ["o"],              label: "Open app",         scope: "mini", group: "places", primary: true },
   { id: "likePlaying", keys: ["f"],              label: "Like",             scope: "mini", group: "track", primary: true },
 
+  // The compact player: a window of its own, so it closes on q or Ctrl C
+  // (Esc does nothing there) and keeps its hints behind ?.
+  { id: "compactKeys", keys: ["?"],              label: "All keys",         scope: "compact", group: "app", primary: true },
+  { id: "compactClose", keys: ["q", "Ctrl+c"],   label: "Close",            scope: "compact", group: "app", primary: true },
+
   { id: "down",        keys: ["j", "Down"],      label: "Down",             scope: "browse", group: "moving" },
   { id: "up",          keys: ["k", "Up"],        label: "Up",               scope: "browse", group: "moving" },
   { id: "pageDown",    keys: ["PgDn"],           label: "Page down",        scope: "browse", group: "moving" },
@@ -59,7 +64,7 @@ var actions = [
   { id: "reload",      keys: ["R"],              label: "Reload",           scope: "browse", group: "app" },
   { id: "sidebar",     keys: ["b"],              label: "Show / hide sidebar", scope: "browse", group: "app" },
   { id: "covers",      keys: ["c"],              label: "Covers in lists",  scope: "browse", group: "app" },
-  { id: "creatures",   keys: ["v"],              label: "Creatures",        scope: "browse", group: "app" },
+  { id: "visuals",     keys: ["v"],              label: "Visuals: full / reduced / off", scope: "browse", group: "app" },
   { id: "help",        keys: ["?"],              label: "All keys",         scope: "browse", group: "app", primary: true },
 
   { id: "signIn",      keys: ["Return"],         label: "Sign in",          scope: "signedOut", group: "app", primary: true },

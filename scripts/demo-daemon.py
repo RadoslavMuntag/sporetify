@@ -10,15 +10,19 @@ played and Spotify is never contacted. Every name in it is invented.
     scripts/demo-daemon.py /tmp/demo.sock &
     SPORETIFY_SOCKET=/tmp/demo.sock qs -p App.qml
 
-Covers are drawn with Pillow into a folder beside the socket.
+Covers are drawn with Pillow into a folder beside the socket (Pillow is
+not installed system-wide on Omarchy: `uv run --with pillow python3 ...`).
+Subscribing to `viz` gets made-up music frames, 30 a second.
 """
 
 import hashlib
 import json
 import os
 import random
+import math
 import socketserver
 import sys
+import threading
 import time
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -177,12 +181,35 @@ def answer(op, args):
     return {}
 
 
+def viz_frame(t):
+    """Made-up band energies and a beat at 120 bpm, shaped like music."""
+    beat = max(0.0, 1.0 - (t % 0.5) / 0.15) if state["playing"] else 0.0
+    bands = []
+    for i in range(16):
+        wave = 0.5 + 0.25 * math.sin(t * (1.1 + i * 0.37) + i) + 0.15 * math.sin(t * (2.3 + i * 0.11) + i * 2)
+        level = wave * (1 - i / 22) + (beat * 0.4 if i < 4 else 0)
+        bands.append(round(max(0.0, min(1.0, level)) if state["playing"] else 0.0, 2))
+    return {"ev": "viz", "bands": bands, "beat": round(beat, 2)}
+
+
 class Connection(socketserver.StreamRequestHandler):
     def send(self, frame):
-        self.wfile.write((json.dumps(frame) + "\n").encode())
-        self.wfile.flush()
+        with self.lock:
+            self.wfile.write((json.dumps(frame) + "\n").encode())
+            self.wfile.flush()
+
+    def stream_viz(self):
+        """About 30 frames a second while subscribed, like the real tap."""
+        while self.viz:
+            try:
+                self.send(viz_frame(time.time()))
+            except OSError:
+                return
+            time.sleep(1 / 30)
 
     def handle(self):
+        self.lock = threading.Lock()
+        self.viz = False
         self.send({"ev": "hello", "protocol": 0, "daemon": "0.1.0", "status": "ready", "player": player()})
         for line in self.rfile:
             try:
@@ -192,6 +219,12 @@ class Connection(socketserver.StreamRequestHandler):
             if "id" not in request:
                 continue
             op = request.get("op", "")
+            if op in ("subscribe", "unsubscribe") and "viz" in (request.get("args") or {}).get("topics", []):
+                wanted = op == "subscribe"
+                if wanted and not self.viz:
+                    self.viz = True
+                    threading.Thread(target=self.stream_viz, daemon=True).start()
+                self.viz = wanted
             if op in ("player.toggle", "player.play", "player.pause"):
                 state["playing"] = op == "player.play" or (op == "player.toggle" and not state["playing"])
                 state["seq"] += 1

@@ -4,6 +4,19 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
+## Unreleased
+
+- Compact player: a small now-playing window for a tiled desktop
+  (`sporetify --compact`, or `toggleCompact` from a Hyprland bind). The
+  track's creature is drawn as line art under a lens whose ring of ticks
+  shows how far the song has played.
+- The compact player moves with the music: a fine-line spectrum under the
+  lens, and the creature swells on the beat. The daemon analyses the audio
+  only while a window that shows it is open and playing.
+- `v` in the app now cycles the creatures between moving, still and off.
+- Creatures stop animating while their window is on a workspace that is
+  not shown, not only when it is closed.
+
 ## 0.1.1 (2026-10-13)
 
 Two fixes asked for in the marketplace review.

@@ -9,6 +9,9 @@ import "Organism.js" as Organism
 //
 // Colours come from the host (theme tokens); the creature only chooses
 // among them.
+//
+// With `lineArt` it is drawn as a specimen plate: an outline in the body
+// colour around a pale fill, hairs as fine lines and a stippled nucleus.
 Item {
   id: root
 
@@ -23,6 +26,11 @@ Item {
   property var palette: []
   property color eye
   property color pupil
+  // Line art, and what it is drawn on (the fill is the body colour washed
+  // into this), and the weight of its lines.
+  property bool lineArt: false
+  property color ground
+  property real stroke: 1
 
   readonly property var shape: Organism.create(seed)
   readonly property real unit: Math.min(width, height)
@@ -36,6 +44,37 @@ Item {
   readonly property color detail: {
     var chosen = Organism.pick(palette, shape.accent)
     return chosen !== undefined ? chosen : pupil
+  }
+
+  readonly property color wash: Qt.tint(ground, Qt.rgba(body.r, body.g, body.b, 0.22))
+  readonly property var dots: lineArt && detailed ? Organism.stipple(seed, 28) : []
+
+  // One lobe of the body, swelling on its own period. `grow` widens it by
+  // a fixed amount: line art draws every lobe grown, in the body colour,
+  // and then every lobe again in the pale fill, which leaves only the
+  // outline of the whole body showing.
+  component Lobe: Rectangle {
+    id: lobe
+    required property var modelData
+    property real grow: 0
+    width: modelData.r * 2 * root.unit + grow * 2
+    height: width
+    radius: width / 2
+    x: modelData.x * root.unit - width / 2
+    y: modelData.y * root.unit - height / 2
+
+    SequentialAnimation on scale {
+      running: root.alive
+      loops: Animation.Infinite
+      NumberAnimation {
+        from: 1; to: 1 + lobe.modelData.swell
+        duration: lobe.modelData.period / 2; easing.type: Easing.InOutSine
+      }
+      NumberAnimation {
+        from: 1 + lobe.modelData.swell; to: 1
+        duration: lobe.modelData.period / 2; easing.type: Easing.InOutSine
+      }
+    }
   }
 
   // 1 = open, towards 0 = closed. Blinking animates this.
@@ -91,48 +130,44 @@ Item {
         }
 
         Rectangle {
-          width: hair.modelData.width * root.unit
+          width: root.lineArt ? root.stroke : hair.modelData.width * root.unit
           height: (root.shape.lobes[0].r + hair.modelData.length) * root.unit
           x: -width / 2
           y: -height
           radius: width / 2
-          color: Qt.darker(root.body, 1.25)
+          color: root.lineArt ? root.body : Qt.darker(root.body, 1.25)
         }
       }
     }
 
     // ---- Body: overlapping circles of one colour read as a single blob.
     Repeater {
+      model: root.lineArt ? root.shape.lobes : []
+      Lobe { grow: root.stroke; color: root.body }
+    }
+    Repeater {
       model: root.shape.lobes
+      Lobe { color: root.lineArt ? root.wash : root.body }
+    }
+
+    // ---- Stippled nucleus (line art)
+    Repeater {
+      model: root.dots
 
       Rectangle {
-        id: lobe
         required property var modelData
-        width: modelData.r * 2 * root.unit
+        width: Math.max(1, root.stroke * 1.2)
         height: width
         radius: width / 2
         x: modelData.x * root.unit - width / 2
         y: modelData.y * root.unit - height / 2
         color: root.body
-
-        SequentialAnimation on scale {
-          running: root.alive
-          loops: Animation.Infinite
-          NumberAnimation {
-            from: 1; to: 1 + lobe.modelData.swell
-            duration: lobe.modelData.period / 2; easing.type: Easing.InOutSine
-          }
-          NumberAnimation {
-            from: 1 + lobe.modelData.swell; to: 1
-            duration: lobe.modelData.period / 2; easing.type: Easing.InOutSine
-          }
-        }
       }
     }
 
     // ---- Nucleus
     Rectangle {
-      visible: root.detailed
+      visible: root.detailed && !root.lineArt
       width: root.shape.core.r * 2 * root.unit
       height: width
       radius: width / 2
@@ -162,6 +197,8 @@ Item {
           height: Math.max(1, socket.size * root.eyeOpen)
           radius: Math.min(width, height) / 2
           color: root.eye
+          border.width: root.lineArt ? root.stroke : 0
+          border.color: root.body
           clip: true
           Behavior on height { NumberAnimation { duration: 120 } }
 

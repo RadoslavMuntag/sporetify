@@ -12,3 +12,4 @@ pub mod player;
 pub mod private;
 pub mod proto;
 pub mod state;
+pub mod viz;
