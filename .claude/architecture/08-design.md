@@ -95,7 +95,9 @@ which to prove the direction before restyling the app.
   pause. The only hint on screen is `? keys`, to keep screenshots clean.
 - Without a track or with a fault it says why, with the same words as the
   other surfaces (`Faults.js`); the creature rests in the lens.
-- With visuals off the lens shows the cover.
+- With visuals or creatures off the cover fills the lens, cut to the
+  circle with a `MultiEffect` mask (drawn once per cover). Wide windows
+  keep the lens under half the width so the text has room.
 - IPC `sporetify.compact`: `act`, `close`, `describe`.
 
 Measured (demo daemon): paused 0.1 % of a core; playing on a hidden

@@ -410,7 +410,10 @@ Things that bite:
 - A Unix socket path is limited to 108 bytes; a socket deep in a temp
   folder fails with "server not found". Keep test socket paths short.
 - **Visual checks without a window on the desktop:** `QT_QPA_PLATFORM=offscreen`
-  renders (in software) and still answers IPC; `Gallery.qml` saves a picture
+  renders (in software) and still answers IPC, but its software renderer
+  skips every `ShaderEffect` / `MultiEffect` (a masked cover comes out
+  empty); check those in a real window, and asking it to use the GPU
+  (`QT_QUICK_BACKEND=rhi`) hangs; `Gallery.qml` saves a picture
   with `SPORETIFY_GALLERY_SHOT=<png>`. CPU measured offscreen is not what a
   real window costs. To measure a real window without disturbing the
   owner's layout, start it on a hidden special workspace:
