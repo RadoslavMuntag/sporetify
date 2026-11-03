@@ -19,6 +19,8 @@ Item {
   required property var player
   // full | reduced | off
   property string visuals: "full"
+  // Draw the creature; off, the lens shows the cover.
+  property bool creatures: true
   // Whether the window is showing; nothing moves or ticks otherwise.
   property bool live: true
   signal lensClicked()
@@ -132,7 +134,7 @@ Item {
 
     seed: root.track ? root.track.id : ""
     progress: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
-    creature: Visuals.drawn(root.visuals)
+    creature: Visuals.drawn(root.visuals) && root.creatures
     coverPath: root.track && root.track.art_path ? root.track.art_path : ""
     alive: root.live && root.playing && Visuals.moving(root.visuals)
     awake: root.playing
@@ -224,7 +226,7 @@ Item {
     }
     Label {
       width: parent.width
-      visible: root.track !== null && Visuals.drawn(root.visuals)
+      visible: root.track !== null && Visuals.drawn(root.visuals) && root.creatures
       text: root.track ? Specimen.traits(root.track.id) : ""
       color: Theme.muted
       opacity: 0.75

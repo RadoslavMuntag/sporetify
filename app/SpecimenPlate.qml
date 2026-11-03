@@ -14,6 +14,8 @@ Rectangle {
   // Draw and move (the visuals setting), and whether the window is seen.
   property bool moving: true
   property bool live: true
+  // Draw the creature; off, the lens shows the cover.
+  property bool creatures: true
 
   readonly property var track: player.track
   readonly property real pad: Theme.spacing.huge
@@ -67,6 +69,8 @@ Rectangle {
       width: parent.width
       height: width
       seed: root.track ? root.track.id : ""
+      creature: root.creatures
+      coverPath: root.track && root.track.art_path ? root.track.art_path : ""
       progress: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
       alive: root.live && root.player.playing && root.moving
       awake: root.player.playing
@@ -121,7 +125,7 @@ Rectangle {
 
     // What the creature is made of, read off the generator, and the length.
     Column {
-      visible: root.track !== null
+      visible: root.track !== null && root.creatures
       width: parent.width
       spacing: Theme.spacing.xs
 

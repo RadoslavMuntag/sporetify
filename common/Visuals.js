@@ -1,14 +1,20 @@
 .pragma library
 
-// The visuals setting: "full" draws and animates the creatures and scenes,
-// "reduced" draws them still, "off" leaves them out. Older preference files
-// only have `creatures` (true or false), which still counts.
+// Two settings, both in ~/.config/sporetify/app.json:
+//
+// `visuals`: "full" draws and animates the scenes (lens, spectrum, plate),
+// "reduced" draws them still, "off" leaves them out.
+// `creatures`: whether any creature is drawn, anywhere: in the app, the
+// compact player, the bar and the mini-player. Off, a lens shows the cover.
 
 var levels = ["full", "reduced", "off"]
 
-function level(saved, creatures) {
-  if (levels.indexOf(saved) !== -1) return saved
-  return creatures === false ? "off" : "full"
+function level(saved) {
+  return levels.indexOf(saved) !== -1 ? saved : "full"
+}
+
+function creatures(saved) {
+  return saved !== false
 }
 
 function next(current) {

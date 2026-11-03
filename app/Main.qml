@@ -120,10 +120,10 @@ FloatingWindow {
 
     JsonAdapter {
       id: prefs
-      // full | reduced | off; see common/Visuals.js. Empty in files
-      // written before it existed, where `creatures` still decides.
+      // full | reduced | off; see common/Visuals.js.
       property string visuals: ""
-      // Draw each track's creature (the older on/off form of `visuals`).
+      // Draw creatures at all, here and in the compact player, the bar and
+      // the mini-player (which read this file).
       property bool creatures: true
       // Show covers on the rows of lists.
       property bool covers: true
@@ -136,7 +136,7 @@ FloatingWindow {
     }
   }
 
-  readonly property string visuals: Visuals.level(prefs.visuals, prefs.creatures)
+  readonly property string visuals: Visuals.level(prefs.visuals)
 
   readonly property var foldedFolders: {
     var out = {}
@@ -331,6 +331,10 @@ FloatingWindow {
       prefs.visuals = Visuals.next(visuals)
       library.notice("Visuals: " + prefs.visuals, false)
       return
+    case "creatures":
+      prefs.creatures = !prefs.creatures
+      library.notice("Creatures " + (prefs.creatures ? "on" : "off") + ", everywhere", false)
+      return
     case "covers": prefs.covers = !prefs.covers; return
     case "plate":
       if (!plate.room) {
@@ -485,7 +489,7 @@ FloatingWindow {
         prompt: window.promptOpen ? window.promptTitle : "", marked: library.markedCount,
         selection: library.markedCount > 0 ? library.selection(-1).map(function(t) { return t.uri }) : [],
         sidebarItem: sidebar.itemAt(sidebar.currentIndex) ? sidebar.itemAt(sidebar.currentIndex).name : "",
-        plate: plate.visible, viz: player.vizOn,
+        plate: plate.visible, viz: player.vizOn, creatures: prefs.creatures,
         playingArt: player.track && player.track.art_path ? player.track.art_path : "",
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
@@ -745,6 +749,7 @@ FloatingWindow {
       width: visible ? Theme.space(260) : 0
       player: player
       moving: Visuals.moving(window.visuals)
+      creatures: prefs.creatures
       live: window.visible && screen.shown
     }
 
@@ -754,7 +759,7 @@ FloatingWindow {
       width: parent.width
       player: player
       live: window.visible && screen.shown
-      visuals: Visuals.drawn(window.visuals)
+      visuals: Visuals.drawn(window.visuals) && prefs.creatures
       motion: Visuals.moving(window.visuals)
       liked: library.playingLiked
       onLikeRequested: library.toggleLike(-1)

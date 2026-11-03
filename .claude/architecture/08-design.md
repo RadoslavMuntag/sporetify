@@ -25,7 +25,8 @@ catalogue. Character comes from line work, not effects:
   digits of its hash) and traits read off its creature ("3 lobes · 2 eyes ·
   7 hairs").
 - The creature drawn as line art: an outline in the body colour around a
-  pale wash, hairs as fine lines, a stippled nucleus.
+  pale wash, hairs as fine lines, a thin ring for the nucleus (a stippled
+  one was tried and looked bad).
 - The lens: a round slide with graph paper, the creature under it, and a
   ring of 72 ticks around the rim that is also the progress bar.
 - Progress elsewhere as a ruler with ticks every 30 s.
@@ -45,12 +46,12 @@ Recorded as D16 in the README.
 
 - `app/Theme.qml`: `stroke.hair` / `stroke.bold` line weights and
   `motion.quick` / `motion.standard` (80 and 150 ms).
-- Visuals setting with three levels, `full` / `reduced` / `off`
-  (`common/Visuals.js`). `v` in the app cycles it; it is saved as
-  `visuals` in `~/.config/sporetify/app.json`, and older files that only
-  have `creatures` still count. `reduced` draws creatures but keeps them
-  still. The plugin still has its on/off `creatures` setting; moving it to
-  the three levels is left for V4.
+- Two settings (`common/Visuals.js`), saved in
+  `~/.config/sporetify/app.json`: `visuals` with three levels, `full` /
+  `reduced` / `off`, cycled by `v` (`reduced` draws, but still); and
+  `creatures`, on or off everywhere (`Shift C`, asked for by the owner): the
+  app, the compact player, and the plugin's bar and mini-player, whose
+  service reads the same file. Off, a lens shows the cover.
 - `common/OnScreen.qml`: whether one of our windows is on a workspace being
   shown (active workspace, open special workspace, or pinned). It asks
   `hyprctl` at start and again on Hyprland's workspace and window events,
@@ -67,7 +68,6 @@ Recorded as D16 in the README.
 - `common/Organism.qml` draws line art (`lineArt`, `ground`, `stroke`) with
   plain items: every lobe grown by the stroke in the body colour, then every
   lobe in the wash on top, so only the outline of the whole body shows.
-  `Organism.stipple` gives the nucleus dots.
 - `common/Lens.qml`, host-agnostic like the creature (colours passed in).
 - `Gallery.qml`: every part in every state, with made-up tracks. It can save
   a picture of itself offscreen (`SPORETIFY_GALLERY_SHOT`), which needs no
@@ -167,7 +167,7 @@ Checked: pictures in gruvbox and catppuccin-latte against the demo
 daemon; `i`, `v` and the music subscription driven over IPC.
 
 Not yet: the search bar, picker, prompt and help overlay are unchanged
-(rounded boxes); the plugin's `creatures` setting is still on/off; frame
+(rounded boxes); frame
 times on a 5 000-track list not compared; README pictures not retaken.
 
 ## V5 · Into the lens: the tide pool

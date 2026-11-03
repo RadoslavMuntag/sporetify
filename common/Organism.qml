@@ -11,7 +11,7 @@ import "Organism.js" as Organism
 // among them.
 //
 // With `lineArt` it is drawn as a specimen plate: an outline in the body
-// colour around a pale fill, hairs as fine lines and a stippled nucleus.
+// colour around a pale fill, hairs as fine lines and the nucleus as a ring.
 Item {
   id: root
 
@@ -47,7 +47,6 @@ Item {
   }
 
   readonly property color wash: Qt.tint(ground, Qt.rgba(body.r, body.g, body.b, 0.22))
-  readonly property var dots: lineArt && detailed ? Organism.stipple(seed, 28) : []
 
   // One lobe of the body, swelling on its own period. `grow` widens it by
   // a fixed amount: line art draws every lobe grown, in the body colour,
@@ -150,22 +149,20 @@ Item {
       Lobe { color: root.lineArt ? root.wash : root.body }
     }
 
-    // ---- Stippled nucleus (line art)
-    Repeater {
-      model: root.dots
-
-      Rectangle {
-        required property var modelData
-        width: Math.max(1, root.stroke * 1.2)
-        height: width
-        radius: width / 2
-        x: modelData.x * root.unit - width / 2
-        y: modelData.y * root.unit - height / 2
-        color: root.body
-      }
+    // ---- Nucleus: a ring in line art, a soft spot otherwise
+    Rectangle {
+      visible: root.detailed && root.lineArt
+      // Smaller than the soft spot, so it reads as a nucleus, not a mouth.
+      width: root.shape.core.r * 1.4 * root.unit
+      height: width
+      radius: width / 2
+      x: root.shape.core.x * root.unit - width / 2
+      y: (root.shape.core.y + 0.1) * root.unit - height / 2
+      color: "transparent"
+      border.width: root.stroke
+      border.color: root.detail
+      opacity: 0.6
     }
-
-    // ---- Nucleus
     Rectangle {
       visible: root.detailed && !root.lineArt
       width: root.shape.core.r * 2 * root.unit
