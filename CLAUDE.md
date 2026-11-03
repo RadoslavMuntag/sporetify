@@ -89,7 +89,8 @@ App.qml              entry point of the full app (`qs -p App.qml`); at the root 
                      that app/ and common/ are both inside its config folder
 Compact.qml          entry point of the compact player (`qs -p Compact.qml`)
 Gallery.qml          every visual part in every state, for judging a change by eye
-app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar
+app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar,
+                     SpecimenPlate, Slider, Ruler
 compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
@@ -284,7 +285,9 @@ flat and square, as Omarchy's is.
 Built so far: the per-track creature (`common/Organism.js` and
 `Organism.qml`, filled or line art) in the bar, mini-player and app; the
 lens (`common/Lens.qml`) and the music (`viz` frames from the daemon's
-audio tap, drawn by `common/Spectrum.qml`) in the compact player. Raise
+audio tap, drawn by `common/Spectrum.qml`) in the compact player and the
+app's specimen plate; the app's lists in the Field Guide manner (rules,
+brackets, catalogue numbers, the ruler). Raise
 `Player.vizWanted` only while a surface is visible, playing and at full
 visuals: the daemon analyses audio only while someone subscribes. To judge a change, look at
 `Gallery.qml` (it can also save a picture of itself, see the file).
@@ -373,6 +376,10 @@ Things that bite:
   plugin's files, which only resolve inside omarchy-shell. Harmless.
 - `hyprctl clients` reports logical pixels; multiply by the monitor scale
   before cropping a `grim` screenshot.
+- `qs ipc --pid <pid> call sporetify.app capture <png>` saves a picture of
+  the app, also when it runs offscreen; with `HOME` pointed at another
+  theme (below) and the demo daemon, a change can be judged in any theme
+  without a window on the desktop.
 - Drive the app in tests over its IPC target, not with injected keys:
   `qs ipc --pid <pid> call sporetify.app act <action>` and `... describe`.
   It needs no focus and works with the screen off. `grim` hangs when the

@@ -187,6 +187,7 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `N` | New playlist | `F2` | Rename a playlist |
 | `Backspace` | Back | `?` | Every shortcut |
 | `b` | Show / hide the sidebar | `c` | Covers in lists on / off |
+| `i` | Specimen plate on / off | `v` | Creatures: moving / still / off |
 | `←` / `→` | Seek 10 s | `Esc` | Cancel search (closes the mini-player) |
 | `Ctrl C` | Quit the app | | |
 

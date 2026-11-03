@@ -16,6 +16,8 @@ Flow {
   property string fontFamily
   property int fontSize
   property int gap
+  // Keycap corner rounding; -1 keeps KeyCap's own.
+  property real corner: -1
 
   spacing: gap * 2
 
@@ -33,6 +35,7 @@ Flow {
         fontFamily: root.fontFamily
         fontSize: root.fontSize
         padding: root.gap
+        corner: root.corner >= 0 ? root.corner : root.gap
       }
 
       Text {

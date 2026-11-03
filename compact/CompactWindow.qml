@@ -29,10 +29,7 @@ FloatingWindow {
   }
 
   // On a workspace being shown; nothing animates otherwise.
-  OnScreen {
-    id: screen
-    appClass: "sporetify-compact"
-  }
+  OnScreen { id: screen }
 
   readonly property var scopes: player.scope === "player" ? ["compact", "mini", "player"] : [player.scope, "compact"]
   property bool keysOpen: false

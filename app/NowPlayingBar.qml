@@ -47,6 +47,7 @@ Rectangle {
     fontFamily: Theme.font.family
     fontSize: Theme.font.caption
     padding: Theme.spacing.xs
+    corner: 0
   }
 
   Item {
@@ -188,10 +189,11 @@ Rectangle {
           font.family: Theme.font.family
           font.pixelSize: Theme.font.caption
         }
-        Slider {
+        Ruler {
           id: seek
           anchors.verticalCenter: parent.verticalCenter
           width: parent.width - elapsed.width - remaining.width - parent.spacing * 2
+          durationMs: root.track ? root.track.duration_ms : 0
           value: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
           // Seeking commits on release so a drag does not re-buffer per frame.
           onReleased: function(value) {

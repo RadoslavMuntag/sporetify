@@ -13,6 +13,10 @@ the daemon that matches.
 - The compact player moves with the music: a fine-line spectrum under the
   lens, and the creature swells on the beat. The daemon analyses the audio
   only while a window that shows it is open and playing.
+- The app takes on the same look: ruled lists with a bracket cursor and a
+  catalogue number for every track, a ruler for the seek bar, square
+  keycaps, and a specimen plate on the right with the playing track's
+  creature, its traits and the music (`i` hides it).
 - `v` in the app now cycles the creatures between moving, still and off.
 - Creatures stop animating while their window is on a workspace that is
   not shown, not only when it is closed.

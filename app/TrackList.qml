@@ -1,6 +1,7 @@
 import QtQuick
 
 import "../common/Position.js" as Position
+import "../common/Specimen.js" as Specimen
 
 // The open collection's tracks. Rows are fixed height and exist for the
 // whole list from the start; a row shows a placeholder until its page of
@@ -18,6 +19,25 @@ Item {
 
   readonly property int rowsPerPage: Math.max(1, Math.floor(list.height / Theme.spacing.trackRow) - 1)
   readonly property string playingUri: player.track ? player.track.id : ""
+
+  // ---- Column layout, shared by the column labels and every row.
+  readonly property real pad: Theme.spacing.huge
+  readonly property real numberWidth: Theme.space(36)
+  readonly property real timeWidth: Theme.space(52)
+  readonly property real markWidth: Theme.space(24)
+  // On an album page every row would show the same cover.
+  readonly property bool thumbs: covers && library.kind !== "album"
+  // Places that are lists of tracks get column labels.
+  readonly property bool trackList: ["playlist", "album", "queue"].indexOf(library.kind) !== -1
+
+  // What kind of place this is, over its name.
+  readonly property string eyebrow: {
+    var names = { playlist: "Playlist", album: "Album", artist: "Artist", queue: "Up next", foryou: "Made for you" }
+    var label = library.searching ? "Search · " + (library.searchMode === "library" ? "your library" : "Spotify")
+      : (names[library.kind] || "")
+    var number = library.uri !== "" && !library.searching ? Specimen.catalogue(library.uri) : ""
+    return (label + (number !== "" ? " · No. " + number : "")).toUpperCase()
+  }
 
   function move(delta) {
     list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + delta))
@@ -75,6 +95,17 @@ Item {
       spacing: Theme.spacing.xs
 
       Text {
+        visible: text !== ""
+        width: parent.width
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        text: root.eyebrow
+        color: Theme.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.caption
+        font.letterSpacing: Theme.font.caption * 0.12
+      }
+      Text {
         width: parent.width
         elide: Text.ElideRight
         textFormat: Text.PlainText
@@ -108,13 +139,51 @@ Item {
     anchors.top: header.bottom
     anchors.topMargin: Theme.spacing.xl
     width: parent.width
-    height: 1
+    height: Theme.stroke.hair
     color: Theme.line
+  }
+
+  component ColumnLabel: Text {
+    anchors.verticalCenter: parent.verticalCenter
+    textFormat: Text.PlainText
+    color: Theme.muted
+    font.family: Theme.font.family
+    font.pixelSize: Theme.font.caption
+    font.letterSpacing: Theme.font.caption * 0.12
+  }
+
+  // ---- Column labels, on lists of tracks
+  Item {
+    id: columns
+    anchors.top: rule.bottom
+    width: parent.width
+    height: root.trackList ? labelRow.height + Theme.spacing.md * 2 : 0
+    visible: root.trackList
+
+    readonly property real textX: root.pad + root.numberWidth + (root.thumbs ? Theme.spacing.thumb + Theme.spacing.xl : 0)
+    readonly property real flexible: width - textX - root.pad - root.timeWidth - root.markWidth
+
+    Item {
+      id: labelRow
+      anchors.verticalCenter: parent.verticalCenter
+      width: parent.width
+      height: Theme.font.caption * 1.4
+      ColumnLabel { x: root.pad; text: "#" }
+      ColumnLabel { x: columns.textX; text: "TITLE" }
+      ColumnLabel { x: columns.textX + columns.flexible * 0.6; text: "ALBUM" }
+      ColumnLabel { anchors.right: parent.right; anchors.rightMargin: root.pad; text: "TIME" }
+    }
+    Rectangle {
+      anchors.bottom: parent.bottom
+      width: parent.width
+      height: Theme.stroke.hair
+      color: Theme.line
+    }
   }
 
   ListView {
     id: list
-    anchors.top: rule.bottom
+    anchors.top: columns.bottom
     anchors.bottom: parent.bottom
     width: parent.width
     clip: true
@@ -143,12 +212,11 @@ Item {
         : (track && kind === "" && !track.available ? Theme.muted : Theme.foreground)
 
       // ---- Layout: number, cover, two lines of text, album, mark, time.
-      readonly property real pad: Theme.spacing.huge
-      readonly property real numberWidth: Theme.space(36)
-      readonly property real timeWidth: Theme.space(52)
-      readonly property real markWidth: Theme.space(24)
-      // On an album page every row would show the same cover.
-      readonly property bool hasThumb: root.covers && kind !== "heading" && root.library.kind !== "album"
+      readonly property real pad: root.pad
+      readonly property real numberWidth: root.numberWidth
+      readonly property real timeWidth: root.timeWidth
+      readonly property real markWidth: root.markWidth
+      readonly property bool hasThumb: root.thumbs && kind !== "heading"
       readonly property real thumbWidth: hasThumb ? Theme.spacing.thumb + Theme.spacing.xl : 0
       readonly property real textX: pad + numberWidth + thumbWidth
       readonly property real flexible: width - textX - pad - timeWidth - markWidth
@@ -187,8 +255,35 @@ Item {
 
       width: list.width
       height: Theme.spacing.trackRow
-      color: cursor ? Theme.selectedFill
-        : (hover.containsMouse && kind !== "heading" ? Theme.hoverFill : "transparent")
+      color: (cursor || hover.containsMouse) && kind !== "heading" ? Theme.hoverFill : "transparent"
+
+      // A hairline under every row, as in a ruled catalogue.
+      Rectangle {
+        visible: row.kind !== "heading"
+        anchors.bottom: parent.bottom
+        x: row.pad
+        width: parent.width - row.pad * 2
+        height: Theme.stroke.hair
+        color: Theme.line
+      }
+
+      // The cursor: corner brackets, top left and bottom right.
+      Item {
+        visible: row.cursor
+        anchors.fill: parent
+        readonly property real arm: Theme.space(10)
+        readonly property real weight: Theme.stroke.bold
+        Rectangle { x: Theme.spacing.md; y: Theme.spacing.xs; width: parent.arm; height: parent.weight; color: Theme.accent }
+        Rectangle { x: Theme.spacing.md; y: Theme.spacing.xs; width: parent.weight; height: parent.arm; color: Theme.accent }
+        Rectangle {
+          x: parent.width - Theme.spacing.md - width; y: parent.height - Theme.spacing.xs - height
+          width: parent.arm; height: parent.weight; color: Theme.accent
+        }
+        Rectangle {
+          x: parent.width - Theme.spacing.md - width; y: parent.height - Theme.spacing.xs - height
+          width: parent.weight; height: parent.arm; color: Theme.accent
+        }
+      }
 
       // A bar down the left edge of a selected row.
       Rectangle {
@@ -222,7 +317,7 @@ Item {
         text: {
           // nf-md-check on a selected row.
           if (row.marked) return "󰄬"
-          if (row.isPlaying) return "󰕾"
+          if (row.isPlaying) return "▸"
           switch (row.kind) {
           case "album": return "󰀥"
           case "artist": return "󰠃"
@@ -284,14 +379,32 @@ Item {
         width: row.mainWidth - Theme.spacing.xxl
         spacing: Theme.spacing.xs
 
-        Text {
+        // The title, and the track's catalogue number when there is room.
+        Row {
           width: parent.width
-          elide: Text.ElideRight
-          textFormat: Text.PlainText
-          text: row.track ? row.track.title : ""
-          color: row.ink
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.body
+          spacing: Theme.spacing.lg
+
+          Text {
+            id: title
+            width: Math.min(implicitWidth, parent.width - (number.visible ? number.implicitWidth + parent.spacing : 0))
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            text: row.track ? row.track.title : ""
+            color: row.ink
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.body
+          }
+          Text {
+            id: number
+            visible: row.kind === "" && row.track !== null && parent.width > Theme.space(150)
+            anchors.baseline: title.baseline
+            textFormat: Text.PlainText
+            text: visible ? "No. " + Specimen.catalogue(row.track.uri) : ""
+            color: Theme.muted
+            opacity: 0.7
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.caption
+          }
         }
         Text {
           width: parent.width

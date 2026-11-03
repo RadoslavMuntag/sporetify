@@ -53,7 +53,9 @@ Recorded as D16 in the README.
   the three levels is left for V4.
 - `common/OnScreen.qml`: whether one of our windows is on a workspace being
   shown (active workspace, open special workspace, or pinned). It asks
-  `hyprctl` at start and again on Hyprland's workspace and window events.
+  `hyprctl` at start and again on Hyprland's workspace and window events,
+  and finds its window by owning process (matching by class found the
+  owner's own app window when a second copy ran for a test).
   The first version read Quickshell's Hyprland model, which on Hyprland
   0.56 never learns a monitor's workspace until the user switches: every
   window counted as hidden, so nothing moved and no music frames were
@@ -140,19 +142,33 @@ clears when paused).
 Not yet: the FFT version on real music (needs the daemon reinstalled),
 the cost while visible on a real screen, and the mini-player and app.
 
-## V4 · App chrome
+## V4 · App chrome (first pass built)
 
-Restyle what already exists in the Field Guide manner, without moving
-anything: sidebar, track rows (hairline rules, catalogue numbers), the
-corner-bracket cursor, headers with column labels, the now-playing bar
-(ruler progress), square keycaps, the hint bar, search and the help
-overlay. A specimen plate on the right of the app showing the lens and the
-playing creature's traits, hidden when the window is narrow. The plugin's
-`creatures` setting becomes the three-level `visuals`.
+Built, without moving anything:
 
-Exit: every view opened by keyboard in both themes; scrolling a 5 000-track
-list is as smooth as before (compare frame times before and after); new
-README pictures taken (with the demo daemon, per `CLAUDE.md`).
+- Track lists: an eyebrow over the name (what kind of place, and its
+  catalogue number), column labels on lists of tracks, a hairline under
+  every row, a corner-bracket cursor in the accent colour over a faint
+  fill, `▸` on the playing row, and each track's catalogue number after
+  its title when there is room.
+- Sidebar ruled off with a hairline.
+- Now-playing bar: the seek bar is a ruler (`app/Ruler.qml`: a tick every
+  10 s, longer every 30 s, a needle), the volume a line slider with a
+  needle; square keycaps there and in the hint bar (`KeyCap.corner`).
+- Specimen plate (`app/SpecimenPlate.qml`) on the right: the lens, the
+  spectrum, title, artist, and the creature's traits and the track's
+  length. Shown when the window is at least 1000 px wide, visuals are not
+  off, and `i` has not hidden it (saved as `plate` in `app.json`). The
+  app subscribes to `viz` only while the plate shows and the track plays.
+- `capture` on the app's IPC saves a picture of the window, offscreen too,
+  for checking a change in any theme without a window on the desktop.
+
+Checked: pictures in gruvbox and catppuccin-latte against the demo
+daemon; `i`, `v` and the music subscription driven over IPC.
+
+Not yet: the search bar, picker, prompt and help overlay are unchanged
+(rounded boxes); the plugin's `creatures` setting is still on/off; frame
+times on a 5 000-track list not compared; README pictures not retaken.
 
 ## V5 · Into the lens: the tide pool
 
