@@ -268,22 +268,7 @@ Item {
       }
 
       // The cursor: corner brackets, top left and bottom right.
-      Item {
-        visible: row.cursor
-        anchors.fill: parent
-        readonly property real arm: Theme.space(10)
-        readonly property real weight: Theme.stroke.bold
-        Rectangle { x: Theme.spacing.md; y: Theme.spacing.xs; width: parent.arm; height: parent.weight; color: Theme.accent }
-        Rectangle { x: Theme.spacing.md; y: Theme.spacing.xs; width: parent.weight; height: parent.arm; color: Theme.accent }
-        Rectangle {
-          x: parent.width - Theme.spacing.md - width; y: parent.height - Theme.spacing.xs - height
-          width: parent.arm; height: parent.weight; color: Theme.accent
-        }
-        Rectangle {
-          x: parent.width - Theme.spacing.md - width; y: parent.height - Theme.spacing.xs - height
-          width: parent.weight; height: parent.arm; color: Theme.accent
-        }
-      }
+      Bracket { visible: row.cursor }
 
       // A bar down the left edge of a selected row.
       Rectangle {
@@ -360,13 +345,11 @@ Item {
         Rectangle {
           width: row.flexible * (0.22 + (row.index % 5) * 0.05)
           height: Theme.space(6)
-          radius: height / 2
           color: Theme.hoverFill
         }
         Rectangle {
           width: row.flexible * (0.14 + (row.index % 3) * 0.04)
           height: Theme.space(5)
-          radius: height / 2
           color: Theme.hoverFill
         }
       }

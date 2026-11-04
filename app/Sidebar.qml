@@ -113,8 +113,9 @@ Rectangle {
 
       width: list.width
       height: Theme.spacing.rowHeight
-      color: cursor ? Theme.selectedFill : (hover.containsMouse ? Theme.hoverFill : "transparent")
+      color: cursor || hover.containsMouse ? Theme.hoverFill : "transparent"
 
+      Bracket { visible: row.cursor }
       Rectangle {
         visible: row.open
         width: Theme.space(2)

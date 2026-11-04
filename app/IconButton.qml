@@ -17,7 +17,6 @@ Item {
 
   Rectangle {
     anchors.fill: parent
-    radius: Theme.spacing.sm
     color: area.pressed ? Theme.selectedFill : (area.containsMouse ? Theme.hoverFill : "transparent")
     // Squash a little on press: soft, quick, never delays the click.
     scale: area.pressed ? 0.92 : 1
