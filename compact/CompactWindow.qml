@@ -33,6 +33,14 @@ FloatingWindow {
 
   readonly property var scopes: player.scope === "player" ? ["compact", "mini", "player"] : [player.scope, "compact"]
   property bool keysOpen: false
+  // The tide pool in the lens; for this window only, not saved.
+  property bool pool: false
+
+  UpNext {
+    id: upNext
+    player: player
+    active: window.pool && view.live && Visuals.drawn(window.visuals) && window.creatures
+  }
 
   // The visuals setting is the app's (~/.config/sporetify/app.json, `v` in
   // the app). Only read here, so the two processes never both write it.
@@ -65,6 +73,7 @@ FloatingWindow {
     case "compactKeys": keysOpen = !keysOpen; return
     case "compactClose": Qt.quit(); return
     case "openApp": openApp(); return
+    case "compactPool": pool = !pool; return
     }
     player.run(action)
   }
@@ -93,7 +102,7 @@ FloatingWindow {
         arrangement: view.arrangement, width: view.width, height: view.height, zoom: view.zoom,
         phase: player.phase, scope: player.scope, playing: player.playing,
         title: view.headline, byline: view.byline, visuals: window.visuals, creatures: window.creatures, keys: window.keysOpen,
-        shown: screen.shown, viz: player.vizOn, bands: player.bands.length, beat: player.beat, workspace: screen.toplevel && screen.toplevel.workspace ? screen.toplevel.workspace.name : ""
+        shown: screen.shown, pool: window.pool, poolNext: upNext.next, viz: player.vizOn, bands: player.bands.length, beat: player.beat, workspace: screen.toplevel && screen.toplevel.workspace ? screen.toplevel.workspace.name : ""
       })
     }
   }
@@ -121,6 +130,8 @@ FloatingWindow {
       player: player
       visuals: window.visuals
       creatures: window.creatures
+      pool: window.pool
+      nextSeed: upNext.next
       live: window.visible && screen.shown
       onLensClicked: player.run("playPause")
     }

@@ -30,6 +30,12 @@ var actions = [
   // (Esc does nothing there) and keeps its hints behind ?.
   { id: "compactKeys", keys: ["?"],              label: "All keys",         scope: "compact", group: "app", primary: true },
   { id: "compactClose", keys: ["q", "Ctrl+c"],   label: "Close",            scope: "compact", group: "app", primary: true },
+  { id: "compactPool", keys: ["z"],              label: "Tide pool in the lens", scope: "compact", group: "app" },
+
+  // The tide pool view in the app. The list is not on screen, so only the
+  // player's keys and these work; Esc (app scope) also goes back.
+  { id: "poolClose",   keys: ["z"],              label: "Back to the list", scope: "pool", group: "app", primary: true },
+  { id: "poolKeys",    keys: ["?"],              label: "All keys",         scope: "pool", group: "app", primary: true },
 
   { id: "down",        keys: ["j", "Down"],      label: "Down",             scope: "browse", group: "moving" },
   { id: "up",          keys: ["k", "Up"],        label: "Up",               scope: "browse", group: "moving" },
@@ -65,6 +71,7 @@ var actions = [
   { id: "sidebar",     keys: ["b"],              label: "Show / hide sidebar", scope: "browse", group: "app" },
   { id: "covers",      keys: ["c"],              label: "Covers in lists",  scope: "browse", group: "app" },
   { id: "plate",       keys: ["i"],              label: "Specimen plate",   scope: "browse", group: "app" },
+  { id: "pool",        keys: ["z"],              label: "Into the lens: the tide pool", scope: "browse", group: "app" },
   { id: "visuals",     keys: ["v"],              label: "Visuals: full / reduced / off", scope: "browse", group: "app" },
   { id: "creatures",   keys: ["C"],              label: "Creatures on / off, everywhere", scope: "browse", group: "app" },
   { id: "help",        keys: ["?"],              label: "All keys",         scope: "browse", group: "app", primary: true },

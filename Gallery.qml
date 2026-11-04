@@ -118,6 +118,44 @@ ShellRoot {
         }
       }
 
+      Caption { text: "TIDE POOL · in the lens: with both neighbours, on a light low end, still (paused), first track (no previous)" }
+      Row {
+        spacing: Theme.spacing.huge
+        Repeater {
+          model: [
+            { seed: 1, next: 2, energy: 0.2, alive: true, awake: true, before: 0 },
+            { seed: 2, next: 3, energy: 0.9, alive: true, awake: true, before: 1 },
+            { seed: 3, next: 0, energy: 0, alive: false, awake: false, before: 2 },
+            { seed: 0, next: 1, energy: 0.4, alive: true, awake: true, before: -1 }
+          ]
+          Lens {
+            required property var modelData
+            width: Theme.space(240)
+            height: width
+            pool: true
+            // Grown in place: one track before, then this one, so the
+            // previous creature is at its edge as after a real track change.
+            seed: modelData.before >= 0 ? window.ids[modelData.before] : window.ids[modelData.seed]
+            // The next track becomes known after the change, as in the app.
+            Component.onCompleted: {
+              seed = window.ids[modelData.seed]
+              nextSeed = window.ids[modelData.next]
+            }
+            energy: modelData.energy
+            progress: 0.55
+            alive: modelData.alive
+            awake: modelData.awake
+            palette: Theme.creatureColors
+            ground: Theme.sunken
+            ink: Theme.foreground
+            accent: Theme.accent
+            eye: Theme.mode === "light" ? Theme.background : Theme.foreground
+            pupil: Theme.mode === "light" ? Theme.foreground : Theme.sunken
+            stroke: Theme.stroke.hair
+          }
+        }
+      }
+
       Caption { text: "COMPACT PLAYER · square, wide, tall · playing, paused (reduced), nothing loaded, daemon missing" }
       Row {
         spacing: Theme.spacing.huge

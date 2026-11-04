@@ -47,7 +47,7 @@ TestCase {
 
   function test_scopes_shown_together_share_no_key() {
     var together = [["browse", "player", "app"], ["mini", "player", "popup"], ["compact", "mini", "player"],
-      ["signedOut", "compact"], ["fault", "compact"]]
+      ["signedOut", "compact"], ["fault", "compact"], ["pool", "player", "app"]]
     for (var t = 0; t < together.length; t++) {
       var seen = {}
       for (var i = 0; i < Keymap.actions.length; i++) {
@@ -70,6 +70,20 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_Question, "?", scopes), "compactKeys")
     compare(Keymap.actionFor(Qt.Key_Space, " ", scopes), "playPause")
     compare(Keymap.actionFor(Qt.Key_O, "o", scopes), "openApp")
+    compare(Keymap.actionFor(Qt.Key_Z, "z", scopes), "compactPool")
+  }
+
+  // The tide pool view: z goes in and out, Esc backs out, the list's keys
+  // do nothing while it is not on screen.
+  function test_tide_pool_keys() {
+    compare(Keymap.actionFor(Qt.Key_Z, "z", ["browse", "player", "app"]), "pool")
+    var pool = ["pool", "player", "app"]
+    compare(Keymap.actionFor(Qt.Key_Z, "z", pool), "poolClose")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", pool), "cancel")
+    compare(Keymap.actionFor(Qt.Key_Question, "?", pool), "poolKeys")
+    compare(Keymap.actionFor(Qt.Key_Space, " ", pool), "playPause")
+    compare(Keymap.actionFor(Qt.Key_Return, "", pool), null)
+    compare(Keymap.actionFor(Qt.Key_J, "j", pool), null)
   }
 
   function test_primary_hints_are_a_subset() {

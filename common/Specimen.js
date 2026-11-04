@@ -46,3 +46,13 @@ function lit(progress, total) {
 function arrangement(width, height) {
   return width >= height * 1.5 ? "side" : "stack"
 }
+
+// How loud the low end of a music frame is, 0..1: the mean of the lowest
+// quarter of the bands. 0 when there is no frame.
+function low(bands) {
+  if (!bands || bands.length === 0) return 0
+  var n = Math.max(1, Math.floor(bands.length / 4))
+  var sum = 0
+  for (var i = 0; i < n; i++) sum += Math.max(0, Math.min(1, bands[i] || 0))
+  return sum / n
+}
