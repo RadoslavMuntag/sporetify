@@ -90,7 +90,9 @@ App.qml              entry point of the full app (`qs -p App.qml`); at the root 
 Compact.qml          entry point of the compact player (`qs -p Compact.qml`)
 Gallery.qml          every visual part in every state, for judging a change by eye
 app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar,
-                     SpecimenPlate, Slider, Ruler
+                     SearchBar, PlaylistPicker, Prompt, HelpOverlay, SpecimenPlate,
+                     Sheet (modal card), Field (ruled text field), Bracket (cursor),
+                     Slider, Ruler
 compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,

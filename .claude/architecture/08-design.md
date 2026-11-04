@@ -168,9 +168,29 @@ Built, without moving anything:
 Checked: pictures in gruvbox and catppuccin-latte against the demo
 daemon; `i`, `v` and the music subscription driven over IPC.
 
-Not yet: the search bar, picker, prompt and help overlay are unchanged
-(rounded boxes); frame
-times on a 5 000-track list not compared; README pictures not retaken.
+Second pass (2026-11-04): no rounded box is left in the app.
+
+- The search bar sits on the background, ruled off underneath: which
+  search it is as a small capital label, a ruled field, and the result
+  types as tabs whose current one is underlined on that rule.
+- The picker and the prompt are `app/Sheet.qml`: a square card with a
+  hairline border, an eyebrow over the title, ruled off from the content
+  and from the line of keys at its foot. Text is typed on
+  `app/Field.qml`, a line that turns heavier and accent-coloured while it
+  has focus. The picker's rows are ruled and use the bracket cursor
+  (`app/Bracket.qml`, shared with the track list and now the sidebar).
+- Help overlay: square keycaps, hairline rules.
+- Toast, icon buttons and placeholder rows lost their rounding.
+- Search bar, picker, prompt and help overlay moved out of `Main.qml`
+  (1170 lines to about 700).
+
+Checked: pictures of each in gruvbox and catppuccin-latte against the
+demo daemon; picker, prompt, search filters and help driven over IPC.
+Not yet driven by the real keyboard: keys sent by Hyprland to a window
+that never had focus are dropped, and the owner was at the desktop.
+
+Not yet: frame times on a 5 000-track list not compared; README pictures
+not retaken.
 
 ## V5 · Into the lens: the tide pool
 
