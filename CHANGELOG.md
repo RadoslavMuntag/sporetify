@@ -22,6 +22,16 @@ the daemon that matches.
   player, the bar and the mini-player.
 - Creatures stop animating while their window is on a workspace that is
   not shown, not only when it is closed.
+- The search bar, playlist picker, prompts and the shortcut overlay are
+  square and ruled like the rest of the app.
+- `z` in the app opens the tide pool: the playing track's creature, large,
+  in moving light, with the previous and next tracks' creatures at the
+  edges, swimming one place along on a track change. `z` in the compact
+  player shows the same pool in its lens.
+- The now-playing bar shows the cover alone; the creature beside it is
+  gone (the plate on the right shows it).
+- Fixed: turning creatures off while the app or the compact player was
+  running left the lens empty instead of showing the cover.
 
 ## 0.1.1 (2026-10-13)
 

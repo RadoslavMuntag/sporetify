@@ -85,4 +85,14 @@ TestCase {
     verify(Visuals.drawn("reduced") && !Visuals.moving("reduced"))
     verify(!Visuals.drawn("off") && Visuals.moving("full"))
   }
+
+  function test_low_end_of_a_frame() {
+    compare(Specimen.low([]), 0)
+    compare(Specimen.low(undefined), 0)
+    var frame = [1, 0.5, 0.5, 0, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9]
+    fuzzyCompare(Specimen.low(frame), 0.5, 1e-9)
+    // Out-of-range levels are held to 0..1.
+    compare(Specimen.low([2, 2, 2, 2]), 1)
+    compare(Specimen.low([-1]), 0)
+  }
 }

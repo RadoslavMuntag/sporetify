@@ -24,6 +24,13 @@ Item {
   // Draw the creature; when false the cover is shown in the lens.
   property bool creature: true
   property string coverPath: ""
+  // Show the tide pool in the lens instead of the slide (common/TidePool.qml),
+  // with the next track's creature at its edge once known, and the low end
+  // of the music (0..1) brightening its light.
+  property bool pool: false
+  property string nextSeed: ""
+  property real energy: 0
+  readonly property bool showPool: pool && creature
 
   // Colours, from the host's theme.
   property var palette: []
@@ -57,7 +64,7 @@ Item {
 
   // ---- Graph paper, each line cut to the rim
   Repeater {
-    model: root.creature ? Specimen.chords(6) : []
+    model: root.creature && !root.pool ? Specimen.chords(6) : []
 
     Item {
       required property var modelData
@@ -81,7 +88,7 @@ Item {
   // ---- The specimen, drifting a little while alive
   Organism {
     id: specimen
-    visible: root.creature
+    visible: root.creature && !root.pool
     width: root.r * 1.6
     height: width
     x: root.cx - width / 2 + driftX
@@ -117,45 +124,74 @@ Item {
     }
   }
 
+  // ---- The tide pool, made only while it shows.
+  Loader {
+    anchors.fill: parent
+    active: root.showPool
+    sourceComponent: TidePool {
+      r: root.r
+      cx: root.cx
+      cy: root.cy
+      seed: root.seed
+      nextSeed: root.nextSeed
+      alive: root.alive
+      awake: root.awake
+      pulse: root.pulse
+      energy: root.energy
+      palette: root.palette
+      ground: root.ground
+      ink: root.ink
+      accent: root.accent
+      eye: root.eye
+      pupil: root.pupil
+      stroke: root.stroke
+    }
+  }
+
   // ---- Cover, when creatures are off: filling the lens, cut to its circle.
-  //      The mask is drawn once per cover, not per frame.
+  //      The mask is drawn once per cover, not per frame. Made only while it
+  //      shows: the effect takes its mask when it is created, so a mask made
+  //      later (creatures turned off while running) left the lens empty.
   readonly property bool showCover: !creature && coverPath !== ""
 
-  Image {
-    id: cover
-    visible: false
-    width: root.r * 2
-    height: width
+  Loader {
+    active: root.showCover
     x: root.cx - root.r
     y: root.cy - root.r
-    source: root.showCover ? "file://" + root.coverPath : ""
-    sourceSize.width: Math.ceil(width)
-    sourceSize.height: Math.ceil(height)
-    fillMode: Image.PreserveAspectCrop
-    asynchronous: true
-  }
-  Rectangle {
-    id: circle
-    visible: false
-    layer.enabled: root.showCover
-    layer.smooth: true
-    width: cover.width
+    width: root.r * 2
     height: width
-    radius: width / 2
-    color: root.ink
-  }
-  MultiEffect {
-    visible: root.showCover && cover.status === Image.Ready
-    source: cover
-    x: cover.x
-    y: cover.y
-    width: cover.width
-    height: cover.height
-    maskEnabled: true
-    maskSource: circle
-    // Soft by a pixel at the edge, so the circle is not jagged.
-    maskThresholdMin: 0.5
-    maskSpreadAtMin: 1.0
+
+    sourceComponent: Item {
+      Image {
+        id: cover
+        visible: false
+        anchors.fill: parent
+        source: "file://" + root.coverPath
+        sourceSize.width: Math.ceil(width)
+        sourceSize.height: Math.ceil(height)
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+      }
+      Rectangle {
+        id: circle
+        visible: false
+        layer.enabled: true
+        layer.smooth: true
+        anchors.fill: parent
+        radius: width / 2
+        color: root.ink
+      }
+      MultiEffect {
+        visible: cover.status === Image.Ready
+        source: cover
+        anchors.fill: parent
+        maskEnabled: true
+        maskSource: circle
+        // Soft by a pixel at the edge, so the circle is not jagged.
+        maskThresholdMin: 0.5
+        maskSpreadAtMin: 1.0
+      }
+    }
   }
 
   // ---- Rim

@@ -90,13 +90,14 @@ App.qml              entry point of the full app (`qs -p App.qml`); at the root 
 Compact.qml          entry point of the compact player (`qs -p Compact.qml`)
 Gallery.qml          every visual part in every state, for judging a change by eye
 app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar,
-                     SearchBar, PlaylistPicker, Prompt, HelpOverlay, SpecimenPlate,
+                     SearchBar, PlaylistPicker, Prompt, HelpOverlay, SpecimenPlate, PoolView,
                      Sheet (modal card), Field (ruled text field), Bracket (cursor),
                      Slider, Ruler
 compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
-                     Organism, Lens, Spectrum, Specimen.js, Visuals.js, OnScreen
+                     Organism, Lens, TidePool, UpNext, Spectrum, Specimen.js, Visuals.js,
+                     OnScreen
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
 scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
@@ -192,7 +193,7 @@ Default keys (app and mini-player):
 | `m` | Mute | `Tab` | Next pane |
 | `←` / `→` | Seek ±10 s | `?` | Shortcut help |
 | `s` / `r` | Shuffle / repeat | `Esc` | Cancel search (app), close (mini-player) |
-| `Ctrl C` | Quit the app | | |
+| `Ctrl C` | Quit the app | `z` | Tide pool in the lens (app, compact player) |
 
 Global control goes through the plugin's IPC target so Hyprland binds work
 without any window open:
@@ -389,8 +390,20 @@ Things that bite:
 - To test without touching the installed daemon, run a second one on another
   socket and start the app with `SPORETIFY_SOCKET=<path> qs -p App.qml`. It
   is silent as long as nothing is played on it.
-- Quickshell reloads a running app when its QML files change, which resets
-  the app's state.
+- Do not count on a running app reloading when its QML files change: on
+  2026-11-04 an edit to `common/Lens.qml` left the owner's app on the old
+  code. Restart it (or a test copy) to see a change.
+- A `MultiEffect` takes its `maskSource` when it is created. A mask whose
+  `layer.enabled` turns on later is never picked up and the effect draws
+  nothing (the lens's cover with creatures switched off while running).
+  Create the effect together with its mask, e.g. in one `Loader`.
+- To see a `ShaderEffect` / `MultiEffect` on the GPU without disturbing
+  the owner (hidden workspaces draw nothing, `minimalegl` fails): copy
+  `app/` and `common/` to a scratch folder with a tiny harness that
+  saves `grabToImage` and quits, and start it small, floating and
+  unfocused: `hyprctl dispatch 'hl.dsp.exec_cmd("<cmd>", { float = true,
+  size = { 320, 320 }, move = { 20, 60 }, no_initial_focus = true })'`.
+  It shows on the owner's screen for a moment, so ask first.
 - **Plugin hot reload is not reliable for this plugin.** The shell keeps a
   running service across reloads, and edited widget files were observed to
   keep their old contents. After changing any plugin QML, run

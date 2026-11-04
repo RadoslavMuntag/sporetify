@@ -63,7 +63,7 @@ Recorded as D16 in the README.
   asked for. Found by the owner ("I have a feeling it does not work").
   Animations stop when it is not. Measured on the compact player playing
   on a hidden special workspace: 2 % of a core before, 0 after. The app
-  uses it for its now-playing creature too. A window covered by another on
+  uses it for its plate and tide pool too. A window covered by another on
   the same workspace still counts as shown.
 - `common/Organism.qml` draws line art (`lineArt`, `ground`, `stroke`) with
   plain items: every lobe grown by the stroke in the body colour, then every
@@ -154,7 +154,9 @@ Built, without moving anything:
   fill, `▸` on the playing row, and each track's catalogue number after
   its title when there is room.
 - Sidebar ruled off with a hairline.
-- Now-playing bar: the seek bar is a ruler (`app/Ruler.qml`: a tick every
+- Now-playing bar: the cover only; the creature that sat beside it was
+  removed at the owner's request (2026-11-04), as the plate already shows
+  it. The seek bar is a ruler (`app/Ruler.qml`: a tick every
   10 s, longer every 30 s, a needle), the volume a line slider with a
   needle; square keycaps there and in the hint bar (`KeyCap.corner`).
 - Specimen plate (`app/SpecimenPlate.qml`) on the right: the lens, the
@@ -192,7 +194,7 @@ that never had focus are dropped, and the owner was at the desktop.
 Not yet: frame times on a 5 000-track list not compared; README pictures
 not retaken.
 
-## V5 · Into the lens: the tide pool
+## V5 · Into the lens: the tide pool (built, not yet measured)
 
 Zoom into the lens (a key in the app, a view of its own) and it fills with
 the tide pool: the playing creature drifting in moving light, the previous
@@ -202,6 +204,38 @@ too.
 
 Exit: the budget in [05-visuals.md](05-visuals.md) met and measured; the
 app is complete with the scene off.
+
+Built (2026-11-04):
+
+- `common/TidePool.qml`, drawn by `Lens` when `pool` is set (made by a
+  `Loader`, so it costs nothing elsewhere): three soft pools of light
+  (`Shape` radial gradients, moved by position only, so never
+  re-tessellated) that brighten with the low end of the music
+  (`Specimen.low`); 14 specks at several depths; the playing creature in
+  the middle; the previous and next tracks' creatures dozing (eyes shut)
+  at the edges. All of it stays inside the circle by geometry: no clip,
+  no layer.
+- On a track change the creatures swim one place along (150 ms, the
+  transition limit). The pool remembers who sits at each edge itself,
+  so a swim never starts with the wrong creature; a jump to an unrelated
+  track does not swim. Tested in `tests/tst_tide_pool.qml`.
+- The previous track is remembered locally. The next one comes from
+  `player.up_next` (`common/UpNext.qml`): one request per track, only
+  while a pool shows, superseded by the next; on failure the edge stays
+  empty.
+- App: `z` opens `app/PoolView.qml` in place of the list and the plate,
+  the lens as large as the window allows, the track named under it. Keys
+  there are the player's plus `z` / `Esc` back and `?`; the list's keys
+  do nothing while it is hidden. A search or a link leaves the pool.
+  Creatures off or visuals off: the view shows the cover in the lens.
+- Compact player: `z` puts the pool in its lens (not saved).
+
+Checked: `Gallery.qml` row in gruvbox and catppuccin-latte; the view
+against the demo daemon over IPC.
+
+Not yet: the cost on a real screen while visible and playing (the
+budget is a few percent of one core), and the swim seen in motion; both
+need a window on the owner's screen.
 
 ## V6 · Motion
 

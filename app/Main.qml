@@ -24,13 +24,23 @@ FloatingWindow {
 
   // "sidebar" or "list"
   property string pane: "sidebar"
-  readonly property var scopes: player.scope === "player" ? ["browse", "player", "app"] : [player.scope, "app"]
+  // The tide pool view (`z`), in place of the list.
+  property bool poolOpen: false
+  readonly property bool poolShown: poolOpen && player.scope === "player"
+  readonly property var scopes: player.scope !== "player" ? [player.scope, "app"]
+    : (poolShown ? ["pool", "player", "app"] : ["browse", "player", "app"])
 
   Player {
     id: player
     wanted: window.visible
     // The daemon analyses the audio only while the plate shows it.
-    vizWanted: plate.visible && window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
+    vizWanted: (plate.visible || pool.visible) && window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
+  }
+
+  UpNext {
+    id: upNext
+    player: player
+    active: pool.visible && window.visible && screen.shown && Visuals.drawn(window.visuals) && prefs.creatures
   }
 
   Library {
@@ -69,6 +79,7 @@ FloatingWindow {
   function openLink(text) {
     var link = Links.parse(text)
     if (!link) return "not a Spotify link Sporetify can open"
+    poolOpen = false
     if (loadedIn === "") {
       pendingLink = text
       return "opening " + link.uri + " once connected"
@@ -159,6 +170,7 @@ FloatingWindow {
   // Open the search field for "spotify" or "library". The text typed so far
   // is kept when switching between the two.
   function openSearch(mode) {
+    poolOpen = false
     searchOpen = true
     searchBar.grab()
     if (!library.searching || library.searchMode !== mode) {
@@ -333,9 +345,19 @@ FloatingWindow {
       pane = prefs.sidebar ? "sidebar" : "list"
       return
     case "quit": Qt.quit(); return
+    case "pool":
+      poolOpen = true
+      return
+    case "poolClose":
+      poolOpen = false
+      return
+    case "poolKeys":
+      helpOpen = true
+      return
     case "cancel":
-      // A selection is cleared before a search is left.
-      if (library.markedCount > 0) library.clearMarks()
+      // Out of the pool first; a selection is cleared before a search is left.
+      if (poolShown) poolOpen = false
+      else if (library.markedCount > 0) library.clearMarks()
       else cancelSearch()
       return
     case "paneNext":
@@ -378,6 +400,7 @@ FloatingWindow {
     function searchLibrary(text: string): string { return search(text, "library") }
     function search(text: string, mode: string): string {
       searchBar.text = text
+      window.poolOpen = false
       window.searchOpen = true
       library.search(text, mode, tracks.currentIndex)
       window.pane = "list"
@@ -473,7 +496,7 @@ FloatingWindow {
         prompt: window.promptOpen ? window.promptTitle : "", marked: library.markedCount,
         selection: library.markedCount > 0 ? library.selection(-1).map(function(t) { return t.uri }) : [],
         sidebarItem: sidebar.itemAt(sidebar.currentIndex) ? sidebar.itemAt(sidebar.currentIndex).name : "",
-        plate: plate.visible, viz: player.vizOn, creatures: prefs.creatures,
+        plate: plate.visible, pool: pool.visible, poolNext: upNext.next, viz: player.vizOn, creatures: prefs.creatures,
         playingArt: player.track && player.track.art_path ? player.track.art_path : "",
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
@@ -511,7 +534,7 @@ FloatingWindow {
       visible: prefs.sidebar
       width: visible ? Math.min(Theme.space(280), parent.width * 0.3) : 0
       library: library
-      focused: window.pane === "sidebar"
+      focused: window.pane === "sidebar" && !window.poolShown
       collapsed: window.foldedFolders
       offline: player.offline
       onActivated: window.openSelected()
@@ -536,7 +559,7 @@ FloatingWindow {
       anchors.bottom: nowPlaying.top
       anchors.left: sidebar.right
       anchors.right: plate.left
-      visible: player.scope === "player"
+      visible: player.scope === "player" && !window.poolShown
       library: library
       player: player
       covers: prefs.covers
@@ -618,12 +641,27 @@ FloatingWindow {
       id: plate
       // Wide enough that the list keeps most of the window.
       readonly property bool room: window.width >= Theme.space(1000)
-      visible: room && prefs.plate && Visuals.drawn(window.visuals) && player.scope === "player"
+      visible: room && prefs.plate && Visuals.drawn(window.visuals) && player.scope === "player" && !window.poolShown
       anchors.top: searchBar.bottom
       anchors.bottom: nowPlaying.top
       anchors.right: parent.right
       width: visible ? Theme.space(260) : 0
       player: player
+      moving: Visuals.moving(window.visuals)
+      creatures: prefs.creatures
+      live: window.visible && screen.shown
+    }
+
+    PoolView {
+      id: pool
+      visible: window.poolShown
+      anchors.top: searchBar.bottom
+      anchors.bottom: nowPlaying.top
+      anchors.left: sidebar.right
+      anchors.right: parent.right
+      player: player
+      nextSeed: upNext.next
+      drawn: Visuals.drawn(window.visuals)
       moving: Visuals.moving(window.visuals)
       creatures: prefs.creatures
       live: window.visible && screen.shown
@@ -635,8 +673,6 @@ FloatingWindow {
       width: parent.width
       player: player
       live: window.visible && screen.shown
-      visuals: Visuals.drawn(window.visuals) && prefs.creatures
-      motion: Visuals.moving(window.visuals)
       liked: library.playingLiked
       onLikeRequested: library.toggleLike(-1)
       onAlbumRequested: { library.openRelated("album", -1); window.pane = "list" }

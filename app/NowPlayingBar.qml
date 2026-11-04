@@ -11,9 +11,6 @@ Rectangle {
   required property var player
   // Whether the window is showing, so the clock only ticks when seen.
   property bool live: true
-  // Whether creatures are drawn at all, and whether they may move.
-  property bool visuals: true
-  property bool motion: true
   // The user clicked the title (album) or the artist line.
   signal albumRequested()
   signal artistRequested()
@@ -72,29 +69,12 @@ Rectangle {
       asynchronous: true
     }
 
-    // ---- The track's creature
-    Organism {
-      id: creature
-      visible: root.visuals && root.track !== null
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.left: cover.right
-      anchors.leftMargin: cover.visible ? Theme.spacing.lg : 0
-      width: visible ? Theme.space(46) : 0
-      height: Theme.space(46)
-      seed: root.track ? root.track.id : ""
-      alive: visible && root.live && root.player.playing && root.motion
-      awake: root.player.playing
-      palette: Theme.creatureColors
-      eye: Theme.foreground
-      pupil: Theme.sunken
-    }
-
     // ---- Track
     Column {
       anchors.verticalCenter: parent.verticalCenter
-      anchors.left: creature.right
-      anchors.leftMargin: creature.visible ? Theme.spacing.xl : 0
-      width: parent.width * 0.28 - creature.width - cover.width - anchors.leftMargin - creature.anchors.leftMargin
+      anchors.left: cover.right
+      anchors.leftMargin: cover.visible ? Theme.spacing.xl : 0
+      width: parent.width * 0.28 - cover.width - anchors.leftMargin
       spacing: Theme.spacing.xs
 
       Text {
