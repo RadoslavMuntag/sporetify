@@ -113,7 +113,7 @@ Built:
 | `player.shuffle` `player.repeat` | `on` | `{}` |
 | `player.play_context` | `uri`, optional `track_uri` | `{}` |
 | `library.playlists` | | `{items, stale}`: the sidebar, Liked Songs first. An item is `{uri, name, length, depth, editable}` or a folder `{kind:"folder", id, name, depth}` |
-| `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
+| `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items, stale, changed}`; a saved copy answers at once with `stale: true` when this daemon has not fetched the list in the last 15 minutes, and the view then asks again with `refresh`, whose `changed` says whether the list differs from the saved copy |
 | `playlist.add` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, added, skipped}`; tracks already there are skipped |
 | `playlist.remove` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, removed}`; every occurrence goes |
 | `playlist.move` | `playlist_uri`, `from`, `to` (0-based; `to` is where the track ends up) | `{playlist, changed, total}` |

@@ -101,6 +101,11 @@ Lines longer than 64 KiB end the connection.
   sidebar as last fetched and every list that has been loaded. Without a
   session `library.playlists` and `library.tracks` answer from it (`stale:
   true`), with placeholder rows for tracks whose metadata was never cached.
+  With a session `library.tracks` answers from it too, never waiting on
+  Spotify, and says `stale: true` when this daemon has not fetched the list
+  within 15 minutes (lists loaded from disk count as never fetched). The app
+  then fetches it again in the background with `refresh` and swaps the new
+  version in if `changed`; a failed refetch leaves the saved copy on screen.
 - Track metadata: one lookup per track, bounded concurrency (8 for a page a
   view asked for), cached on disk for good in
   `$XDG_CACHE_HOME/sporetify/tracks.json`, written atomically.

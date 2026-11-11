@@ -118,7 +118,10 @@ on artist pages and for the playing track, and unliking removes the entry
 that is really there; the cover cache is held to 200 MB by dropping the
 least recently used; a like button in the mini-player.
 
-Not done: stale-while-revalidate frames, batched metadata lookups, a devices
+Stale-while-revalidate for track lists: a saved list opens at once and is
+checked against Spotify in the background (#12).
+
+Not done: stale-while-revalidate for the sidebar and artwork, batched metadata lookups, a devices
 view, and
 telling the user when another device takes over playback (both of the last
 two need information librespot does not hand out).

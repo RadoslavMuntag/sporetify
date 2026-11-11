@@ -65,6 +65,12 @@ Item {
   // Requests of the current place, cancelled when another one opens.
   property var inFlight: []
   property int generation: 0
+  // Which version of the open list the rows belong to. A newer version
+  // replaces the rows in place (see `revalidate`), and pages asked for
+  // before that are dropped when they answer.
+  property int listVersion: 0
+  // The loaded pages were forgotten; the view asks again for what it shows.
+  signal pagesReset()
 
   visible: false
 
@@ -545,41 +551,72 @@ Item {
 
   function fetchPage(page, refresh) {
     var forGeneration = generation
+    var forVersion = listVersion
     if (page === 0) pages.claim(0, 0, 1)
     var handle = player.request("library.tracks", {
       uri: uri, offset: page * pageSize, limit: pageSize, refresh: refresh
     }, {
       deadline: 8000,
       onDone: function(result) {
-        // An answer for a place that is no longer on screen is dropped.
-        if (forGeneration !== root.generation) return
+        // An answer for a place that is no longer on screen, or for a
+        // version of the list that has since been replaced, is dropped.
+        if (forGeneration !== root.generation || forVersion !== root.listVersion) return
         if (!result.ok) {
           root.pages.failed(page)
           if (page === 0 && result.error.code !== "cancelled")
             root.collection = Loadable.withResult(root.collection, result)
           return
         }
-        var data = result.data
-        var rows = root.rows
-        if (rows.length !== data.total) {
-          rows = new Array(data.total)
-          for (var i = 0; i < root.rows.length && i < data.total; i++) rows[i] = root.rows[i]
-        }
-        for (var j = 0; j < data.items.length; j++) rows[data.offset + j] = data.items[j]
-        root.rows = rows
-        root.total = data.total
-        if (data.name) root.name = data.name
-        if (page === 0 && data.art_url && root.artPath === "") root.loadArt(data.art_url)
-        root.subtitle = root.count(data.total, "track", "tracks")
-        root.pages.done(page)
-        root.revision++
-        if (page === 0) {
-          root.collection = Loadable.ready(true)
-          if (root.restoreCursor >= 0) {
-            root.cursorRestoreRequested(root.restoreCursor)
-            root.restoreCursor = -1
-          }
-        }
+        root.applyPage(page, result.data)
+        // A saved copy is on screen at once; check it against Spotify now.
+        if (page === 0 && !refresh && result.data.stale === true) root.revalidate()
+      }
+    })
+    inFlight.push(handle)
+  }
+
+  function applyPage(page, data) {
+    var rows = root.rows
+    if (rows.length !== data.total) {
+      rows = new Array(data.total)
+      for (var i = 0; i < root.rows.length && i < data.total; i++) rows[i] = root.rows[i]
+    }
+    for (var j = 0; j < data.items.length; j++) rows[data.offset + j] = data.items[j]
+    root.rows = rows
+    root.total = data.total
+    if (data.name) root.name = data.name
+    if (page === 0 && data.art_url && root.artPath === "") root.loadArt(data.art_url)
+    root.subtitle = root.count(data.total, "track", "tracks")
+    root.pages.done(page)
+    root.revision++
+    if (page === 0) {
+      root.collection = Loadable.ready(true)
+      if (root.restoreCursor >= 0) {
+        root.cursorRestoreRequested(root.restoreCursor)
+        root.restoreCursor = -1
+      }
+    }
+  }
+
+  // Fetch the open list again in the background. Until it answers, and if
+  // it fails, the saved copy stays on screen with no error: it is all we
+  // have, and Reload (r) is there to ask again.
+  function revalidate() {
+    var forGeneration = generation
+    var handle = player.request("library.tracks", {
+      uri: uri, offset: 0, limit: pageSize, refresh: true
+    }, {
+      deadline: 8000,
+      onDone: function(result) {
+        if (forGeneration !== root.generation) return
+        if (!result.ok || result.data.changed !== true) return
+        // The rows on screen stay until their page arrives again, so the
+        // list never flashes empty; the cursor keeps its place.
+        root.listVersion++
+        root.pages.reset()
+        root.pages.claim(0, 0, 1)
+        root.applyPage(0, result.data)
+        root.pagesReset()
       }
     })
     inFlight.push(handle)

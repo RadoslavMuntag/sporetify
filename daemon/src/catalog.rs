@@ -4,7 +4,10 @@
 //!
 //! Track metadata never changes, so it is cached on disk for good
 //! (`$XDG_CACHE_HOME/sporetify/tracks.v3.json`) and fetched at most once per
-//! track, one at a time with bounded concurrency. Lists are cached in memory.
+//! track, one at a time with bounded concurrency. Lists are saved on disk
+//! (`library.json`) and answered from that copy at once; a copy this daemon
+//! has not fetched within `LIST_MAX_AGE` is marked `stale`, and the view asks
+//! for it again with `refresh` in the background (stale-while-revalidate).
 //!
 //! Search runs over what is cached. Spotify's own search is not reachable
 //! without a client id, so this searches the user's library instead; Liked
@@ -14,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use futures_util::stream::{self, StreamExt};
 use librespot_core::{Session, SpotifyUri};
@@ -28,6 +32,10 @@ use crate::proto::{ErrorCode, OpError, OpResult};
 /// How many track lookups may be in flight at once.
 const LOOKUPS_IN_FLIGHT: usize = 8;
 const MAX_PAGE: usize = 200;
+/// How long a list this daemon fetched counts as current. Spotify rewrites
+/// some playlists on a schedule (Discover Weekly, the daily mixes, daylist)
+/// and any playlist can be edited on another device.
+const LIST_MAX_AGE: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackRow {
@@ -73,6 +81,19 @@ struct List {
     art_url: Option<String>,
 }
 
+impl List {
+    /// Whether a view showing `self` would look the same showing `other`.
+    fn same_as(&self, other: &List) -> bool {
+        self.name == other.name && self.uris == other.uris && self.art_url == other.art_url
+    }
+}
+
+/// Whether a list fetched at `fetched` (`None`: never, by this daemon) is
+/// still current at `now`.
+fn is_current(fetched: Option<Instant>, now: Instant) -> bool {
+    fetched.is_some_and(|at| now.saturating_duration_since(at) < LIST_MAX_AGE)
+}
+
 /// What is kept on disk so the library can be shown without a connection:
 /// the sidebar as last seen, and every list that has been loaded.
 #[derive(Default, Serialize, Deserialize)]
@@ -90,6 +111,9 @@ pub struct Catalog {
     tracks: Mutex<HashMap<String, TrackRow>>,
     albums: Mutex<HashMap<String, AlbumHeader>>,
     made_for_you: Mutex<Vec<Value>>,
+    /// When this daemon last fetched each list from Spotify. Lists loaded
+    /// from disk have no entry, so they count as stale until fetched.
+    fetched: Mutex<HashMap<String, Instant>>,
     /// Tracks fetched since the cache file was last written.
     unsaved: AtomicBool,
     indexing: AtomicBool,
@@ -109,6 +133,7 @@ impl Default for Catalog {
             tracks: Mutex::new(load_tracks()),
             albums: Mutex::default(),
             made_for_you: Mutex::default(),
+            fetched: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -267,6 +292,10 @@ impl Catalog {
     }
 
     /// One page of a playlist's (or Liked Songs') tracks, with metadata.
+    ///
+    /// A saved copy is answered at once, never waiting on Spotify; `stale`
+    /// says whether it may be out of date. `refresh` fetches the list again,
+    /// and `changed` then says whether it differs from the copy it replaced.
     pub async fn tracks(
         &self,
         session: Option<&Session>,
@@ -276,12 +305,15 @@ impl Catalog {
         refresh: bool,
     ) -> OpResult {
         let limit = limit.clamp(1, MAX_PAGE);
-        let (list, rows) = match session {
+        let (list, rows, stale, changed) = match session {
             Some(session) => {
+                let before = self.lists.lock().expect("lists lock").get(uri).cloned();
                 let list = self.list(session, uri, refresh).await?;
+                let changed = before.is_none_or(|before| !before.same_as(&list));
+                let stale = !is_current(self.fetched.lock().expect("fetched lock").get(uri).copied(), Instant::now());
                 let page = list.uris.iter().skip(offset).take(limit).cloned().collect();
                 let rows = self.rows(session, page, LOOKUPS_IN_FLIGHT).await;
-                (list, rows)
+                (list, rows, stale, changed)
             }
             // Offline: whatever was saved, with placeholders for the rest.
             None => {
@@ -296,7 +328,7 @@ impl Catalog {
                     .take(limit)
                     .map(|uri| tracks.get(uri).cloned().unwrap_or_else(|| unavailable_row(uri.clone())))
                     .collect();
-                (list, rows)
+                (list, rows, true, false)
             }
         };
 
@@ -307,6 +339,8 @@ impl Catalog {
             "offset": offset,
             // The list's own picture, when its owner set one.
             "art_url": list.art_url,
+            "stale": stale,
+            "changed": changed,
             "items": self.decorate(rows),
         }))
     }
@@ -524,6 +558,7 @@ impl Catalog {
         };
         let list = Arc::new(list);
         self.lists.lock().expect("lists lock").insert(uri.to_owned(), list.clone());
+        self.fetched.lock().expect("fetched lock").insert(uri.to_owned(), Instant::now());
         self.library_unsaved.store(true, Ordering::Relaxed);
         Ok(list)
     }
@@ -1515,6 +1550,7 @@ mod tests {
             tracks: Mutex::new(rows.iter().map(|row| (row.uri.clone(), row.clone())).collect()),
             albums: Mutex::default(),
             made_for_you: Mutex::default(),
+            fetched: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -1580,6 +1616,33 @@ mod tests {
         assert_eq!(empty.playlists(None).await.unwrap_err().code, crate::proto::ErrorCode::Offline);
     }
 
+    #[test]
+    fn a_list_is_current_only_if_this_daemon_fetched_it_recently() {
+        let now = std::time::Instant::now();
+        // Loaded from disk: never fetched by this daemon.
+        assert!(!super::is_current(None, now));
+        assert!(super::is_current(Some(now), now));
+        let expiry = now + super::LIST_MAX_AGE;
+        assert!(super::is_current(Some(now), expiry - std::time::Duration::from_secs(1)));
+        assert!(!super::is_current(Some(now), expiry));
+    }
+
+    #[test]
+    fn a_list_counts_as_changed_when_its_tracks_order_name_or_picture_differ() {
+        let list = |name: &str, uris: &[&str], art: Option<&str>| super::List {
+            name: name.into(),
+            uris: uris.iter().map(|u| u.to_string()).collect(),
+            art_url: art.map(Into::into),
+        };
+        let weekly = list("Discover Weekly", &["t:1", "t:2"], None);
+        assert!(weekly.same_as(&list("Discover Weekly", &["t:1", "t:2"], None)));
+        assert!(!weekly.same_as(&list("Discover Weekly", &["t:3", "t:4"], None)));
+        assert!(!weekly.same_as(&list("Discover Weekly", &["t:2", "t:1"], None)));
+        assert!(!weekly.same_as(&list("Discover Weekly", &["t:1"], None)));
+        assert!(!weekly.same_as(&list("Weekly", &["t:1", "t:2"], None)));
+        assert!(!weekly.same_as(&list("Discover Weekly", &["t:1", "t:2"], Some("https://i.scdn.co/x"))));
+    }
+
     #[tokio::test]
     async fn offline_a_saved_list_is_served_with_placeholders_for_unknown_tracks() {
         let library = library();
@@ -1588,6 +1651,9 @@ mod tests {
         assert_eq!(page["total"], 3);
         assert_eq!(titles(&page), ["Follow the Sun", "Sun Song", "Unavailable"]);
         assert_eq!(page["items"][2]["available"], false);
+        // Saved, so possibly out of date, and nothing was fetched to compare.
+        assert_eq!(page["stale"], true);
+        assert_eq!(page["changed"], false);
         // Paging works the same from disk.
         let second = library.tracks(None, "spotify:playlist:p", 1, 1, false).await.unwrap();
         assert_eq!(titles(&second), ["Sun Song"]);

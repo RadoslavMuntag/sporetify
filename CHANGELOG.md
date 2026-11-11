@@ -4,6 +4,15 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
+## Unreleased
+
+- Fixed: playlists Spotify rewrites on a schedule (Discover Weekly, Release
+  Radar, the Daily Mixes, daylist) and playlists edited on another device
+  kept the tracks they had when Sporetify first saved them. A saved list
+  still opens at once; the app now checks it against Spotify in the
+  background and swaps in the new version when it has changed. Reported by
+  lutzlstein in #12.
+
 ## 0.1.1 (2026-10-13)
 
 Two fixes asked for in the marketplace review.
