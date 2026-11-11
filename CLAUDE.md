@@ -108,6 +108,7 @@ assets/sporetify.svg the icon, installed for the menu entry
 preview.png          the picture plugin listings show (app and mini-player composed)
 CHANGELOG.md         one section per version
 docs/screenshots/    the pictures the README shows
+docs/agents/         where the engineering skills find the issue tracker, labels and domain docs
 bin/sporetify        launcher: focus the running app or start it
 tests/               qmltestrunner tests (tst_*.qml) and lint.sh
 .claude/architecture/  architecture plan, protocol draft, visual language, roadmap
@@ -500,3 +501,17 @@ both a dark and a light theme (`omarchy theme set <name>`).
 - Plugins run unsandboxed inside `omarchy-shell`. Do not add install hooks,
   network calls from QML, or anything that runs at shell start beyond a cheap
   service mount.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `RadoslavMuntag/sporetify`, through `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label named after its role (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. Decisions are the D-numbered table in `.claude/architecture/README.md`, not `docs/adr/`. See `docs/agents/domain.md`.
