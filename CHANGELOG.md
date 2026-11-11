@@ -4,11 +4,20 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
-## Unreleased
+## 0.1.2 (not released yet)
 
-- Fixed: playlists Spotify rewrites on a schedule (Discover Weekly, Release
-  Radar, the Daily Mixes, daylist) and playlists edited on another device
-  kept the tracks they had when Sporetify first saved them. A saved list
+Fixes to editing playlists, and to lists that never refreshed.
+
+- Moving a track never moves the wrong one. If the playlist changed since
+  it was shown, nothing moves and the list is reloaded.
+- A new playlist appears only once it is complete: a create cut off
+  part-way leaves nothing behind, and trying again does not make a
+  duplicate.
+- Creating or deleting a playlist is no longer reported as failed when
+  only the reload of your playlists afterwards was slow.
+- Playlists Spotify rewrites on a schedule (Discover Weekly, Release Radar,
+  the Daily Mixes, daylist) and playlists edited on another device no
+  longer keep the tracks they had when Sporetify first saved them. A saved list
   still opens at once; the app now checks it against Spotify in the
   background and swaps in the new version when it has changed. Reported by
   lutzlstein in #12.

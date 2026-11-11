@@ -856,7 +856,8 @@ impl Catalog {
     /// The playlist is read from Spotify first, not from the cache, so the
     /// change is based on what is really there: tracks already in it are not
     /// added again, tracks not in it are not "removed", and a move is checked
-    /// against the real length.
+    /// against the real length and refused unless the track at `from` is the
+    /// one the app expects there.
     pub async fn edit_playlist(&self, session: &Session, playlist_uri: &str, edit: PlaylistEdit) -> OpResult {
         use librespot_protocol::playlist4_external::{op::Kind, Add, Item, ItemAttributes, Mov, Op, Rem};
 
@@ -864,9 +865,13 @@ impl Catalog {
         let spotify_uri = SpotifyUri::from_uri(playlist_uri).map_err(|_| OpError::bad_request("not a playlist"))?;
         let playlist = Playlist::get(session, &spotify_uri).await.map_err(|e| upstream("the playlist", e))?;
         let mut name = playlist.name().to_owned();
-        let mut uris: Vec<String> = playlist.tracks().filter_map(|t| t.to_uri().ok()).collect();
-        let unchanged = |name: &str, total: usize, reason: &str| {
-            Ok(json!({ "playlist": name, "changed": false, "total": total, "reason": reason }))
+        // Every entry keeps its place (an unreadable one as ""), so positions
+        // match the ones Spotify counts in.
+        let mut uris: Vec<String> = playlist.tracks().map(|t| t.to_uri().unwrap_or_default()).collect();
+        // The length the app sees, which leaves the unreadable entries out.
+        let readable = uris.iter().filter(|uri| !uri.is_empty()).count();
+        let unchanged = |name: &str, reason: &str| {
+            Ok(json!({ "playlist": name, "changed": false, "total": readable, "reason": reason }))
         };
 
         let mut op = Op::new();
@@ -879,7 +884,7 @@ impl Catalog {
                 let fresh: Vec<String> = tracks.iter().filter(|t| seen.insert(t)).cloned().collect();
                 detail = json!({ "added": fresh.len(), "skipped": tracks.len() - fresh.len() });
                 if fresh.is_empty() {
-                    return unchanged(&name, uris.len(), "already there");
+                    return unchanged(&name, "already there");
                 }
                 let mut change = Add::new();
                 for track in &fresh {
@@ -901,7 +906,7 @@ impl Catalog {
                 let gone: HashSet<&String> = tracks.iter().filter(|t| uris.contains(t)).collect();
                 detail = json!({ "removed": gone.len() });
                 if gone.is_empty() {
-                    return unchanged(&name, uris.len(), "not in the playlist");
+                    return unchanged(&name, "not in the playlist");
                 }
                 let mut change = Rem::new();
                 for track in &gone {
@@ -916,19 +921,15 @@ impl Catalog {
                 let gone: HashSet<String> = gone.into_iter().cloned().collect();
                 uris.retain(|uri| !gone.contains(uri));
             }
-            PlaylistEdit::Move { from, to } => {
-                if from >= uris.len() || to >= uris.len() {
-                    return Err(OpError::bad_request("the playlist is shorter than that"));
-                }
-                if from == to {
-                    return unchanged(&name, uris.len(), "already there");
-                }
+            PlaylistEdit::Move { from, to, track } => {
+                // From here on, positions in the whole playlist.
+                let Some((from, to, to_index)) = move_target(&uris, from, to, &track)? else {
+                    return unchanged(&name, "already there");
+                };
                 let mut change = Mov::new();
                 change.set_from_index(from as i32);
                 change.set_length(1);
-                // Spotify counts the destination in the list as it is before
-                // the track is taken out: "insert before the item now at N".
-                change.set_to_index(if to > from { to as i32 + 1 } else { to as i32 });
+                change.set_to_index(to_index);
                 op.set_kind(Kind::MOV);
                 op.mov = Some(change).into();
                 let track = uris.remove(from);
@@ -940,7 +941,7 @@ impl Catalog {
                     return Err(OpError::bad_request("a playlist needs a name"));
                 }
                 if new_name == name {
-                    return unchanged(&name, uris.len(), "already called that");
+                    return unchanged(&name, "already called that");
                 }
                 op = rename_op(&new_name);
                 name = new_name;
@@ -951,6 +952,7 @@ impl Catalog {
         // meantime is merged by Spotify rather than overwritten.
         send_changes(session, &format!("/playlist/v2/playlist/{id}/changes"), playlist.revision.clone(), op).await?;
 
+        uris.retain(|uri| !uri.is_empty());
         let total = uris.len();
         let art_url = self.lists.lock().expect("lists lock").get(playlist_uri).and_then(|l| l.art_url.clone());
         self.lists
@@ -997,7 +999,17 @@ impl Catalog {
         playlist_id(&uri).map_err(|_| upstream("the new playlist", "Spotify did not say where it is"))?;
         self.edit_playlist(session, &uri, PlaylistEdit::Rename(name.to_owned())).await?;
 
-        // 2. Into the user's list of playlists, or it would exist unseen.
+        // 2. Its tracks.
+        let mut total = 0;
+        if !tracks.is_empty() {
+            let added = self.edit_playlist(session, &uri, PlaylistEdit::Add(tracks)).await?;
+            total = added["total"].as_u64().unwrap_or(0);
+        }
+
+        // 3. Last, into the user's list of playlists. A playlist that is not
+        //    in that list is what Spotify calls deleted, so if anything above
+        //    failed or was cut off by the deadline, nothing appears and trying
+        //    again cannot leave a half-made duplicate behind.
         let root = self.rootlist(session).await?;
         let mut item = Item::new();
         item.set_uri(uri.clone());
@@ -1009,13 +1021,9 @@ impl Catalog {
         op.add = Some(change).into();
         send_changes(session, &rootlist_changes(session), root.revision().to_vec(), op).await?;
 
-        // 3. Its tracks.
-        let mut total = 0;
-        if !tracks.is_empty() {
-            let added = self.edit_playlist(session, &uri, PlaylistEdit::Add(tracks)).await?;
-            total = added["total"].as_u64().unwrap_or(0);
-        }
-        self.refresh_sidebar(session).await;
+        // Nothing more may run after this: a slow step here would turn a
+        // finished create into a timeout, and a retry into a duplicate. The
+        // app re-reads the sidebar itself.
         Ok(json!({ "uri": uri, "playlist": name, "total": total }))
     }
 
@@ -1042,7 +1050,7 @@ impl Catalog {
 
         self.lists.lock().expect("lists lock").remove(playlist_uri);
         self.library_unsaved.store(true, Ordering::Relaxed);
-        self.refresh_sidebar(session).await;
+        self.flush();
         Ok(json!({ "changed": true }))
     }
 
@@ -1053,15 +1061,6 @@ impl Catalog {
             .await
             .map_err(|e| upstream("your playlists", e))?;
         SelectedListContent::parse_from_bytes(&bytes).map_err(|e| upstream("your playlists", e))
-    }
-
-    /// Re-read the sidebar after the list of playlists changed.
-    async fn refresh_sidebar(&self, session: &Session) {
-        if let Ok(items) = self.fetch_sidebar(session).await {
-            *self.sidebar.lock().expect("sidebar lock") = items;
-            self.library_unsaved.store(true, Ordering::Relaxed);
-        }
-        self.flush();
     }
 
     /// The playlist Spotify itself publishes under exactly this name, such
@@ -1245,8 +1244,10 @@ pub enum PlaylistEdit {
     Add(Vec<String>),
     /// Take out every occurrence of these tracks.
     Remove(Vec<String>),
-    /// Move the track at `from` so that it ends up at `to` (both 0-based).
-    Move { from: usize, to: usize },
+    /// Move the track at `from` so that it ends up at `to` (both 0-based,
+    /// counting only the entries that can be read, as the app's list does).
+    /// `track` must be the one at `from`, or nothing moves.
+    Move { from: usize, to: usize, track: String },
     Rename(String),
 }
 
@@ -1255,6 +1256,34 @@ fn playlist_id(uri: &str) -> Result<&str, OpError> {
     uri.strip_prefix("spotify:playlist:")
         .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric()))
         .ok_or_else(|| OpError::bad_request(format!("not a playlist: '{uri}'")))
+}
+
+/// Where a track moved from `from` to `to` goes, or `None` when it is
+/// already there. `from` and `to` count only readable entries, as the app's
+/// list does; `uris` is the whole playlist, unreadable entries as "".
+/// Returns `from` and `to` in the whole playlist, and the destination the
+/// way Spotify counts it: in the list as it is before the track is taken
+/// out ("insert before the item now at N").
+/// The entry at `from` must be `track`: the screen the move came from may be
+/// older than the playlist, and moving by position alone would then move a
+/// different track.
+fn move_target(uris: &[String], from: usize, to: usize, track: &str) -> Result<Option<(usize, usize, i32)>, OpError> {
+    let readable: Vec<usize> = (0..uris.len()).filter(|&i| !uris[i].is_empty()).collect();
+    let (Some(&from), Some(&to)) = (readable.get(from), readable.get(to)) else {
+        return Err(stale_playlist());
+    };
+    if uris[from] != track {
+        return Err(stale_playlist());
+    }
+    if from == to {
+        return Ok(None);
+    }
+    Ok(Some((from, to, if to > from { to as i32 + 1 } else { to as i32 })))
+}
+
+/// The playlist is no longer what the screen showed; the app reloads it.
+fn stale_playlist() -> OpError {
+    OpError::new(ErrorCode::NotFound, "the playlist changed since it was shown, so nothing was moved")
 }
 
 fn require_tracks(uris: &[String]) -> Result<(), OpError> {
@@ -1467,6 +1496,45 @@ fn radio_art(seed_uri: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::collection_write;
+
+    #[test]
+    fn a_move_names_spotifys_destination_and_checks_the_track() {
+        use super::move_target;
+        use crate::proto::ErrorCode;
+        // Spotify counts the unreadable "", the app does not: it shows a, b, c.
+        let uris: Vec<String> = ["a", "", "b", "c"].iter().map(|u| u.to_string()).collect();
+        let shown = ["a", "b", "c"];
+        // What the app shows after Spotify makes the move (insert before the
+        // entry now at `to_index`, then take out the original), checked
+        // against the daemon's own copy of the list.
+        let moved = |from: usize, to: usize| {
+            let (from, to, to_index) = move_target(&uris, from, to, shown[from]).unwrap().unwrap();
+            let mut spotify = uris.clone();
+            spotify.insert(to_index as usize, uris[from].clone());
+            spotify.remove(if to_index as usize <= from { from + 1 } else { from });
+            let mut ours = uris.clone();
+            let track = ours.remove(from);
+            ours.insert(to, track);
+            assert_eq!(ours, spotify);
+            spotify.concat()
+        };
+        // Up, across the unreadable entry: "c" goes to the very front.
+        assert_eq!(move_target(&uris, 2, 0, "c").unwrap(), Some((3, 0, 0)));
+        assert_eq!(moved(2, 0), "cab");
+        // Down, across it: the destination is counted before "a" is taken out.
+        assert_eq!(move_target(&uris, 0, 1, "a").unwrap(), Some((0, 2, 3)));
+        assert_eq!(moved(0, 1), "bac");
+        assert_eq!(moved(1, 0), "bac");
+        assert_eq!(moved(0, 2), "bca");
+        assert_eq!(moved(1, 2), "acb");
+        assert_eq!(moved(2, 1), "acb");
+        assert_eq!(move_target(&uris, 1, 1, "b").unwrap(), None);
+        // The list changed under the screen: refuse, do not move "b".
+        assert_eq!(move_target(&uris, 1, 0, "a").unwrap_err().code, ErrorCode::NotFound);
+        // A position past what the app can see means the same.
+        assert_eq!(move_target(&uris, 0, 3, "a").unwrap_err().code, ErrorCode::NotFound);
+        assert_eq!(move_target(&uris, 3, 0, "c").unwrap_err().code, ErrorCode::NotFound);
+    }
 
     #[test]
     fn radio_art_is_built_only_for_a_plain_artist_uri() {
