@@ -26,6 +26,17 @@ var actions = [
   { id: "openApp",     keys: ["o"],              label: "Open app",         scope: "mini", group: "places", primary: true },
   { id: "likePlaying", keys: ["f"],              label: "Like",             scope: "mini", group: "track", primary: true },
 
+  // The compact player: a window of its own, so it closes on q or Ctrl C
+  // (Esc does nothing there) and keeps its hints behind ?.
+  { id: "compactKeys", keys: ["?"],              label: "All keys",         scope: "compact", group: "app", primary: true },
+  { id: "compactClose", keys: ["q", "Ctrl+c"],   label: "Close",            scope: "compact", group: "app", primary: true },
+  { id: "compactPool", keys: ["z"],              label: "Tide pool in the lens", scope: "compact", group: "app" },
+
+  // The tide pool view in the app. The list is not on screen, so only the
+  // player's keys and these work; Esc (app scope) also goes back.
+  { id: "poolClose",   keys: ["z"],              label: "Back to the list", scope: "pool", group: "app", primary: true },
+  { id: "poolKeys",    keys: ["?"],              label: "All keys",         scope: "pool", group: "app", primary: true },
+
   { id: "down",        keys: ["j", "Down"],      label: "Down",             scope: "browse", group: "moving" },
   { id: "up",          keys: ["k", "Up"],        label: "Up",               scope: "browse", group: "moving" },
   { id: "pageDown",    keys: ["PgDn"],           label: "Page down",        scope: "browse", group: "moving" },
@@ -59,7 +70,10 @@ var actions = [
   { id: "reload",      keys: ["R"],              label: "Reload",           scope: "browse", group: "app" },
   { id: "sidebar",     keys: ["b"],              label: "Show / hide sidebar", scope: "browse", group: "app" },
   { id: "covers",      keys: ["c"],              label: "Covers in lists",  scope: "browse", group: "app" },
-  { id: "creatures",   keys: ["v"],              label: "Creatures",        scope: "browse", group: "app" },
+  { id: "plate",       keys: ["i"],              label: "Specimen plate",   scope: "browse", group: "app" },
+  { id: "pool",        keys: ["z"],              label: "Into the lens: the tide pool", scope: "browse", group: "app" },
+  { id: "visuals",     keys: ["v"],              label: "Visuals: full / reduced / off", scope: "browse", group: "app" },
+  { id: "creatures",   keys: ["C"],              label: "Creatures on / off, everywhere", scope: "browse", group: "app" },
   { id: "help",        keys: ["?"],              label: "All keys",         scope: "browse", group: "app", primary: true },
 
   { id: "signIn",      keys: ["Return"],         label: "Sign in",          scope: "signedOut", group: "app", primary: true },
@@ -68,7 +82,16 @@ var actions = [
   // a search), so the two have their own scopes.
   { id: "close",       keys: ["Esc", "q"],       label: "Close",            scope: "popup", group: "app", primary: true },
   { id: "cancel",      keys: ["Esc"],            label: "Clear selection, or leave search", scope: "app", group: "search" },
-  { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",             scope: "app", group: "app", primary: true }
+  { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",             scope: "app", group: "app", primary: true },
+
+  // In a text field (search, the playlist picker, prompts): app/Field.qml.
+  // What Confirm, Up and Down do depends on the field; its hint says.
+  { id: "fieldAccept", keys: ["Return"],         label: "Confirm",          scope: "field", group: "typing" },
+  { id: "fieldCancel", keys: ["Esc"],            label: "Cancel",           scope: "field", group: "typing" },
+  { id: "fieldUp",     keys: ["Up"],             label: "Up",               scope: "field", group: "typing" },
+  { id: "fieldDown",   keys: ["Down"],           label: "Down",             scope: "field", group: "typing" },
+  { id: "fieldNext",   keys: ["Tab"],            label: "Next",             scope: "field", group: "typing" },
+  { id: "fieldPrevious", keys: ["Backtab"],      label: "Previous",         scope: "field", group: "typing" }
 ]
 
 // The sections of the help overlay, in reading order.
@@ -79,7 +102,8 @@ var groups = [
   { id: "search",    title: "Search" },
   { id: "track",     title: "The track under the cursor" },
   { id: "playlists", title: "Your playlists" },
-  { id: "app",       title: "App" }
+  { id: "app",       title: "App" },
+  { id: "typing",    title: "While typing" }
 ]
 
 // Qt::Key values for the keys that have no printable character.
@@ -87,6 +111,7 @@ var named = {
   0x20: "Space",
   0x01000000: "Esc",
   0x01000001: "Tab",
+  0x01000002: "Backtab",
   0x01000003: "Backspace",
   0x01000007: "Del",
   0x01000031: "F2",
@@ -103,7 +128,7 @@ var named = {
 }
 
 // Symbols used when a key is shown to the user.
-var glyphs = { Space: "␣", Left: "←", Right: "→", Up: "↑", Down: "↓", Return: "⏎", Tab: "⇥", Backspace: "⌫" }
+var glyphs = { Space: "␣", Left: "←", Right: "→", Up: "↑", Down: "↓", Return: "⏎", Tab: "⇥", Backtab: "⇤", Backspace: "⌫" }
 
 // Qt::ControlModifier
 var CTRL = 0x04000000

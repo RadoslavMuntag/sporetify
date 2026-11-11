@@ -1,5 +1,6 @@
 import QtQuick
 
+import "../common/Keymap.js" as Keymap
 import "../common/Loadable.js" as Loadable
 
 // Liked Songs and the user's playlists.
@@ -51,6 +52,14 @@ Rectangle {
   }
   readonly property int rowsPerPage: Math.max(1, Math.floor(list.height / Theme.spacing.rowHeight) - 1)
 
+  // Ruled off from the list, as a hairline.
+  Rectangle {
+    anchors.right: parent.right
+    width: Theme.stroke.hair
+    height: parent.height
+    color: Theme.line
+  }
+
   Text {
     id: heading
     x: Theme.spacing.xxl
@@ -73,7 +82,7 @@ Rectangle {
     wrapMode: Text.WordWrap
     textFormat: Text.PlainText
     text: root.library.playlists.state === "error"
-      ? root.library.playlists.error.message + "\nPress R to retry."
+      ? root.library.playlists.error.message + "\nPress " + Keymap.keyLabel("reload") + " to retry."
       : "Loading…"
     color: root.library.playlists.state === "error" ? Theme.urgent : Theme.muted
     font.family: Theme.font.family
@@ -105,8 +114,9 @@ Rectangle {
 
       width: list.width
       height: Theme.spacing.rowHeight
-      color: cursor ? Theme.selectedFill : (hover.containsMouse ? Theme.hoverFill : "transparent")
+      color: cursor || hover.containsMouse ? Theme.hoverFill : "transparent"
 
+      Bracket { visible: row.cursor }
       Rectangle {
         visible: row.open
         width: Theme.space(2)

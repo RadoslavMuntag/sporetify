@@ -137,14 +137,46 @@ This builds the daemon here and links the checkout as the plugin.
 | Where | How |
 | --- | --- |
 | Full app | `sporetify`, the application menu, or `o` in the mini-player |
+| Compact player | `sporetify --compact` (see below) |
 | Mini-player | click the bar icon |
 | Play / pause | right-click the bar icon, or your media keys |
 | Full app from the bar | middle-click the bar icon |
 | Volume | scroll on the bar icon |
 
 Each track has its own small creature, grown from the track itself, shown
-beside it while it plays. Turn them off with `v` in the app or the Creatures
-setting of the bar widget.
+in the specimen plate on the right while it plays. `Shift C` in the app turns the creatures off
+everywhere (app, compact player, bar and mini-player); a lens then shows
+the album cover. `v` sets the other visuals (lens, spectrum, plate) to
+moving, still or off. The bar widget's Creatures setting turns them off in
+the bar only.
+
+`z` goes into the lens: the playing track's creature, large, drifting in a
+tide pool with the next track's creature dozing at its edge; they swim one
+place along when the track changes. `z` or `Esc` goes back to the list.
+
+### Compact player
+
+A small window with just what is playing: the track's creature under a
+lens whose ring of ticks fills as the song plays, a fine-line spectrum that
+moves with the music, the title, the artist and the time. Made to sit tiled beside a terminal in a desktop screenshot. It
+lays itself out to fit any window: square, wide or tall.
+
+`sporetify --compact` opens it (or focuses it). Its keys are the
+mini-player's: `Space`, `n`, `p`, `+`, `-`, `f` to like, `o` for the full app,
+`z` for the tide pool in the lens, `?` for the list, and `q` to close. Clicking the lens plays or pauses.
+
+To float it in a corner on every workspace instead of tiling it, add a
+window rule to your Hyprland config, for example in
+`~/.config/hypr/hyprland.lua`:
+
+```lua
+o.window("sporetify-compact", {
+  float = true,
+  pin = true,
+  size = { 360, 400 },
+  move = { "(monitor_w-window_w-40)", "(monitor_h*0.06)" },
+})
+```
 
 Every surface lists its shortcuts in a footer. The main ones:
 
@@ -162,6 +194,8 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `N` | New playlist | `F2` | Rename a playlist |
 | `Backspace` | Back | `?` | Every shortcut |
 | `b` | Show / hide the sidebar | `c` | Covers in lists on / off |
+| `i` | Specimen plate on / off | `v` | Visuals: moving / still / off |
+| `Shift C` | Creatures on / off, everywhere | `z` | Into the lens (tide pool) and back |
 | `←` / `→` | Seek 10 s | `Esc` | Cancel search (closes the mini-player) |
 | `Ctrl C` | Quit the app | | |
 
@@ -174,6 +208,7 @@ check `hyprctl configerrors`:
 ```lua
 o.bind("SUPER + SHIFT + M", "Sporetify", "omarchy shell -q sporetify toggleApp")
 o.bind("SUPER + ALT + M", "Sporetify mini-player", "omarchy shell -q sporetify toggleMini")
+o.bind("SUPER + CTRL + M", "Sporetify compact player", "omarchy shell -q sporetify toggleCompact")
 ```
 
 `SUPER + SHIFT + M` is Omarchy's stock Music binding; put

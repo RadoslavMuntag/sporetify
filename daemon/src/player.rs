@@ -14,7 +14,7 @@ use librespot_core::config::SessionConfig;
 use librespot_core::session::Session;
 use librespot_metadata::audio::UniqueFields;
 use librespot_oauth::OAuthToken;
-use librespot_playback::audio_backend;
+use librespot_playback::audio_backend::{self, Sink};
 use librespot_playback::config::{AudioFormat, PlayerConfig};
 use librespot_playback::mixer::{self, MixerConfig};
 use librespot_playback::player::{Player, PlayerEvent};
@@ -24,6 +24,7 @@ use crate::auth::{self, AuthError};
 use crate::persist::{self, Saved};
 use crate::proto::{ErrorCode, OpError};
 use crate::state::{PlayerState, Position, Shared, Status, Track};
+use crate::viz;
 
 const DEVICE_NAME: &str = "Sporetify";
 const RETRY_MIN: Duration = Duration::from_secs(2);
@@ -392,11 +393,12 @@ impl Playback {
         let mixer = mixer::find(None).ok_or("no volume mixer available")?(MixerConfig::default())
             .map_err(|e| e.to_string())?;
         let backend = audio_backend::find(None).ok_or("no audio backend available")?;
+        let hub = self.shared.viz.clone();
         let player = Player::new(
             PlayerConfig::default(),
             session.clone(),
             mixer.get_soft_volume(),
-            move || backend(None, AudioFormat::default()),
+            move || Box::new(viz::Tap::new(backend(None, AudioFormat::default()), hub)) as Box<dyn Sink>,
         );
         let mut events = player.get_player_event_channel();
 

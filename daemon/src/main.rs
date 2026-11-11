@@ -174,6 +174,7 @@ async fn run(options: Options) -> io::Result<()> {
             }
         } => Ok(()),
         _ = sporetifyd::mpris::run(shared.clone(), at_exit.clone()) => Ok(()),
+        _ = shared.viz.deliver() => Ok(()),
         _ = idle_exit(clients_rx, options.idle, shared.clone()) => {
             eprintln!("sporetifyd: idle, exiting");
             Ok(())

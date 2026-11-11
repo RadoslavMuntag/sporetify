@@ -126,6 +126,10 @@ sign-in give a working Sporetify.
 
 ## Phase 4 · Spore, properly
 
+The visual work in this phase is now planned, with a compact player, as
+milestones V0–V8 in [08-design.md](08-design.md). The list below is kept
+for the audio tap and as the original intent.
+
 - **Audio tap in the daemon** (`viz`): band energies and a beat pulse from
   the playback path, sent only to subscribers.
 - **Creatures react to the music** in the bar, mini-player and app.

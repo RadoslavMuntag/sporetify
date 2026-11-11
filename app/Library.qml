@@ -1,5 +1,6 @@
 import QtQuick
 
+import "../common/Keymap.js" as Keymap
 import "../common/Loadable.js" as Loadable
 import "../common/Pages.js" as Pages
 
@@ -987,7 +988,7 @@ Item {
   // Why the playlist on screen cannot be changed, or "" if it can.
   function whyNotEditable() {
     if (kind !== "playlist") return "Open one of your playlists first"
-    if (uri.indexOf(":collection") !== -1) return "Liked Songs: press f on a track to unlike it"
+    if (uri.indexOf(":collection") !== -1) return "Liked Songs: press " + Keymap.keyLabel("like") + " on a track to unlike it"
     if (!isEditable(uri)) return "This playlist is not yours to change"
     return ""
   }

@@ -6,6 +6,7 @@ import "../common"
 import "../common/Keymap.js" as Keymap
 import "../common/Faults.js" as Faults
 import "../common/Links.js" as Links
+import "../common/Visuals.js" as Visuals
 
 // The app window: sidebar, track list, now-playing bar and the hint bar.
 // One key handler serves the whole window; what a key means comes from
@@ -23,17 +24,32 @@ FloatingWindow {
 
   // "sidebar" or "list"
   property string pane: "sidebar"
-  readonly property var scopes: player.scope === "player" ? ["browse", "player", "app"] : [player.scope, "app"]
+  // The tide pool view (`z`), in place of the list.
+  property bool poolOpen: false
+  readonly property bool poolShown: poolOpen && player.scope === "player"
+  readonly property var scopes: player.scope !== "player" ? [player.scope, "app"]
+    : (poolShown ? ["pool", "player", "app"] : ["browse", "player", "app"])
 
   Player {
     id: player
     wanted: window.visible
+    // The daemon analyses the audio only while the plate shows it.
+    vizWanted: (plate.visible || pool.visible) && window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
+  }
+
+  UpNext {
+    id: upNext
+    player: player
+    active: pool.visible && window.visible && screen.shown && Visuals.drawn(window.visuals) && prefs.creatures
   }
 
   Library {
     id: library
     player: player
   }
+
+  // On a workspace being shown; the creature only moves then.
+  OnScreen { id: screen }
 
   // The library can only load once the daemon is connected to Spotify.
   Connections {
@@ -63,6 +79,7 @@ FloatingWindow {
   function openLink(text) {
     var link = Links.parse(text)
     if (!link) return "not a Spotify link Sporetify can open"
+    poolOpen = false
     if (loadedIn === "") {
       pendingLink = text
       return "opening " + link.uri + " once connected"
@@ -114,16 +131,23 @@ FloatingWindow {
 
     JsonAdapter {
       id: prefs
-      // Draw each track's creature.
+      // full | reduced | off; see common/Visuals.js.
+      property string visuals: ""
+      // Draw creatures at all, here and in the compact player, the bar and
+      // the mini-player (which read this file).
       property bool creatures: true
       // Show covers on the rows of lists.
       property bool covers: true
       property bool sidebar: true
+      // The specimen plate on the right (when the window is wide enough).
+      property bool plate: true
       onSidebarChanged: if (!sidebar) window.pane = "list"
       // Ids of sidebar folders that are folded shut, comma separated.
       property string foldedFolders: ""
     }
   }
+
+  readonly property string visuals: Visuals.level(prefs.visuals)
 
   readonly property var foldedFolders: {
     var out = {}
@@ -146,12 +170,12 @@ FloatingWindow {
   // Open the search field for "spotify" or "library". The text typed so far
   // is kept when switching between the two.
   function openSearch(mode) {
+    poolOpen = false
     searchOpen = true
-    searchField.forceActiveFocus()
+    searchBar.grab()
     if (!library.searching || library.searchMode !== mode) {
-      library.search(searchField.text, mode, tracks.currentIndex)
+      library.search(searchBar.text, mode, tracks.currentIndex)
     }
-    searchField.selectAll()
   }
   // Enter or Down in the field: on to the results.
   function leaveSearchField() {
@@ -172,36 +196,20 @@ FloatingWindow {
   property bool pickerOpen: false
   // [{ uri, title }] being added.
   property var pickerTracks: []
-  // What the picker lists: the user's playlists whose name holds every
-  // typed word, then, when something has been typed, a row that creates a
-  // playlist of that name. Creating comes last so that Enter on a name that
-  // already exists adds to it and does not make a second one.
-  readonly property var pickerChoices: {
-    var typed = pickerFilter.text.trim()
-    var words = typed.toLowerCase().split(/\s+/)
-    var out = library.editablePlaylists.filter(function(playlist) {
-      var name = playlist.name.toLowerCase()
-      for (var i = 0; i < words.length; i++) if (words[i] !== "" && name.indexOf(words[i]) === -1) return false
-      return true
-    })
-    if (typed !== "") out = out.concat([{ create: true, name: typed }])
-    return out
-  }
+  readonly property var pickerChoices: picker.choices
   function openPicker(index) {
     var tracks = library.selection(index)
     if (tracks.length === 0) return
     pickerTracks = tracks
-    pickerFilter.text = ""
-    pickerList.currentIndex = 0
     pickerOpen = true
-    pickerFilter.forceActiveFocus()
+    picker.reset()
   }
   function closePicker() {
     pickerOpen = false
     keys.forceActiveFocus()
   }
   function confirmPicker() {
-    var choice = pickerChoices[pickerList.currentIndex]
+    var choice = pickerChoices[picker.currentIndex]
     if (choice && pickerTracks.length > 0) {
       if (choice.create) library.createPlaylist(choice.name, pickerTracks)
       else library.addToPlaylist(choice, pickerTracks)
@@ -211,15 +219,16 @@ FloatingWindow {
 
   // ---- Asking for a line of text (a new playlist's name, a new name)
   property bool promptOpen: false
+  property string promptEyebrow: ""
   property string promptTitle: ""
   property var promptAccept: null
-  function ask(title, initial, accept) {
+  function ask(eyebrow, title, initial, accept) {
+    promptEyebrow = eyebrow
     promptTitle = title
     promptAccept = accept
-    promptField.text = initial
+    prompt.text = initial
     promptOpen = true
-    promptField.forceActiveFocus()
-    promptField.selectAll()
+    prompt.grab()
   }
   function closePrompt() {
     promptOpen = false
@@ -227,7 +236,7 @@ FloatingWindow {
     keys.forceActiveFocus()
   }
   function confirmPrompt() {
-    var text = promptField.text.trim()
+    var text = prompt.text.trim()
     var accept = promptAccept
     closePrompt()
     if (text !== "" && accept) accept(text)
@@ -297,7 +306,7 @@ FloatingWindow {
       if (landed >= 0) tracks.jump(landed)
       return
     case "newPlaylist":
-      ask("Name the new playlist", "", function(name) { library.createPlaylist(name, []) })
+      ask("New playlist", "Name the new playlist", "", function(name) { library.createPlaylist(name, []) })
       return
     case "rename":
       var playlist = targetPlaylist()
@@ -305,7 +314,7 @@ FloatingWindow {
         library.notice("Move to one of your own playlists to rename it", true)
         return
       }
-      ask("Rename " + playlist.name, playlist.name, function(name) { library.renamePlaylist(playlist.uri, name) })
+      ask("Rename playlist", "Rename " + playlist.name, playlist.name, function(name) { library.renamePlaylist(playlist.uri, name) })
       return
     case "enqueue": library.enqueue(pane === "list" ? tracks.currentIndex : -1); return
     case "artist":
@@ -314,17 +323,41 @@ FloatingWindow {
       library.openRelated(action, pane === "list" ? tracks.currentIndex : -1)
       pane = "list"
       return
-    case "creatures": prefs.creatures = !prefs.creatures; return
+    case "visuals":
+      prefs.visuals = Visuals.next(visuals)
+      library.notice("Visuals: " + prefs.visuals, false)
+      return
+    case "creatures":
+      prefs.creatures = !prefs.creatures
+      library.notice("Creatures " + (prefs.creatures ? "on" : "off") + ", everywhere", false)
+      return
     case "covers": prefs.covers = !prefs.covers; return
+    case "plate":
+      if (!plate.room) {
+        library.notice("The window is too narrow for the specimen plate", true)
+        return
+      }
+      prefs.plate = !prefs.plate
+      return
     case "sidebar":
       prefs.sidebar = !prefs.sidebar
       // Focus follows: into the sidebar when it appears, out when it goes.
       pane = prefs.sidebar ? "sidebar" : "list"
       return
     case "quit": Qt.quit(); return
+    case "pool":
+      poolOpen = true
+      return
+    case "poolClose":
+      poolOpen = false
+      return
+    case "poolKeys":
+      helpOpen = true
+      return
     case "cancel":
-      // A selection is cleared before a search is left.
-      if (library.markedCount > 0) library.clearMarks()
+      // Out of the pool first; a selection is cleared before a search is left.
+      if (poolShown) poolOpen = false
+      else if (library.markedCount > 0) library.clearMarks()
       else cancelSearch()
       return
     case "paneNext":
@@ -366,7 +399,8 @@ FloatingWindow {
     function searchFor(text: string): string { return search(text, "spotify") }
     function searchLibrary(text: string): string { return search(text, "library") }
     function search(text: string, mode: string): string {
-      searchField.text = text
+      searchBar.text = text
+      window.poolOpen = false
       window.searchOpen = true
       library.search(text, mode, tracks.currentIndex)
       window.pane = "list"
@@ -392,18 +426,18 @@ FloatingWindow {
     // Type into whichever of the picker or the prompt is open, and confirm.
     function answer(text: string): string {
       if (window.promptOpen) {
-        promptField.text = text
+        prompt.text = text
         window.confirmPrompt()
         return "prompt"
       }
       if (window.pickerOpen) {
-        pickerFilter.text = text
+        picker.text = text
         // The playlist of exactly this name if there is one, else the first row.
         var at = 0
         for (var i = 0; i < window.pickerChoices.length; i++) {
           if (!window.pickerChoices[i].create && window.pickerChoices[i].name === text) at = i
         }
-        pickerList.currentIndex = at
+        picker.currentIndex = at
         var chosen = window.pickerChoices[at]
         window.confirmPicker()
         return chosen ? (chosen.create ? "created " : "added to ") + chosen.name : "nothing to pick"
@@ -429,6 +463,13 @@ FloatingWindow {
       library.setSearchFilter(filter)
       return library.searchFilter
     }
+    // Save a picture of the window as PNG. For tests; runs offscreen too
+    // (QT_QPA_PLATFORM=offscreen). Areas the window colour fills come out
+    // transparent: flatten onto the theme's background to view.
+    function capture(path: string): string {
+      keys.grabToImage(function(result) { result.saveToFile(path) })
+      return "ok"
+    }
     // What is on screen, as JSON. For tests.
     function describe(): string {
       var rows = []
@@ -443,7 +484,7 @@ FloatingWindow {
         state: library.collection.state, pane: window.pane, cursor: tracks.currentIndex,
         history: library.historyIndex + 1 + "/" + library.history.length,
         phase: player.phase, help: window.helpOpen, sidebarShown: prefs.sidebar,
-        helpScroll: Math.round(helpScroll.contentY), helpScrollable: help.scrollable,
+        helpScroll: Math.round(help.scrollY), helpScrollable: help.scrollable,
         helpColumns: help.columns.map(function(column) {
           return column.map(function(section) { return section.title + " (" + section.items.length + ")" })
         }), searchOpen: window.searchOpen, notice: window.noticeText,
@@ -455,6 +496,7 @@ FloatingWindow {
         prompt: window.promptOpen ? window.promptTitle : "", marked: library.markedCount,
         selection: library.markedCount > 0 ? library.selection(-1).map(function(t) { return t.uri }) : [],
         sidebarItem: sidebar.itemAt(sidebar.currentIndex) ? sidebar.itemAt(sidebar.currentIndex).name : "",
+        plate: plate.visible, pool: pool.visible, poolNext: upNext.next, viz: player.vizOn, creatures: prefs.creatures,
         playingArt: player.track && player.track.art_path ? player.track.art_path : "",
         // What `like` and `enqueue` would act on right now.
         subject: library.subject(window.pane === "list" ? tracks.currentIndex : -1)
@@ -466,6 +508,9 @@ FloatingWindow {
     id: keys
     anchors.fill: parent
     focus: true
+
+    // Under everything, so pictures taken with `capture` have it too.
+    Rectangle { anchors.fill: parent; color: Theme.background }
 
     Keys.onPressed: function(event) {
       // The help overlay swallows every key: the moving keys scroll it when
@@ -489,130 +534,23 @@ FloatingWindow {
       visible: prefs.sidebar
       width: visible ? Math.min(Theme.space(280), parent.width * 0.3) : 0
       library: library
-      focused: window.pane === "sidebar"
+      focused: window.pane === "sidebar" && !window.poolShown
       collapsed: window.foldedFolders
       offline: player.offline
       onActivated: window.openSelected()
     }
 
-    // ---- Search: a field, and under it the kind of result to show.
-    Rectangle {
+    SearchBar {
       id: searchBar
       visible: window.searchOpen && player.scope === "player"
       anchors.top: parent.top
       anchors.left: sidebar.right
       anchors.right: parent.right
-      height: visible ? searchRow.height + chips.height + Theme.spacing.md : 0
-      color: Theme.raised
-
-      Item {
-        id: searchRow
-        width: parent.width
-        height: Theme.spacing.rowHeight + Theme.spacing.md
-
-        Text {
-          id: searchIcon
-          anchors.verticalCenter: parent.verticalCenter
-          x: Theme.spacing.huge
-          textFormat: Text.PlainText
-          // nf-md-magnify
-          text: "\uDB80\uDF49"
-          color: Theme.muted
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.icon
-        }
-        // Which search this is, since both share the field.
-        Text {
-          id: searchWhere
-          anchors.verticalCenter: parent.verticalCenter
-          anchors.left: searchIcon.right
-          anchors.leftMargin: Theme.spacing.lg
-          textFormat: Text.PlainText
-          text: library.searchMode === "library" ? "Library" : "Spotify"
-          color: Theme.accent
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.bodySmall
-          font.bold: true
-        }
-        TextInput {
-          id: searchField
-          anchors.verticalCenter: parent.verticalCenter
-          anchors.left: searchWhere.right
-          anchors.leftMargin: Theme.spacing.lg
-          anchors.right: searchHelp.left
-          anchors.rightMargin: Theme.spacing.lg
-          clip: true
-          color: Theme.foreground
-          selectionColor: Theme.selectedFill
-          selectedTextColor: Theme.foreground
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.body
-          onTextEdited: library.search(text, library.searchMode, tracks.currentIndex)
-          Keys.onEscapePressed: window.cancelSearch()
-          Keys.onReturnPressed: window.leaveSearchField()
-          Keys.onDownPressed: window.leaveSearchField()
-          // Tab walks the result types instead of leaving the field.
-          Keys.onTabPressed: library.cycleSearchFilter(1)
-          Keys.onBacktabPressed: library.cycleSearchFilter(-1)
-          Keys.onPressed: function(event) {
-            // Switch between the two searches without leaving the field.
-            if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F) {
-              window.openSearch("library")
-              event.accepted = true
-            }
-          }
-        }
-        Text {
-          id: searchHelp
-          anchors.verticalCenter: parent.verticalCenter
-          anchors.right: parent.right
-          anchors.rightMargin: Theme.spacing.huge
-          textFormat: Text.PlainText
-          text: searchField.activeFocus ? "⇥ type · ⏎ results · Esc cancel" : "/ Spotify · Ctrl F library · t type · Esc cancel"
-          color: Theme.muted
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.caption
-        }
-      }
-
-      Row {
-        id: chips
-        anchors.top: searchRow.bottom
-        x: Theme.spacing.huge
-        spacing: Theme.spacing.md
-
-        Repeater {
-          model: library.searchFilters
-
-          Rectangle {
-            required property string modelData
-            readonly property bool current: library.searchFilter === modelData
-            width: chipText.implicitWidth + Theme.spacing.xl * 2
-            height: chipText.implicitHeight + Theme.spacing.sm * 2
-            radius: height / 2
-            color: current ? Theme.selectedFill : (chipArea.containsMouse ? Theme.hoverFill : "transparent")
-            border.width: 1
-            border.color: current ? Theme.accent : Theme.line
-
-            Text {
-              id: chipText
-              anchors.centerIn: parent
-              textFormat: Text.PlainText
-              text: parent.modelData.charAt(0).toUpperCase() + parent.modelData.slice(1)
-              color: parent.current ? Theme.accent : Theme.muted
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.caption
-            }
-            MouseArea {
-              id: chipArea
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: library.setSearchFilter(parent.modelData)
-            }
-          }
-        }
-      }
+      library: library
+      cursor: tracks.currentIndex
+      onCancelled: window.cancelSearch()
+      onFinished: window.leaveSearchField()
+      onSwitchTo: function(mode) { window.openSearch(mode) }
     }
 
     TrackList {
@@ -620,8 +558,8 @@ FloatingWindow {
       anchors.top: searchBar.bottom
       anchors.bottom: nowPlaying.top
       anchors.left: sidebar.right
-      anchors.right: parent.right
-      visible: player.scope === "player"
+      anchors.right: plate.left
+      visible: player.scope === "player" && !window.poolShown
       library: library
       player: player
       covers: prefs.covers
@@ -680,9 +618,8 @@ FloatingWindow {
       anchors.horizontalCenter: tracks.horizontalCenter
       width: Math.min(toast.implicitWidth + Theme.spacing.huge * 2, tracks.width - Theme.spacing.huge * 2)
       height: toast.implicitHeight + Theme.spacing.lg * 2
-      radius: Theme.spacing.sm
       color: Theme.raised
-      border.width: 1
+      border.width: Theme.stroke.hair
       border.color: window.noticeIsError ? Theme.urgent : Theme.border
       z: 5
 
@@ -699,13 +636,43 @@ FloatingWindow {
       }
     }
 
+    // ---- The playing track as a specimen, when there is room and visuals are on.
+    SpecimenPlate {
+      id: plate
+      // Wide enough that the list keeps most of the window.
+      readonly property bool room: window.width >= Theme.space(1000)
+      visible: room && prefs.plate && Visuals.drawn(window.visuals) && player.scope === "player" && !window.poolShown
+      anchors.top: searchBar.bottom
+      anchors.bottom: nowPlaying.top
+      anchors.right: parent.right
+      width: visible ? Theme.space(260) : 0
+      player: player
+      moving: Visuals.moving(window.visuals)
+      creatures: prefs.creatures
+      live: window.visible && screen.shown
+    }
+
+    PoolView {
+      id: pool
+      visible: window.poolShown
+      anchors.top: searchBar.bottom
+      anchors.bottom: nowPlaying.top
+      anchors.left: sidebar.right
+      anchors.right: parent.right
+      player: player
+      nextSeed: upNext.next
+      drawn: Visuals.drawn(window.visuals)
+      moving: Visuals.moving(window.visuals)
+      creatures: prefs.creatures
+      live: window.visible && screen.shown
+    }
+
     NowPlayingBar {
       id: nowPlaying
       anchors.bottom: hints.top
       width: parent.width
       player: player
-      live: window.visible
-      visuals: prefs.creatures
+      live: window.visible && screen.shown
       liked: library.playingLiked
       onLikeRequested: library.toggleLike(-1)
       onAlbumRequested: { library.openRelated("album", -1); window.pane = "list" }
@@ -733,382 +700,36 @@ FloatingWindow {
         fontFamily: Theme.font.family
         fontSize: Theme.font.caption
         gap: Theme.spacing.xs
+        corner: 0
       }
     }
 
-    // ---- Playlist picker: type to narrow, arrows to move, Enter to add.
-    Rectangle {
+    PlaylistPicker {
+      id: picker
       visible: window.pickerOpen
-      anchors.fill: parent
-      color: Theme.alpha(Theme.background, 0.88)
       z: 8
-
-      MouseArea { anchors.fill: parent; onClicked: window.closePicker() }
-
-      Rectangle {
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Theme.spacing.huge * 4, Theme.space(460))
-        height: Math.min(parent.height - Theme.spacing.huge * 4, Theme.space(480))
-        color: Theme.raised
-        border.width: 1
-        border.color: Theme.border
-        radius: Theme.spacing.sm
-
-        MouseArea { anchors.fill: parent }
-
-        Column {
-          id: pickerHead
-          x: Theme.spacing.huge
-          y: Theme.spacing.xxl
-          width: parent.width - Theme.spacing.huge * 2
-          spacing: Theme.spacing.md
-
-          Text {
-            width: parent.width
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            text: window.pickerTracks.length === 0 ? ""
-              : "Add " + (window.pickerTracks.length === 1 ? "\u201C" + window.pickerTracks[0].title + "\u201D"
-                : window.pickerTracks.length + " tracks") + " to\u2026"
-            color: Theme.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.title
-            font.bold: true
-          }
-          Rectangle {
-            width: parent.width
-            height: Theme.spacing.rowHeight
-            color: Theme.sunken
-            radius: Theme.spacing.xs
-
-            TextInput {
-              id: pickerFilter
-              anchors.verticalCenter: parent.verticalCenter
-              x: Theme.spacing.lg
-              width: parent.width - Theme.spacing.lg * 2
-              clip: true
-              color: Theme.foreground
-              selectionColor: Theme.selectedFill
-              selectedTextColor: Theme.foreground
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.body
-              onTextEdited: pickerList.currentIndex = 0
-              Keys.onEscapePressed: window.closePicker()
-              Keys.onReturnPressed: window.confirmPicker()
-              Keys.onDownPressed: pickerList.currentIndex = Math.min(pickerList.count - 1, pickerList.currentIndex + 1)
-              Keys.onUpPressed: pickerList.currentIndex = Math.max(0, pickerList.currentIndex - 1)
-            }
-            Text {
-              visible: pickerFilter.text === ""
-              anchors.verticalCenter: parent.verticalCenter
-              x: Theme.spacing.lg
-              textFormat: Text.PlainText
-              text: "Type to narrow the list, or a name for a new playlist"
-              color: Theme.muted
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.body
-            }
-          }
-        }
-
-        ListView {
-          id: pickerList
-          anchors.top: pickerHead.bottom
-          anchors.topMargin: Theme.spacing.lg
-          anchors.bottom: pickerFoot.top
-          anchors.bottomMargin: Theme.spacing.lg
-          width: parent.width
-          clip: true
-          model: window.pickerChoices.length
-          boundsBehavior: Flickable.StopAtBounds
-          highlightMoveDuration: 0
-
-          delegate: Rectangle {
-            id: choice
-            required property int index
-            readonly property var playlist: window.pickerChoices[index]
-            width: pickerList.width
-            height: Theme.spacing.rowHeight
-            color: ListView.isCurrentItem ? Theme.selectedFill
-              : (choiceArea.containsMouse ? Theme.hoverFill : "transparent")
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              x: Theme.spacing.huge
-              width: parent.width - Theme.spacing.huge * 2 - choiceCount.width
-              elide: Text.ElideRight
-              textFormat: Text.PlainText
-              text: !choice.playlist ? "" : (choice.playlist.create
-                ? "+ Create \u201C" + choice.playlist.name + "\u201D" : choice.playlist.name)
-              color: choice.playlist && choice.playlist.create ? Theme.accent : Theme.foreground
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.body
-            }
-            Text {
-              id: choiceCount
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.right: parent.right
-              anchors.rightMargin: Theme.spacing.huge
-              textFormat: Text.PlainText
-              text: choice.playlist && !choice.playlist.create && choice.playlist.length !== null
-                && choice.playlist.length !== undefined ? String(choice.playlist.length) : ""
-              color: Theme.muted
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.bodySmall
-            }
-            MouseArea {
-              id: choiceArea
-              anchors.fill: parent
-              hoverEnabled: true
-              onClicked: {
-                pickerList.currentIndex = choice.index
-                window.confirmPicker()
-              }
-            }
-          }
-        }
-
-        Text {
-          id: pickerFoot
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: Theme.spacing.xl
-          x: Theme.spacing.huge
-          textFormat: Text.PlainText
-          text: window.pickerChoices.length === 0 ? "No playlist of yours matches"
-            : "\u2191 \u2193 move \u00b7 \u23ce add \u00b7 Esc cancel"
-          color: Theme.muted
-          font.family: Theme.font.family
-          font.pixelSize: Theme.font.caption
-        }
-      }
+      playlists: library.editablePlaylists
+      tracks: window.pickerTracks
+      onConfirmed: window.confirmPicker()
+      onCancelled: window.closePicker()
     }
 
-    // ---- A one-line question
-    Rectangle {
+    Prompt {
+      id: prompt
       visible: window.promptOpen
-      anchors.fill: parent
-      color: Theme.alpha(Theme.background, 0.88)
       z: 9
-
-      MouseArea { anchors.fill: parent; onClicked: window.closePrompt() }
-
-      Rectangle {
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Theme.spacing.huge * 4, Theme.space(460))
-        height: promptBody.implicitHeight + Theme.spacing.xxl * 2
-        color: Theme.raised
-        border.width: 1
-        border.color: Theme.border
-        radius: Theme.spacing.sm
-
-        MouseArea { anchors.fill: parent }
-
-        Column {
-          id: promptBody
-          x: Theme.spacing.huge
-          y: Theme.spacing.xxl
-          width: parent.width - Theme.spacing.huge * 2
-          spacing: Theme.spacing.lg
-
-          Text {
-            width: parent.width
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            text: window.promptTitle
-            color: Theme.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.title
-            font.bold: true
-          }
-          Rectangle {
-            width: parent.width
-            height: Theme.spacing.rowHeight
-            color: Theme.sunken
-            radius: Theme.spacing.xs
-
-            TextInput {
-              id: promptField
-              anchors.verticalCenter: parent.verticalCenter
-              x: Theme.spacing.lg
-              width: parent.width - Theme.spacing.lg * 2
-              clip: true
-              color: Theme.foreground
-              selectionColor: Theme.selectedFill
-              selectedTextColor: Theme.foreground
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.body
-              Keys.onEscapePressed: window.closePrompt()
-              Keys.onReturnPressed: window.confirmPrompt()
-            }
-          }
-          Text {
-            textFormat: Text.PlainText
-            text: "\u23ce confirm \u00b7 Esc cancel"
-            color: Theme.muted
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-          }
-        }
-      }
+      eyebrow: window.promptEyebrow
+      title: window.promptTitle
+      onConfirmed: window.confirmPrompt()
+      onCancelled: window.closePrompt()
     }
 
-    // ---- Every key, on demand, in sections. Any key or click closes it.
-    Rectangle {
+    HelpOverlay {
       id: help
-      visible: window.helpOpen
-      anchors.fill: parent
-      color: Theme.alpha(Theme.background, 0.94)
       z: 10
-
-      MouseArea { anchors.fill: parent; onClicked: window.helpOpen = false }
-
-      // As many columns as fit, three at most.
-      readonly property int columnCount: Math.max(1, Math.min(3, Math.floor((width - Theme.spacing.huge * 2) / Theme.space(300))))
-      readonly property var columns: window.helpOpen ? Keymap.columns(window.scopes, columnCount) : []
-      readonly property bool scrollable: helpScroll.contentHeight > helpScroll.height + 1
-      onVisibleChanged: helpScroll.contentY = 0
-
-      // Scroll for a moving action. False when the key should close instead:
-      // it is not a moving key, or everything is already on screen.
-      function scroll(action) {
-        if (!scrollable) return false
-        var end = helpScroll.contentHeight - helpScroll.height
-        var step = Theme.space(80)
-        var to
-        switch (action) {
-        case "down": to = helpScroll.contentY + step; break
-        case "up": to = helpScroll.contentY - step; break
-        case "pageDown": to = helpScroll.contentY + helpScroll.height * 0.8; break
-        case "pageUp": to = helpScroll.contentY - helpScroll.height * 0.8; break
-        case "top": to = 0; break
-        case "bottom": to = end; break
-        default: return false
-        }
-        helpScroll.contentY = Math.max(0, Math.min(end, to))
-        return true
-      }
-
-      Flickable {
-        id: helpScroll
-        anchors.fill: parent
-        anchors.margins: Theme.spacing.huge
-        contentHeight: helpBody.implicitHeight
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-
-        Column {
-          id: helpBody
-          width: Math.min(helpScroll.width, Theme.space(1000))
-          anchors.horizontalCenter: parent.horizontalCenter
-          spacing: Theme.spacing.huge
-
-          Row {
-            width: parent.width
-            Text {
-              textFormat: Text.PlainText
-              text: "Keyboard"
-              color: Theme.foreground
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.heading
-              font.bold: true
-            }
-            Text {
-              anchors.baseline: parent.children[0].baseline
-              leftPadding: Theme.spacing.xxl
-              textFormat: Text.PlainText
-              text: help.scrollable ? Keymap.keyLabel("down") + " " + Keymap.keyLabel("up") + " scroll · any other key closes"
-                : "press any key to close"
-              color: Theme.muted
-              font.family: Theme.font.family
-              font.pixelSize: Theme.font.bodySmall
-            }
-          }
-
-          Row {
-            id: helpColumns
-            width: parent.width
-            spacing: Theme.spacing.huge * 2
-            readonly property real columnWidth: (width - spacing * (help.columnCount - 1)) / help.columnCount
-
-            Repeater {
-              model: help.columns
-
-              Column {
-                id: helpColumn
-                required property var modelData
-                width: helpColumns.columnWidth
-                spacing: Theme.spacing.huge
-
-                Repeater {
-                  model: helpColumn.modelData
-
-                  // One section: a title, then its keys.
-                  Column {
-                    id: section
-                    required property var modelData
-                    width: helpColumn.width
-                    spacing: Theme.spacing.md
-
-                    Text {
-                      textFormat: Text.PlainText
-                      text: section.modelData.title.toUpperCase()
-                      color: Theme.accent
-                      font.family: Theme.font.family
-                      font.pixelSize: Theme.font.caption
-                      font.letterSpacing: 1
-                    }
-                    Rectangle { width: parent.width; height: 1; color: Theme.line }
-
-                    Repeater {
-                      model: section.modelData.items
-
-                      Row {
-                        id: entry
-                        required property var modelData
-                        width: section.width
-                        spacing: Theme.spacing.xl
-
-                        // Every key that does it, right-aligned in a fixed
-                        // column so the labels line up.
-                        Item {
-                          width: Theme.space(92)
-                          height: caps.implicitHeight
-                          Row {
-                            id: caps
-                            anchors.right: parent.right
-                            spacing: Theme.spacing.xs
-                            Repeater {
-                              model: entry.modelData.keys
-                              KeyCap {
-                                required property string modelData
-                                label: modelData
-                                foreground: Theme.foreground
-                                fontFamily: Theme.font.family
-                                fontSize: Theme.font.bodySmall
-                                padding: Theme.spacing.sm
-                              }
-                            }
-                          }
-                        }
-                        Text {
-                          width: entry.width - Theme.space(92) - entry.spacing
-                          anchors.verticalCenter: parent.verticalCenter
-                          wrapMode: Text.WordWrap
-                          textFormat: Text.PlainText
-                          text: entry.modelData.label
-                          color: Theme.foreground
-                          font.family: Theme.font.family
-                          font.pixelSize: Theme.font.body
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+      open: window.helpOpen
+      scopes: window.scopes
+      onCloseRequested: window.helpOpen = false
     }
   }
 }

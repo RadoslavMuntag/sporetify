@@ -15,9 +15,12 @@ Current state: M0 and M1 are done (sign-in, playback, bar controls,
 mini-player, MPRIS, resume); the full app has a working first version
 (library sidebar, track lists, play from a list, library search, now-playing
 bar); see
-`.claude/architecture/06-roadmap.md` for what exists and what is next. This
-file holds the rules; the working architecture
-plan lives in `.claude/architecture/` (start at its `README.md`). When a
+`.claude/architecture/06-roadmap.md` for what exists and what is next. The
+look follows the Field Guide direction; its milestones (V0–V8) are in
+`.claude/architecture/08-design.md`. A third surface, the **compact player**
+(`sporetify --compact`), is a small now-playing window for showing off a
+desktop. This file holds the rules; the working architecture plan lives in
+`.claude/architecture/` (start at its `README.md`). When a
 decision changes, update both in the same change.
 
 ## Priorities (in this order)
@@ -84,10 +87,17 @@ BarWidget.qml        bar widget
 MiniPlayer.qml       popup opened from the bar
 App.qml              entry point of the full app (`qs -p App.qml`); at the root so
                      that app/ and common/ are both inside its config folder
-app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar
+Compact.qml          entry point of the compact player (`qs -p Compact.qml`)
+Gallery.qml          every visual part in every state, for judging a change by eye
+app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar,
+                     SearchBar, PlaylistPicker, Prompt, HelpOverlay, SpecimenPlate, PoolView,
+                     Sheet (modal card), Field (ruled text field), Bracket (cursor),
+                     Slider, Ruler
+compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
-                     Organism
+                     Organism, Lens, TidePool, UpNext, Spectrum, Specimen.js, Visuals.js,
+                     OnScreen
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
 scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
@@ -98,6 +108,7 @@ assets/sporetify.svg the icon, installed for the menu entry
 preview.png          the picture plugin listings show (app and mini-player composed)
 CHANGELOG.md         one section per version
 docs/screenshots/    the pictures the README shows
+docs/agents/         where the engineering skills find the issue tracker, labels and domain docs
 bin/sporetify        launcher: focus the running app or start it
 tests/               qmltestrunner tests (tst_*.qml) and lint.sh
 .claude/architecture/  architecture plan, protocol draft, visual language, roadmap
@@ -183,17 +194,18 @@ Default keys (app and mini-player):
 | `m` | Mute | `Tab` | Next pane |
 | `←` / `→` | Seek ±10 s | `?` | Shortcut help |
 | `s` / `r` | Shuffle / repeat | `Esc` | Cancel search (app), close (mini-player) |
-| `Ctrl C` | Quit the app | | |
+| `Ctrl C` | Quit the app | `z` | Tide pool in the lens (app, compact player) |
 
 Global control goes through the plugin's IPC target so Hyprland binds work
 without any window open:
 
 ```bash
-omarchy shell -q sporetify playPause | next | previous | volumeUp | volumeDown | toggleMini | toggleApp
+omarchy shell -q sporetify playPause | next | previous | volumeUp | volumeDown | toggleMini | toggleApp | toggleCompact
 ```
 
-`toggleApp` focuses the app window or starts it. Also available: `mute`, `signIn`,
-`status`, `nowPlaying`, `wake`.
+`toggleApp` focuses the app window or starts it; `toggleCompact` closes the
+compact player or starts it. Also available: `mute`, `signIn`, `status`,
+`nowPlaying`, `wake`.
 
 Hyprland binds belong to the user (`~/.config/hypr/bindings.lua`,
 `o.bind("SUPER + SHIFT + M", "Sporetify", "omarchy shell -q sporetify toggleApp")`).
@@ -268,16 +280,30 @@ Full detail is in `.claude/architecture/05-visuals.md`; the essentials:
   spatial view exists; the visuals decorate the app, they are never the only
   way to do something.
 
+**Direction: Field Guide** (decision D16). Every track is a specimen:
+hairline rules, catalogue numbers from the track id, the creature drawn as
+line art under a lens whose tick ring is the progress bar. The tide pool
+lives inside the lens (now playing, screensaver); the app's chrome stays
+flat and square, as Omarchy's is.
+
 Built so far: the per-track creature (`common/Organism.js` and
-`Organism.qml`) in the bar, mini-player and app. To judge a change to it,
-render a grid of them in a scratch Quickshell config and look.
+`Organism.qml`, filled or line art) in the bar, mini-player and app; the
+lens (`common/Lens.qml`) and the music (`viz` frames from the daemon's
+audio tap, drawn by `common/Spectrum.qml`) in the compact player and the
+app's specimen plate; the app's lists in the Field Guide manner (rules,
+brackets, catalogue numbers, the ruler). Raise
+`Player.vizWanted` only while a surface is visible, playing and at full
+visuals: the daemon analyses audio only while someone subscribes. To judge a change, look at
+`Gallery.qml` (it can also save a picture of itself, see the file).
 
 Technical limits for all visuals:
 
 - GPU only: `ShaderEffect` / `MultiEffect` and property animations. No
   per-frame JavaScript, no `Canvas` repaint loops.
 - Animate only while visible **and** playing. Hidden, occluded or paused means
-  zero frames rendered.
+  zero frames rendered. A window on a hidden workspace draws nothing but its
+  animations still tick: tie them to `OnScreen.shown` as well as to
+  `visible`.
 - Every visual has an off switch in settings and the app is fully usable with
   all of them off. Transitions stay ≤ 150 ms and never delay input.
 
@@ -295,7 +321,9 @@ omarchy shell sporetify status                   # ask the running plugin for it
 omarchy-shell shell rescanPlugins                # force a plugin reload (saves auto-reload)
 
 sporetify                # open the full app (focuses it if already running)
+sporetify --compact      # open the compact player (--compact-toggle closes it if open)
 qs -p App.qml            # run the app from the checkout, logs in the terminal
+qs -p Gallery.qml        # look at every visual part
 
 # talk to the daemon by hand
 socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/sporetify.sock
@@ -352,6 +380,10 @@ Things that bite:
   plugin's files, which only resolve inside omarchy-shell. Harmless.
 - `hyprctl clients` reports logical pixels; multiply by the monitor scale
   before cropping a `grim` screenshot.
+- `qs ipc --pid <pid> call sporetify.app capture <png>` saves a picture of
+  the app, also when it runs offscreen; with `HOME` pointed at another
+  theme (below) and the demo daemon, a change can be judged in any theme
+  without a window on the desktop.
 - Drive the app in tests over its IPC target, not with injected keys:
   `qs ipc --pid <pid> call sporetify.app act <action>` and `... describe`.
   It needs no focus and works with the screen off. `grim` hangs when the
@@ -359,8 +391,20 @@ Things that bite:
 - To test without touching the installed daemon, run a second one on another
   socket and start the app with `SPORETIFY_SOCKET=<path> qs -p App.qml`. It
   is silent as long as nothing is played on it.
-- Quickshell reloads a running app when its QML files change, which resets
-  the app's state.
+- Do not count on a running app reloading when its QML files change: on
+  2026-11-04 an edit to `common/Lens.qml` left the owner's app on the old
+  code. Restart it (or a test copy) to see a change.
+- A `MultiEffect` takes its `maskSource` when it is created. A mask whose
+  `layer.enabled` turns on later is never picked up and the effect draws
+  nothing (the lens's cover with creatures switched off while running).
+  Create the effect together with its mask, e.g. in one `Loader`.
+- To see a `ShaderEffect` / `MultiEffect` on the GPU without disturbing
+  the owner (hidden workspaces draw nothing, `minimalegl` fails): copy
+  `app/` and `common/` to a scratch folder with a tiny harness that
+  saves `grabToImage` and quits, and start it small, floating and
+  unfocused: `hyprctl dispatch 'hl.dsp.exec_cmd("<cmd>", { float = true,
+  size = { 320, 320 }, move = { 20, 60 }, no_initial_focus = true })'`.
+  It shows on the owner's screen for a moment, so ask first.
 - **Plugin hot reload is not reliable for this plugin.** The shell keeps a
   running service across reloads, and edited widget files were observed to
   keep their old contents. After changing any plugin QML, run
@@ -377,6 +421,23 @@ Things that bite:
 - The daemon runs on a `LocalSet` because MPRIS callbacks are not `Send`.
   Request handlers run under `tokio::spawn`, where `spawn_local` panics; use
   `tokio::spawn` from them.
+- `scripts/demo-daemon.py` needs Pillow, which is not installed system-wide:
+  `uv run --with pillow python3 scripts/demo-daemon.py <socket>`.
+- A Unix socket path is limited to 108 bytes; a socket deep in a temp
+  folder fails with "server not found". Keep test socket paths short.
+- **Visual checks without a window on the desktop:** `QT_QPA_PLATFORM=offscreen`
+  renders (in software) and still answers IPC, but its software renderer
+  skips every `ShaderEffect` / `MultiEffect` (a masked cover comes out
+  empty); check those in a real window, and asking it to use the GPU
+  (`QT_QUICK_BACKEND=rhi`) hangs; `Gallery.qml` saves a picture
+  with `SPORETIFY_GALLERY_SHOT=<png>`. CPU measured offscreen is not what a
+  real window costs. To measure a real window without disturbing the
+  owner's layout, start it on a hidden special workspace:
+  `hyprctl dispatch 'hl.dsp.exec_cmd("<cmd>", { workspace = "special:test silent" })'`.
+- Quickshell's Hyprland model (`Hyprland.monitors`, a monitor's
+  `activeWorkspace` and `lastIpcObject`) stays empty on Hyprland 0.56 until
+  the user switches workspace. Ask `hyprctl` instead (see
+  `common/OnScreen.qml`); the module's `rawEvent` stream is fine.
 - Run a second daemon for experiments with
   `sporetifyd --socket /tmp/x.sock --debug-ops`. Add `--no-connect` to test
   offline behaviour.
@@ -440,3 +501,17 @@ both a dark and a light theme (`omarchy theme set <name>`).
 - Plugins run unsandboxed inside `omarchy-shell`. Do not add install hooks,
   network calls from QML, or anything that runs at shell start beyond a cheap
   service mount.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `RadoslavMuntag/sporetify`, through `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label named after its role (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. Decisions are the D-numbered table in `.claude/architecture/README.md`, not `docs/adr/`. See `docs/agents/domain.md`.

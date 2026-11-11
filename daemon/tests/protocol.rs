@@ -268,6 +268,35 @@ async fn subscribe_and_unsubscribe_report_the_current_topics() {
 }
 
 #[tokio::test]
+async fn viz_frames_reach_subscribers_only_while_subscribed() {
+    use sporetifyd::viz::Frame;
+
+    let server = Server::start();
+    let delivery = server.shared.clone();
+    tokio::spawn(async move { delivery.viz.deliver().await });
+    let mut client = server.client().await;
+    assert!(!server.shared.viz.wanted(), "nobody has asked yet");
+
+    client.send(json!({"id": 1, "op": "subscribe", "args": {"topics": ["viz"]}, "deadline_ms": 1000})).await;
+    assert_eq!(client.recv().await["data"]["topics"], json!(["viz"]));
+    assert!(server.shared.viz.wanted());
+
+    let mut frame = Frame::silent();
+    frame.bands[0] = 0.5;
+    frame.beat = 1.0;
+    server.shared.viz.schedule(Instant::now(), &frame);
+    let got = client.recv().await;
+    assert_eq!(got["ev"], "viz");
+    assert_eq!(got["bands"][0], 0.5);
+    assert_eq!(got["beat"], 1.0);
+    assert_eq!(got["bands"].as_array().map(Vec::len), Some(sporetifyd::viz::BANDS));
+
+    client.send(json!({"id": 2, "op": "unsubscribe", "args": {"topics": ["viz"]}, "deadline_ms": 1000})).await;
+    assert_eq!(client.recv().await["data"]["topics"], json!([]));
+    assert!(!server.shared.viz.wanted(), "the tap must go quiet again");
+}
+
+#[tokio::test]
 async fn an_oversized_line_closes_the_connection() {
     let server = Server::start();
     let mut client = server.client().await;

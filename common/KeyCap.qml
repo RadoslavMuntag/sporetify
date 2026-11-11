@@ -11,11 +11,13 @@ Rectangle {
   property string fontFamily
   property int fontSize
   property int padding
+  // Corner rounding; the app's Field Guide look uses square caps.
+  property real corner: padding
 
   visible: label !== ""
   implicitWidth: Math.max(implicitHeight, text.implicitWidth + padding * 2)
   implicitHeight: text.implicitHeight + padding
-  radius: padding
+  radius: corner
   color: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.08)
   border.width: 1
   border.color: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.25)

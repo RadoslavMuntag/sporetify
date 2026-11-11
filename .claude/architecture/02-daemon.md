@@ -22,12 +22,12 @@ Built:
 | `art` | Cover images fetched once and kept as files |
 | `private` | Writes files only the user may read, and closes older ones at start |
 | `mpris` | MPRIS server mirroring `state`, calling the same commands as the socket |
+| `viz` | Audio tap around the sink: 16 band energies and a beat, 30 Hz, timed to when the audio is heard; analyses only while a client subscribes (an FFT; 0.20 % of a core when it does) |
 
 Planned, not built:
 
 | Module | Responsibility |
 | --- | --- |
-| `viz` | Band energies and beat pulses from the playback path, for subscribers only |
 | `remote` | Player state when another Connect device is the active one |
 | `api` | Optional public Web API client, only with a user-supplied client id |
 

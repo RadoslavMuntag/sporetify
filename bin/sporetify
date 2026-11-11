@@ -3,16 +3,46 @@
 # Open the Sporetify app: focus its window if it is already running,
 # otherwise start it. With a Spotify link as the argument (spotify:album:...
 # or https://open.spotify.com/...), also show that link.
+#
+#   sporetify --compact          focus the compact player, or start it
+#   sporetify --compact-toggle   close the compact player, or start it
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+# "<address> <pid>" of the first window of this class, or nothing.
+find_window() {
+  hyprctl clients -j 2>/dev/null | jq -r --arg class "$1" \
+    '[.[] | select(.class == $class)][0] | select(. != null) | "\(.address) \(.pid)"'
+}
+
+focus() {
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$1\" })" >/dev/null 2>&1 ||
+    hyprctl dispatch focuswindow "address:$1" >/dev/null 2>&1
+}
+
+case "$1" in
+--compact | --compact-toggle)
+  window=$(find_window sporetify-compact)
+  if [[ -n $window ]]; then
+    read -r address pid <<<"$window"
+    if [[ $1 == --compact-toggle ]]; then
+      qs ipc --pid "$pid" call sporetify.compact close >/dev/null 2>&1
+    else
+      focus "$address"
+    fi
+    exit 0
+  fi
+  exec setsid qs -p "$ROOT/Compact.qml" >/dev/null 2>&1
+  ;;
+esac
+
 link="$1"
 
-window=$(hyprctl clients -j 2>/dev/null | jq -r '[.[] | select(.class == "sporetify")][0] | select(. != null) | "\(.address) \(.pid)"')
+window=$(find_window sporetify)
 if [[ -n $window ]]; then
   read -r address pid <<<"$window"
   [[ -z $link ]] || qs ipc --pid "$pid" call sporetify.app open "$link" >/dev/null 2>&1
-  hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })" >/dev/null 2>&1 ||
-    hyprctl dispatch focuswindow "address:$address" >/dev/null 2>&1
+  focus "$address"
   exit 0
 fi
 

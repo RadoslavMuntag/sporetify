@@ -46,7 +46,8 @@ TestCase {
   }
 
   function test_scopes_shown_together_share_no_key() {
-    var together = [["browse", "player", "app"], ["mini", "player", "popup"]]
+    var together = [["browse", "player", "app"], ["mini", "player", "popup"], ["compact", "mini", "player"],
+      ["signedOut", "compact"], ["fault", "compact"], ["pool", "player", "app"]]
     for (var t = 0; t < together.length; t++) {
       var seen = {}
       for (var i = 0; i < Keymap.actions.length; i++) {
@@ -58,6 +59,31 @@ TestCase {
         }
       }
     }
+  }
+
+  // The compact player is a window: q and Ctrl C close it, Esc does not.
+  function test_compact_player_keys() {
+    var scopes = ["compact", "mini", "player"]
+    compare(Keymap.actionFor(Qt.Key_Q, "q", scopes), "compactClose")
+    compare(Keymap.actionFor(Qt.Key_C, "\u0003", scopes, Qt.ControlModifier), "compactClose")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", scopes), null)
+    compare(Keymap.actionFor(Qt.Key_Question, "?", scopes), "compactKeys")
+    compare(Keymap.actionFor(Qt.Key_Space, " ", scopes), "playPause")
+    compare(Keymap.actionFor(Qt.Key_O, "o", scopes), "openApp")
+    compare(Keymap.actionFor(Qt.Key_Z, "z", scopes), "compactPool")
+  }
+
+  // The tide pool view: z goes in and out, Esc backs out, the list's keys
+  // do nothing while it is not on screen.
+  function test_tide_pool_keys() {
+    compare(Keymap.actionFor(Qt.Key_Z, "z", ["browse", "player", "app"]), "pool")
+    var pool = ["pool", "player", "app"]
+    compare(Keymap.actionFor(Qt.Key_Z, "z", pool), "poolClose")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", pool), "cancel")
+    compare(Keymap.actionFor(Qt.Key_Question, "?", pool), "poolKeys")
+    compare(Keymap.actionFor(Qt.Key_Space, " ", pool), "playPause")
+    compare(Keymap.actionFor(Qt.Key_Return, "", pool), null)
+    compare(Keymap.actionFor(Qt.Key_J, "j", pool), null)
   }
 
   function test_primary_hints_are_a_subset() {
@@ -82,7 +108,7 @@ TestCase {
     compare(Keymap.actionFor(Qt.Key_J, "j", ["browse", "player"]), "down")
     compare(Keymap.actionFor(Qt.Key_K, "K", ["browse", "player"]), "moveUp")
     compare(Keymap.actionFor(Qt.Key_V, "V", ["browse", "player"]), "mark")
-    compare(Keymap.actionFor(Qt.Key_V, "v", ["browse", "player"]), "creatures")
+    compare(Keymap.actionFor(Qt.Key_V, "v", ["browse", "player"]), "visuals")
     compare(Keymap.actionFor(Qt.Key_N, "N", ["browse", "player"]), "newPlaylist")
     compare(Keymap.actionFor(Qt.Key_N, "n", ["browse", "player"]), "next")
     compare(Keymap.actionFor(Qt.Key_F2, "", ["browse", "player"]), "rename")
@@ -155,6 +181,21 @@ TestCase {
         if (action.scope !== "any") verify(!seen["any/" + action.keys[k]], action.keys[k] + " shadows a global key")
       }
     }
+  }
+
+  function test_a_text_field_takes_only_its_own_keys() {
+    compare(Keymap.actionFor(Qt.Key_Return, "\r", "field"), "fieldAccept")
+    compare(Keymap.actionFor(Qt.Key_Enter, "\r", "field"), "fieldAccept")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", "field"), "fieldCancel")
+    compare(Keymap.actionFor(Qt.Key_Up, "", "field"), "fieldUp")
+    compare(Keymap.actionFor(Qt.Key_Down, "", "field"), "fieldDown")
+    compare(Keymap.actionFor(Qt.Key_Tab, "\t", "field"), "fieldNext")
+    compare(Keymap.actionFor(Qt.Key_Backtab, "", "field"), "fieldPrevious")
+    // Letters and the browse keys are typed, not taken.
+    compare(Keymap.actionFor(Qt.Key_J, "j", "field"), null)
+    compare(Keymap.actionFor(Qt.Key_Space, " ", "field"), null)
+    // Its hints are built from the same table.
+    compare(Keymap.keyLabel("fieldAccept") + " " + Keymap.keyLabel("fieldCancel"), "⏎ Esc")
   }
 
   function test_hints_come_from_the_same_table() {

@@ -11,8 +11,6 @@ Rectangle {
   required property var player
   // Whether the window is showing, so the clock only ticks when seen.
   property bool live: true
-  // Whether creatures are drawn at all.
-  property bool visuals: true
   // The user clicked the title (album) or the artist line.
   signal albumRequested()
   signal artistRequested()
@@ -46,6 +44,7 @@ Rectangle {
     fontFamily: Theme.font.family
     fontSize: Theme.font.caption
     padding: Theme.spacing.xs
+    corner: 0
   }
 
   Item {
@@ -70,29 +69,12 @@ Rectangle {
       asynchronous: true
     }
 
-    // ---- The track's creature
-    Organism {
-      id: creature
-      visible: root.visuals && root.track !== null
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.left: cover.right
-      anchors.leftMargin: cover.visible ? Theme.spacing.lg : 0
-      width: visible ? Theme.space(46) : 0
-      height: Theme.space(46)
-      seed: root.track ? root.track.id : ""
-      alive: visible && root.live && root.player.playing
-      awake: root.player.playing
-      palette: Theme.creatureColors
-      eye: Theme.foreground
-      pupil: Theme.sunken
-    }
-
     // ---- Track
     Column {
       anchors.verticalCenter: parent.verticalCenter
-      anchors.left: creature.right
-      anchors.leftMargin: creature.visible ? Theme.spacing.xl : 0
-      width: parent.width * 0.28 - creature.width - cover.width - anchors.leftMargin - creature.anchors.leftMargin
+      anchors.left: cover.right
+      anchors.leftMargin: cover.visible ? Theme.spacing.xl : 0
+      width: parent.width * 0.28 - cover.width - anchors.leftMargin
       spacing: Theme.spacing.xs
 
       Text {
@@ -187,10 +169,11 @@ Rectangle {
           font.family: Theme.font.family
           font.pixelSize: Theme.font.caption
         }
-        Slider {
+        Ruler {
           id: seek
           anchors.verticalCenter: parent.verticalCenter
           width: parent.width - elapsed.width - remaining.width - parent.spacing * 2
+          durationMs: root.track ? root.track.duration_ms : 0
           value: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
           // Seeking commits on release so a drag does not re-buffer per frame.
           onReleased: function(value) {
