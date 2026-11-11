@@ -132,16 +132,20 @@ Original scope:
 Exit: app opens to a full library with the network unplugged; the soak test
 passes; scrolling a 5 000-track playlist stays smooth.
 
-## M4 · Spore visuals (organisms done)
+## M4 · Spore visuals (organisms done; continued as V1–V8)
 
 Built: the organism generator and component, shown in the bar, mini-player
 and app, with off switches (see "What exists" in
 [05-visuals.md](05-visuals.md)).
 
-Still to do: audio reactivity (needs the daemon's `viz` tap), the helix
-loader, the tide-pool now-playing view, zoom transitions, collection-level
-visuals (album, artist, playlist), the galaxy view, a `reduced` setting
-between on and off, and measuring the cost on integrated graphics.
+Since 2026-11-03 the visuals follow the Field Guide milestones in
+[08-design.md](08-design.md), which built (on `design-field-guide`) audio
+reactivity through the daemon's `viz` tap (V3), the tide pool inside the
+lens (V5) and a `reduced` setting between full and off (V1).
+
+Still to do: the helix loader and zoom transitions (V6), collection-level
+visuals (album, artist, playlist), the galaxy view, and measuring the cost
+on integrated graphics.
 
 Original scope:
 
@@ -183,8 +187,10 @@ dragging, editing a playlist's description or picture, folders.
 
 Built: `scripts/setup.sh` and `scripts/uninstall.sh` for users, the release
 workflow, the changelog, and a README written for people who are not the
-author. `spotify:` links and an icon followed. No release has
-been tagged.
+author. `spotify:` links and an icon followed. Released: 0.1.0
+(2026-10-12) and 0.1.1 (2026-10-13), published as GitHub releases with the
+daemon attached; setup installs the 0.1.1 daemon only because its digest is
+pinned in `scripts/daemon.sha256`.
 
 Original scope:
 
