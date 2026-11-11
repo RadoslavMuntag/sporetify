@@ -32,6 +32,9 @@ the daemon that matches.
   gone (the plate on the right shows it).
 - Fixed: turning creatures off while the app or the compact player was
   running left the lens empty instead of showing the cover.
+- A new icon in the Field Guide look: the creature grown from the word
+  "sporetify", in line art on a round slide, with a play mark for its
+  nucleus and the lens's progress arc around it.
 
 ## 0.1.1 (2026-10-13)
 
