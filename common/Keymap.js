@@ -82,7 +82,16 @@ var actions = [
   // a search), so the two have their own scopes.
   { id: "close",       keys: ["Esc", "q"],       label: "Close",            scope: "popup", group: "app", primary: true },
   { id: "cancel",      keys: ["Esc"],            label: "Clear selection, or leave search", scope: "app", group: "search" },
-  { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",             scope: "app", group: "app", primary: true }
+  { id: "quit",        keys: ["Ctrl+c"],         label: "Quit",             scope: "app", group: "app", primary: true },
+
+  // In a text field (search, the playlist picker, prompts): app/Field.qml.
+  // What Confirm, Up and Down do depends on the field; its hint says.
+  { id: "fieldAccept", keys: ["Return"],         label: "Confirm",          scope: "field", group: "typing" },
+  { id: "fieldCancel", keys: ["Esc"],            label: "Cancel",           scope: "field", group: "typing" },
+  { id: "fieldUp",     keys: ["Up"],             label: "Up",               scope: "field", group: "typing" },
+  { id: "fieldDown",   keys: ["Down"],           label: "Down",             scope: "field", group: "typing" },
+  { id: "fieldNext",   keys: ["Tab"],            label: "Next",             scope: "field", group: "typing" },
+  { id: "fieldPrevious", keys: ["Backtab"],      label: "Previous",         scope: "field", group: "typing" }
 ]
 
 // The sections of the help overlay, in reading order.
@@ -93,7 +102,8 @@ var groups = [
   { id: "search",    title: "Search" },
   { id: "track",     title: "The track under the cursor" },
   { id: "playlists", title: "Your playlists" },
-  { id: "app",       title: "App" }
+  { id: "app",       title: "App" },
+  { id: "typing",    title: "While typing" }
 ]
 
 // Qt::Key values for the keys that have no printable character.
@@ -101,6 +111,7 @@ var named = {
   0x20: "Space",
   0x01000000: "Esc",
   0x01000001: "Tab",
+  0x01000002: "Backtab",
   0x01000003: "Backspace",
   0x01000007: "Del",
   0x01000031: "F2",
@@ -117,7 +128,7 @@ var named = {
 }
 
 // Symbols used when a key is shown to the user.
-var glyphs = { Space: "␣", Left: "←", Right: "→", Up: "↑", Down: "↓", Return: "⏎", Tab: "⇥", Backspace: "⌫" }
+var glyphs = { Space: "␣", Left: "←", Right: "→", Up: "↑", Down: "↓", Return: "⏎", Tab: "⇥", Backtab: "⇤", Backspace: "⌫" }
 
 // Qt::ControlModifier
 var CTRL = 0x04000000

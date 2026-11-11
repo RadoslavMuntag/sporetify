@@ -1,4 +1,5 @@
 import QtQuick
+import "../common/Keymap.js" as Keymap
 
 // A one-line question (a new playlist's name, a new name). The window
 // opens it and decides what the answer does.
@@ -13,7 +14,7 @@ Sheet {
     field.grab(true)
   }
 
-  footer: "⏎ confirm · Esc cancel"
+  footer: Keymap.keyLabel("fieldAccept") + " confirm · " + Keymap.keyLabel("fieldCancel") + " cancel"
   contentHeight: field.height
   onDismissed: cancelled()
 

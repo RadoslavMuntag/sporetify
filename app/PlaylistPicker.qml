@@ -1,4 +1,5 @@
 import QtQuick
+import "../common/Keymap.js" as Keymap
 
 // Choosing a playlist to add tracks to: type to narrow, arrows to move,
 // Enter to add. The window opens and closes it and acts on the choice.
@@ -38,7 +39,9 @@ Sheet {
 
   eyebrow: "Add to playlist"
   title: tracks.length === 0 ? "" : (tracks.length === 1 ? "“" + tracks[0].title + "”" : tracks.length + " tracks")
-  footer: choices.length === 0 ? "No playlist of yours matches" : "↑ ↓ move · ⏎ add · Esc cancel"
+  footer: choices.length === 0 ? "No playlist of yours matches"
+    : Keymap.keyLabel("fieldUp") + " " + Keymap.keyLabel("fieldDown") + " move · "
+      + Keymap.keyLabel("fieldAccept") + " add · " + Keymap.keyLabel("fieldCancel") + " cancel"
   onDismissed: cancelled()
 
   Field {

@@ -1,4 +1,5 @@
 import QtQuick
+import "../common/Keymap.js" as Keymap
 
 // Search: which search it is, a ruled field, and under it the kinds of
 // result as tabs. The window decides what Esc, Enter and the switch do.
@@ -64,7 +65,7 @@ Rectangle {
       onTabbed: function(delta) { root.library.cycleSearchFilter(delta) }
       onOtherKey: function(event) {
         // Switch between the two searches without leaving the field.
-        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F) {
+        if (Keymap.actionFor(event.key, event.text, "browse", event.modifiers) === "searchLibrary") {
           root.switchTo("library")
           event.accepted = true
         }
@@ -76,7 +77,11 @@ Rectangle {
       anchors.right: parent.right
       anchors.rightMargin: Theme.spacing.huge
       textFormat: Text.PlainText
-      text: field.typing ? "⇥ type · ⏎ results · Esc cancel" : "/ Spotify · Ctrl F library · t type · Esc cancel"
+      text: field.typing
+        ? Keymap.keyLabel("fieldNext") + " type · " + Keymap.keyLabel("fieldAccept") + " results · "
+          + Keymap.keyLabel("fieldCancel") + " cancel"
+        : Keymap.keyLabel("search") + " Spotify · " + Keymap.keyLabel("searchLibrary") + " library · "
+          + Keymap.keyLabel("searchType") + " type · " + Keymap.keyLabel("cancel") + " cancel"
       color: Theme.muted
       font.family: Theme.font.family
       font.pixelSize: Theme.font.caption
