@@ -82,9 +82,13 @@ struct List {
 }
 
 impl List {
-    /// Whether a view showing `self` would look the same showing `other`.
-    fn same_as(&self, other: &List) -> bool {
-        self.name == other.name && self.uris == other.uris && self.art_url == other.art_url
+    /// A short name for what a view shows of this list (its name, tracks in
+    /// order, and picture): equal for equal contents within one daemon.
+    fn version(&self) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (&self.name, &self.uris, &self.art_url).hash(&mut hasher);
+        format!("{:016x}", hasher.finish())
     }
 }
 
@@ -114,6 +118,8 @@ pub struct Catalog {
     /// When this daemon last fetched each list from Spotify. Lists loaded
     /// from disk have no entry, so they count as stale until fetched.
     fetched: Mutex<HashMap<String, Instant>>,
+    /// Held while a list is being fetched, one per list.
+    gates: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Tracks fetched since the cache file was last written.
     unsaved: AtomicBool,
     indexing: AtomicBool,
@@ -134,6 +140,7 @@ impl Default for Catalog {
             albums: Mutex::default(),
             made_for_you: Mutex::default(),
             fetched: Mutex::default(),
+            gates: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -294,8 +301,9 @@ impl Catalog {
     /// One page of a playlist's (or Liked Songs') tracks, with metadata.
     ///
     /// A saved copy is answered at once, never waiting on Spotify; `stale`
-    /// says whether it may be out of date. `refresh` fetches the list again,
-    /// and `changed` then says whether it differs from the copy it replaced.
+    /// says whether it may be out of date, and `refresh` fetches it again.
+    /// `version` names the list's contents, so a view can tell whether the
+    /// list it shows is still the one the daemon has.
     pub async fn tracks(
         &self,
         session: Option<&Session>,
@@ -305,15 +313,12 @@ impl Catalog {
         refresh: bool,
     ) -> OpResult {
         let limit = limit.clamp(1, MAX_PAGE);
-        let (list, rows, stale, changed) = match session {
+        let (list, rows) = match session {
             Some(session) => {
-                let before = self.lists.lock().expect("lists lock").get(uri).cloned();
                 let list = self.list(session, uri, refresh).await?;
-                let changed = before.is_none_or(|before| !before.same_as(&list));
-                let stale = !is_current(self.fetched.lock().expect("fetched lock").get(uri).copied(), Instant::now());
                 let page = list.uris.iter().skip(offset).take(limit).cloned().collect();
                 let rows = self.rows(session, page, LOOKUPS_IN_FLIGHT).await;
-                (list, rows, stale, changed)
+                (list, rows)
             }
             // Offline: whatever was saved, with placeholders for the rest.
             None => {
@@ -328,9 +333,10 @@ impl Catalog {
                     .take(limit)
                     .map(|uri| tracks.get(uri).cloned().unwrap_or_else(|| unavailable_row(uri.clone())))
                     .collect();
-                (list, rows, true, false)
+                (list, rows)
             }
         };
+        let stale = session.is_none() || !is_current(self.fetched.lock().expect("fetched lock").get(uri).copied(), Instant::now());
 
         Ok(json!({
             "uri": uri,
@@ -340,7 +346,7 @@ impl Catalog {
             // The list's own picture, when its owner set one.
             "art_url": list.art_url,
             "stale": stale,
-            "changed": changed,
+            "version": list.version(),
             "items": self.decorate(rows),
         }))
     }
@@ -533,10 +539,20 @@ impl Catalog {
     }
 
     async fn list(&self, session: &Session, uri: &str, refresh: bool) -> Result<Arc<List>, OpError> {
+        let asked = Instant::now();
+        let saved = || self.lists.lock().expect("lists lock").get(uri).cloned();
         if !refresh {
-            if let Some(list) = self.lists.lock().expect("lists lock").get(uri) {
-                return Ok(list.clone());
+            if let Some(list) = saved() {
+                return Ok(list);
             }
+        }
+        // One fetch per list at a time. Whoever waited for another fetch of
+        // the same list takes its answer instead of asking Spotify again.
+        let gate = self.gates.lock().expect("gates lock").entry(uri.to_owned()).or_default().clone();
+        let _turn = gate.lock().await;
+        let fetched_since = self.fetched.lock().expect("fetched lock").get(uri).is_some_and(|at| *at >= asked);
+        if let Some(list) = saved().filter(|_| fetched_since || !refresh) {
+            return Ok(list);
         }
         let list = if uri.ends_with(":collection") {
             self.liked_songs(session, uri).await?
@@ -1551,6 +1567,7 @@ mod tests {
             albums: Mutex::default(),
             made_for_you: Mutex::default(),
             fetched: Mutex::default(),
+            gates: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -1628,19 +1645,19 @@ mod tests {
     }
 
     #[test]
-    fn a_list_counts_as_changed_when_its_tracks_order_name_or_picture_differ() {
+    fn a_list_gets_a_new_version_when_its_tracks_order_name_or_picture_differ() {
         let list = |name: &str, uris: &[&str], art: Option<&str>| super::List {
             name: name.into(),
             uris: uris.iter().map(|u| u.to_string()).collect(),
             art_url: art.map(Into::into),
         };
-        let weekly = list("Discover Weekly", &["t:1", "t:2"], None);
-        assert!(weekly.same_as(&list("Discover Weekly", &["t:1", "t:2"], None)));
-        assert!(!weekly.same_as(&list("Discover Weekly", &["t:3", "t:4"], None)));
-        assert!(!weekly.same_as(&list("Discover Weekly", &["t:2", "t:1"], None)));
-        assert!(!weekly.same_as(&list("Discover Weekly", &["t:1"], None)));
-        assert!(!weekly.same_as(&list("Weekly", &["t:1", "t:2"], None)));
-        assert!(!weekly.same_as(&list("Discover Weekly", &["t:1", "t:2"], Some("https://i.scdn.co/x"))));
+        let weekly = list("Discover Weekly", &["t:1", "t:2"], None).version();
+        assert_eq!(weekly, list("Discover Weekly", &["t:1", "t:2"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:3", "t:4"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:2", "t:1"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:1"], None).version());
+        assert_ne!(weekly, list("Weekly", &["t:1", "t:2"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:1", "t:2"], Some("https://i.scdn.co/x")).version());
     }
 
     #[tokio::test]
@@ -1651,12 +1668,13 @@ mod tests {
         assert_eq!(page["total"], 3);
         assert_eq!(titles(&page), ["Follow the Sun", "Sun Song", "Unavailable"]);
         assert_eq!(page["items"][2]["available"], false);
-        // Saved, so possibly out of date, and nothing was fetched to compare.
+        // Saved, so possibly out of date; every page names the same version.
         assert_eq!(page["stale"], true);
-        assert_eq!(page["changed"], false);
+        assert_eq!(page["version"].as_str().unwrap().len(), 16);
         // Paging works the same from disk.
         let second = library.tracks(None, "spotify:playlist:p", 1, 1, false).await.unwrap();
         assert_eq!(titles(&second), ["Sun Song"]);
+        assert_eq!(second["version"], page["version"]);
         // A list never loaded cannot be shown offline.
         let unknown = library.tracks(None, "spotify:playlist:never", 0, 50, false).await.unwrap_err();
         assert_eq!(unknown.code, crate::proto::ErrorCode::Offline);

@@ -18,7 +18,7 @@ Item {
 
   readonly property int rowsPerPage: Math.max(1, Math.floor(list.height / Theme.spacing.trackRow) - 1)
   readonly property string playingUri: player.track ? player.track.id : ""
-  property int keptCursor: 0
+  property int cursorBeforeReplace: 0
 
   function move(delta) {
     list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + delta))
@@ -44,9 +44,9 @@ Item {
     function onTotalChanged() { root.ensureVisible() }
     // A newer version of the open list replaced the rows. The row count
     // may change, which resets the view, so the cursor is put back.
-    function onListVersionChanged() { root.keptCursor = list.currentIndex }
-    function onPagesReset() {
-      list.currentIndex = Math.max(0, Math.min(list.count - 1, root.keptCursor))
+    function onListReplacing() { root.cursorBeforeReplace = list.currentIndex }
+    function onListReplaced() {
+      list.currentIndex = Math.max(0, Math.min(list.count - 1, root.cursorBeforeReplace))
       list.positionViewAtIndex(list.currentIndex, ListView.Contain)
       root.ensureVisible()
     }

@@ -105,7 +105,9 @@ Lines longer than 64 KiB end the connection.
   Spotify, and says `stale: true` when this daemon has not fetched the list
   within 15 minutes (lists loaded from disk count as never fetched). The app
   then fetches it again in the background with `refresh` and swaps the new
-  version in if `changed`; a failed refetch leaves the saved copy on screen.
+  version in when the answer's `version` differs from the one it shows; a
+  failed refetch leaves the saved copy on screen. A list is fetched by one
+  request at a time: requests that waited for that fetch take its answer.
 - Track metadata: one lookup per track, bounded concurrency (8 for a page a
   view asked for), cached on disk for good in
   `$XDG_CACHE_HOME/sporetify/tracks.json`, written atomically.

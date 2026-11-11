@@ -65,12 +65,18 @@ Item {
   // Requests of the current place, cancelled when another one opens.
   property var inFlight: []
   property int generation: 0
-  // Which version of the open list the rows belong to. A newer version
-  // replaces the rows in place (see `revalidate`), and pages asked for
-  // before that are dropped when they answer.
-  property int listVersion: 0
-  // The loaded pages were forgotten; the view asks again for what it shows.
-  signal pagesReset()
+  // The open list's version as the daemon names it, and the requests for
+  // its pages. A newer version replaces the rows (see `replaceList`), and
+  // answers for pages of an older one are dropped.
+  property string shownVersion: ""
+  property string shownArtUrl: ""
+  property var pageRequests: ({})
+  property bool revalidated: false
+  property bool rechecking: false
+  // Around a replacement, so the view can keep its cursor although the
+  // row count changes.
+  signal listReplacing()
+  signal listReplaced()
 
   visible: false
 
@@ -186,6 +192,11 @@ Item {
     artQueue = []
     generation++
     pages.reset()
+    shownVersion = ""
+    shownArtUrl = ""
+    pageRequests = {}
+    revalidated = false
+    rechecking = false
     // A selection belongs to the place it was made in.
     marked = {}
     markedCount = 0
@@ -549,30 +560,55 @@ Item {
     for (var i = 0; i < wanted.length; i++) fetchPage(wanted[i], false)
   }
 
-  function fetchPage(page, refresh) {
+  // One page of the open list; `onDone(result)` runs only while the same
+  // place is still open.
+  function requestTracks(page, refresh, onDone) {
     var forGeneration = generation
-    var forVersion = listVersion
-    if (page === 0) pages.claim(0, 0, 1)
     var handle = player.request("library.tracks", {
       uri: uri, offset: page * pageSize, limit: pageSize, refresh: refresh
     }, {
       deadline: 8000,
-      onDone: function(result) {
-        // An answer for a place that is no longer on screen, or for a
-        // version of the list that has since been replaced, is dropped.
-        if (forGeneration !== root.generation || forVersion !== root.listVersion) return
-        if (!result.ok) {
-          root.pages.failed(page)
-          if (page === 0 && result.error.code !== "cancelled")
-            root.collection = Loadable.withResult(root.collection, result)
-          return
-        }
-        root.applyPage(page, result.data)
-        // A saved copy is on screen at once; check it against Spotify now.
-        if (page === 0 && !refresh && result.data.stale === true) root.revalidate()
-      }
+      onDone: function(result) { if (forGeneration === root.generation) onDone(result) }
     })
     inFlight.push(handle)
+    return handle
+  }
+
+  // Whether an answer comes from a newer version of the list than the one
+  // on screen. Daemons that name no version never replace anything.
+  function isNewer(data) {
+    return data.version !== undefined && root.shownVersion !== "" && data.version !== root.shownVersion
+  }
+
+  function fetchPage(page, refresh) {
+    var forVersion = shownVersion
+    if (page === 0) pages.claim(0, 0, 1)
+    pageRequests[page] = requestTracks(page, refresh, function(result) {
+      // A page of a version that has since been replaced is dropped.
+      if (forVersion !== root.shownVersion) return
+      delete root.pageRequests[page]
+      if (!result.ok) {
+        root.pages.failed(page)
+        if (page === 0 && result.error.code !== "cancelled")
+          root.collection = Loadable.withResult(root.collection, result)
+        return
+      }
+      var data = result.data
+      // The daemon's copy changed under this view (another window
+      // refreshed it, or a refetch stored it but ran out of time).
+      if (root.isNewer(data)) {
+        root.pages.failed(page)
+        root.recheck()
+        return
+      }
+      if (page === 0 && data.version !== undefined) root.shownVersion = data.version
+      root.applyPage(page, data)
+      // A saved copy is on screen at once; check it against Spotify now.
+      if (page === 0 && !refresh && data.stale === true && !root.revalidated) {
+        root.revalidated = true
+        root.revalidate()
+      }
+    })
   }
 
   function applyPage(page, data) {
@@ -585,7 +621,10 @@ Item {
     root.rows = rows
     root.total = data.total
     if (data.name) root.name = data.name
-    if (page === 0 && data.art_url && root.artPath === "") root.loadArt(data.art_url)
+    if (page === 0) {
+      root.shownArtUrl = data.art_url || ""
+      if (data.art_url && root.artPath === "") root.loadArt(data.art_url)
+    }
     root.subtitle = root.count(data.total, "track", "tracks")
     root.pages.done(page)
     root.revision++
@@ -602,24 +641,42 @@ Item {
   // it fails, the saved copy stays on screen with no error: it is all we
   // have, and Reload (r) is there to ask again.
   function revalidate() {
-    var forGeneration = generation
-    var handle = player.request("library.tracks", {
-      uri: uri, offset: 0, limit: pageSize, refresh: true
-    }, {
-      deadline: 8000,
-      onDone: function(result) {
-        if (forGeneration !== root.generation) return
-        if (!result.ok || result.data.changed !== true) return
-        // The rows on screen stay until their page arrives again, so the
-        // list never flashes empty; the cursor keeps its place.
-        root.listVersion++
-        root.pages.reset()
-        root.pages.claim(0, 0, 1)
-        root.applyPage(0, result.data)
-        root.pagesReset()
+    requestTracks(0, true, function(result) {
+      if (result.ok) {
+        if (root.isNewer(result.data)) root.replaceList(result.data)
+      } else if (result.error.code === "timeout") {
+        // The daemon may have stored the new list before its tracks were
+        // looked up; its copy says.
+        root.recheck()
       }
     })
-    inFlight.push(handle)
+  }
+
+  // Ask the daemon's copy, without going to Spotify, whether it is newer
+  // than what is on screen.
+  function recheck() {
+    if (rechecking) return
+    rechecking = true
+    requestTracks(0, false, function(result) {
+      root.rechecking = false
+      if (result.ok && root.isNewer(result.data)) root.replaceList(result.data)
+    })
+  }
+
+  // Show `data`, the first page of a newer version of the open list.
+  function replaceList(data) {
+    listReplacing()
+    for (var page in pageRequests) pageRequests[page].cancel()
+    pageRequests = {}
+    shownVersion = data.version
+    pages.reset()
+    pages.claim(0, 0, 1)
+    // Past the first page, rows are placeholders until their page comes
+    // again: an old row could name a track the list no longer has.
+    rows = new Array(data.total)
+    if ((data.art_url || "") !== shownArtUrl) artPath = ""
+    applyPage(0, data)
+    listReplaced()
   }
 
   function rowAt(index) {
