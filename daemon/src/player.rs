@@ -6,7 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use librespot_connect::{ConnectConfig, LoadRequest, LoadRequestOptions, PlayingTrack, Spirc};
 use librespot_core::authentication::Credentials;
@@ -28,6 +28,17 @@ use crate::state::{PlayerState, Position, Shared, Status, Track};
 const DEVICE_NAME: &str = "Sporetify";
 const RETRY_MIN: Duration = Duration::from_secs(2);
 const RETRY_MAX: Duration = Duration::from_secs(60);
+/// How often a connected session is checked for having been given up. When
+/// the network goes away under an open connection (a cable pulled, a switch
+/// of network), librespot notices only through its keep-alive, about 80 s
+/// later, and marks the session invalid without ending the Connect task.
+const SESSION_CHECK: Duration = Duration::from_secs(2);
+/// Music that stopped because the connection was lost starts again by itself
+/// if the connection is back within this long.
+const RESUME_WINDOW: Duration = Duration::from_secs(5 * 60);
+/// How often librespot reports the position it is really playing. Kept in
+/// the daemon, never sent to frontends.
+const HEARD_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Command {
@@ -77,6 +88,13 @@ pub struct Playback {
     /// Tracks queued from here that have not started yet. Spotify's queue
     /// cannot be read back, so this is the only record of it.
     queued: Mutex<Vec<String>>,
+    /// The last position librespot reported while sound was really coming
+    /// out: (track uri, position). Unlike the state's position it does not
+    /// move on when playback stalls.
+    heard: Mutex<Option<(String, u64)>>,
+    /// Set when a session was lost while music played, to start it again
+    /// once the next session is up.
+    resume: Mutex<Option<Instant>>,
 }
 
 impl Playback {
@@ -92,6 +110,8 @@ impl Playback {
             loaded: AtomicBool::new(false),
             saved: Mutex::new(persist::load()),
             queued: Mutex::new(Vec::new()),
+            heard: Mutex::new(None),
+            resume: Mutex::new(None),
         })
     }
 
@@ -233,6 +253,19 @@ impl Playback {
     }
 
     /// Record where playback is right now. Called before the daemon exits.
+    /// Like `remember_position`, but from the position last heard playing,
+    /// when it belongs to the current track.
+    fn remember_heard_position(&self) {
+        let (_, state) = self.shared.snapshot();
+        let Some(track) = state.track.clone() else { return };
+        let heard = self.heard.lock().expect("heard lock").clone();
+        let position_ms = resume_position(heard.as_ref(), &track.id, state.position.position_ms);
+        self.remember(|saved| {
+            saved.position_ms = position_ms;
+            saved.track = Some(track);
+        });
+    }
+
     pub fn remember_position(&self) {
         let (_, state) = self.shared.snapshot();
         if state.track.is_none() {
@@ -393,7 +426,7 @@ impl Playback {
             .map_err(|e| e.to_string())?;
         let backend = audio_backend::find(None).ok_or("no audio backend available")?;
         let player = Player::new(
-            PlayerConfig::default(),
+            PlayerConfig { position_update_interval: Some(HEARD_INTERVAL), ..PlayerConfig::default() },
             session.clone(),
             mixer.get_soft_volume(),
             move || backend(None, AudioFormat::default()),
@@ -409,7 +442,8 @@ impl Playback {
         let (spirc, spirc_task) = Spirc::new(config, session.clone(), credentials, player.clone(), mixer)
             .await
             .map_err(|e| e.to_string())?;
-        tokio::pin!(spirc_task);
+        // Boxed so it can be handed to another thread at the end.
+        let mut spirc_task = Box::pin(spirc_task);
 
         *self.active.lock().expect("active lock") =
             Some(Active { spirc, session: session.clone(), username: session.username() });
@@ -428,8 +462,23 @@ impl Playback {
         // The remembered track's cover, so it shows before anything plays.
         self.fetch_art();
 
+        // Music that stopped with the last lost connection plays on.
+        let resume = self.resume.lock().expect("resume lock").take();
+        if resume.is_some_and(|lost| lost.elapsed() < RESUME_WINDOW) {
+            eprintln!("sporetifyd: connected again; resuming where the music stopped");
+            if let Err(e) = self.command(Command::Play) {
+                eprintln!("sporetifyd: could not resume: {}", e.message);
+            }
+        }
+
+        let mut check = tokio::time::interval(SESSION_CHECK);
+        check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let end = loop {
             tokio::select! {
+                _ = check.tick() => if session.is_invalid() {
+                    eprintln!("sporetifyd: lost the connection to Spotify; reconnecting");
+                    break SessionEnd::Disconnected;
+                },
                 _ = &mut spirc_task => break SessionEnd::Disconnected,
                 event = events.recv() => match event {
                     Some(event) => self.apply(event),
@@ -439,7 +488,15 @@ impl Playback {
             }
         };
 
-        self.remember_position();
+        if end == SessionEnd::Disconnected && self.shared.snapshot().1.playing {
+            // The sound may have stopped well before the session was given
+            // up: keep the position last heard, not the one the state has
+            // moved on to since, and start again from there.
+            self.remember_heard_position();
+            *self.resume.lock().expect("resume lock") = Some(Instant::now());
+        } else {
+            self.remember_position();
+        }
         self.queued.lock().expect("queued lock").clear();
         self.loaded.store(false, Ordering::Relaxed);
         self.ready.send_replace(false);
@@ -447,11 +504,30 @@ impl Playback {
             let _ = active.spirc.shutdown();
         }
         player.stop();
+        // librespot's Player joins its threads when the last handle goes,
+        // and a track load caught on a dead connection never finishes. Let
+        // that wait happen on a thread of its own: on this one it would stop
+        // the whole daemon, requests and reconnecting included.
+        let teardown = std::thread::Builder::new().name("session-teardown".into()).spawn(move || {
+            drop(spirc_task);
+            drop(player);
+        });
+        if let Err(e) = teardown {
+            eprintln!("sporetifyd: could not start the session teardown: {e}");
+        }
         self.shared.update_player(|state| *state = PlayerState::default());
         Ok(end)
     }
 
     fn apply(&self, event: PlayerEvent) {
+        if let PlayerEvent::PositionChanged { track_id, position_ms, .. } = &event {
+            // Only for `heard`: the frontends interpolate the position
+            // themselves, and a state change every second would wake them.
+            if let Ok(uri) = track_id.to_uri() {
+                *self.heard.lock().expect("heard lock") = Some((uri, u64::from(*position_ms)));
+            }
+            return;
+        }
         match &event {
             PlayerEvent::TrackChanged { audio_item } => {
                 self.loaded.store(true, Ordering::Relaxed);
@@ -543,9 +619,7 @@ impl Playback {
                 state.playing = false;
                 state.position = position(position_ms, false);
             }
-            PlayerEvent::Seeked { position_ms, .. }
-            | PlayerEvent::PositionCorrection { position_ms, .. }
-            | PlayerEvent::PositionChanged { position_ms, .. } => {
+            PlayerEvent::Seeked { position_ms, .. } | PlayerEvent::PositionCorrection { position_ms, .. } => {
                 state.position = position(position_ms, state.playing);
             }
             PlayerEvent::Loading { position_ms, .. } => {
@@ -563,6 +637,7 @@ impl Playback {
     }
 }
 
+#[derive(PartialEq)]
 enum SessionEnd {
     /// The connection to Spotify ended; reconnect.
     Disconnected,
@@ -585,6 +660,16 @@ fn set_playing(state: &mut PlayerState, playing: bool) {
     state.playing = playing;
 }
 
+/// Where to start a track again after its sound stopped: the position last
+/// heard playing if that was this track, else the track's last known
+/// position, not moved on, since nothing says it played past it.
+fn resume_position(heard: Option<&(String, u64)>, track: &str, last_known_ms: u64) -> u64 {
+    match heard {
+        Some((uri, position_ms)) if uri == track => *position_ms,
+        _ => last_known_ms,
+    }
+}
+
 fn position(position_ms: u32, playing: bool) -> Position {
     Position { position_ms: u64::from(position_ms), at_ms: now_ms(), rate: if playing { 1.0 } else { 0.0 } }
 }
@@ -603,7 +688,7 @@ fn from_device_volume(volume: u16) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{from_device_volume, now_ms, set_playing, to_device_volume};
+    use super::{from_device_volume, now_ms, resume_position, set_playing, to_device_volume};
     use crate::state::{PlayerState, Position, Track};
 
     fn loaded(playing: bool, position_ms: u64, seconds_ago: u64) -> PlayerState {
@@ -620,6 +705,18 @@ mod tests {
     }
 
     #[test]
+    fn music_lost_with_the_connection_starts_again_where_it_was_last_heard() {
+        let heard = ("spotify:track:a".to_owned(), 61_000);
+        // Heard playing at 1:01; the state had moved on to 2:30 by the time
+        // the session was given up, but the sound had stopped long before.
+        assert_eq!(resume_position(Some(&heard), "spotify:track:a", 150_000), 61_000);
+        // The next track was loaded but never heard: from its own start.
+        assert_eq!(resume_position(Some(&heard), "spotify:track:b", 0), 0);
+        // Nothing heard yet: the last known position, not moved on.
+        assert_eq!(resume_position(None, "spotify:track:a", 42_000), 42_000);
+    }
+
+        #[test]
     fn pausing_freezes_the_clock_where_playback_has_got_to() {
         let mut state = loaded(true, 10_000, 5);
         set_playing(&mut state, false);
