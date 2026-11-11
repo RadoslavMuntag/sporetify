@@ -48,6 +48,14 @@ Clients handle both (`ClientCore.js` is tested for it), but the daemon does
 not send early frames yet: library answers come from its memory cache when it
 has one, and from Spotify otherwise. After the final frame the id is dead.
 
+Track lists revalidate without early frames: the answer from the saved copy
+is final and says `stale: true` in its data, and the view asks again with
+`refresh`. An early frame would hold the request, its deadline and its slot
+open while Spotify answers; a second request is cancelled with the view like
+any other, and every page answer's `version` tells the view when the list it
+shows has been replaced (another window refreshed it, or a refetch stored the
+new list but ran out of time before answering).
+
 Errors are always final:
 
 ```json
@@ -62,7 +70,7 @@ Errors are always final:
 | `unauthorized` | Signed out or token rejected | Prompt sign-in |
 | `no_premium` | Account cannot play | Explain once, keep browsing enabled |
 | `no_audio` | No output device | Explain, offer device picker |
-| `not_found` | Entity gone | Remove from view |
+| `not_found` | Entity gone, or no longer where the client saw it | Reload / remove from view |
 | `cancelled` | Client cancelled or superseded | Silent |
 | `bad_request` | Malformed or missing field | Bug: log it |
 | `internal` | Daemon fault | Toast, log |
@@ -115,10 +123,10 @@ Built:
 | `player.shuffle` `player.repeat` | `on` | `{}` |
 | `player.play_context` | `uri`, optional `track_uri` | `{}` |
 | `library.playlists` | | `{items, stale}`: the sidebar, Liked Songs first. An item is `{uri, name, length, depth, editable}` or a folder `{kind:"folder", id, name, depth}` |
-| `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items}` |
+| `library.tracks` | `uri`, `offset`, `limit` (max 200), optional `refresh` | `{uri, name, total, offset, items, stale, version}`; a saved copy answers at once with `stale: true` when this daemon has not fetched the list in the last 15 minutes, and the view then asks again with `refresh`. `version` names the list's contents (name, tracks in order, picture); a view replaces its rows when an answer names another version than the one it shows |
 | `playlist.add` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, added, skipped}`; tracks already there are skipped |
 | `playlist.remove` | `playlist_uri`, `track_uris` (or `track_uri`) | `{playlist, changed, total, removed}`; every occurrence goes |
-| `playlist.move` | `playlist_uri`, `from`, `to` (0-based; `to` is where the track ends up) | `{playlist, changed, total}` |
+| `playlist.move` | `playlist_uri`, `from`, `to` (0-based, counted in the list `library.tracks` returns; `to` is where the track ends up), `track_uri` (the track expected at `from`) | `{playlist, changed, total}`; `not_found` if a position is past the end or `track_uri` is not at `from` |
 | `playlist.rename` | `playlist_uri`, `name` | `{playlist, changed, total}` |
 | `playlist.create` | `name`, optional `track_uris` | `{uri, playlist, total}`; placed first among the user's playlists |
 | `playlist.delete` | `playlist_uri` | `{changed}`; removes it from the user's playlists |

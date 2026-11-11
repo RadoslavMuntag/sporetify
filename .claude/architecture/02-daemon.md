@@ -101,6 +101,13 @@ Lines longer than 64 KiB end the connection.
   sidebar as last fetched and every list that has been loaded. Without a
   session `library.playlists` and `library.tracks` answer from it (`stale:
   true`), with placeholder rows for tracks whose metadata was never cached.
+  With a session `library.tracks` answers from it too, never waiting on
+  Spotify, and says `stale: true` when this daemon has not fetched the list
+  within 15 minutes (lists loaded from disk count as never fetched). The app
+  then fetches it again in the background with `refresh` and swaps the new
+  version in when the answer's `version` differs from the one it shows; a
+  failed refetch leaves the saved copy on screen. A list is fetched by one
+  request at a time: requests that waited for that fetch take its answer.
 - Track metadata: one lookup per track, bounded concurrency (8 for a page a
   view asked for), cached on disk for good in
   `$XDG_CACHE_HOME/sporetify/tracks.json`, written atomically.
@@ -141,15 +148,23 @@ Lines longer than 64 KiB end the connection.
   - add, remove, move and rename post to
     `/playlist/v2/playlist/<id>/changes`. The playlist is re-read from
     Spotify first, so tracks already there are not added again, tracks not
-    there are not "removed", and a move is checked against the real length.
+    there are not "removed", and a move is checked against the real length
+    and refused unless the track at `from` is the `track_uri` the app sent.
     A move's destination is sent the way Spotify counts it (the position in
-    the list before the track is taken out).
+    the list before the track is taken out). The app's positions skip
+    entries that cannot be read, as its list does, and are mapped to
+    Spotify's, which count them.
   - create posts to `/playlist/v2/playlist`, which answers with the new uri
     but ignores any name sent along, so the playlist is renamed straight
-    after; it is then added first in the user's list of playlists
-    (`/playlist/v2/user/<user>/rootlist/changes`) and filled.
+    after and filled, and only then added first in the user's list of
+    playlists (`/playlist/v2/user/<user>/rootlist/changes`). A playlist
+    outside that list is what Spotify treats as deleted, so a create that
+    fails or times out part-way leaves nothing visible behind.
   - delete removes it from that list, which for an owned playlist is what
     Spotify calls deleting.
+  - nothing runs after a create or delete has been sent, so a slow step
+    cannot turn a change already made into a timeout (and a create tried
+    again into a duplicate). The app re-reads the sidebar afterwards.
   The sidebar marks which playlists the user may change, from the
   capabilities Spotify reports.
 - Likes: `library.save` / `unsave` write to the collection service; every

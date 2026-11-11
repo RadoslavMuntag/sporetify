@@ -4,7 +4,10 @@
 //!
 //! Track metadata never changes, so it is cached on disk for good
 //! (`$XDG_CACHE_HOME/sporetify/tracks.v3.json`) and fetched at most once per
-//! track, one at a time with bounded concurrency. Lists are cached in memory.
+//! track, one at a time with bounded concurrency. Lists are saved on disk
+//! (`library.json`) and answered from that copy at once; a copy this daemon
+//! has not fetched within `LIST_MAX_AGE` is marked `stale`, and the view asks
+//! for it again with `refresh` in the background (stale-while-revalidate).
 //!
 //! Search runs over what is cached. Spotify's own search is not reachable
 //! without a client id, so this searches the user's library instead; Liked
@@ -14,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use futures_util::stream::{self, StreamExt};
 use librespot_core::{Session, SpotifyUri};
@@ -28,6 +32,10 @@ use crate::proto::{ErrorCode, OpError, OpResult};
 /// How many track lookups may be in flight at once.
 const LOOKUPS_IN_FLIGHT: usize = 8;
 const MAX_PAGE: usize = 200;
+/// How long a list this daemon fetched counts as current. Spotify rewrites
+/// some playlists on a schedule (Discover Weekly, the daily mixes, daylist)
+/// and any playlist can be edited on another device.
+const LIST_MAX_AGE: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackRow {
@@ -73,6 +81,23 @@ struct List {
     art_url: Option<String>,
 }
 
+impl List {
+    /// A short name for what a view shows of this list (its name, tracks in
+    /// order, and picture): equal for equal contents within one daemon.
+    fn version(&self) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (&self.name, &self.uris, &self.art_url).hash(&mut hasher);
+        format!("{:016x}", hasher.finish())
+    }
+}
+
+/// Whether a list fetched at `fetched` (`None`: never, by this daemon) is
+/// still current at `now`.
+fn is_current(fetched: Option<Instant>, now: Instant) -> bool {
+    fetched.is_some_and(|at| now.saturating_duration_since(at) < LIST_MAX_AGE)
+}
+
 /// What is kept on disk so the library can be shown without a connection:
 /// the sidebar as last seen, and every list that has been loaded.
 #[derive(Default, Serialize, Deserialize)]
@@ -90,6 +115,11 @@ pub struct Catalog {
     tracks: Mutex<HashMap<String, TrackRow>>,
     albums: Mutex<HashMap<String, AlbumHeader>>,
     made_for_you: Mutex<Vec<Value>>,
+    /// When this daemon last fetched each list from Spotify. Lists loaded
+    /// from disk have no entry, so they count as stale until fetched.
+    fetched: Mutex<HashMap<String, Instant>>,
+    /// Held while a list is being fetched, one per list.
+    gates: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Tracks fetched since the cache file was last written.
     unsaved: AtomicBool,
     indexing: AtomicBool,
@@ -109,6 +139,8 @@ impl Default for Catalog {
             tracks: Mutex::new(load_tracks()),
             albums: Mutex::default(),
             made_for_you: Mutex::default(),
+            fetched: Mutex::default(),
+            gates: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -267,6 +299,11 @@ impl Catalog {
     }
 
     /// One page of a playlist's (or Liked Songs') tracks, with metadata.
+    ///
+    /// A saved copy is answered at once, never waiting on Spotify; `stale`
+    /// says whether it may be out of date, and `refresh` fetches it again.
+    /// `version` names the list's contents, so a view can tell whether the
+    /// list it shows is still the one the daemon has.
     pub async fn tracks(
         &self,
         session: Option<&Session>,
@@ -299,6 +336,7 @@ impl Catalog {
                 (list, rows)
             }
         };
+        let stale = session.is_none() || !is_current(self.fetched.lock().expect("fetched lock").get(uri).copied(), Instant::now());
 
         Ok(json!({
             "uri": uri,
@@ -307,6 +345,8 @@ impl Catalog {
             "offset": offset,
             // The list's own picture, when its owner set one.
             "art_url": list.art_url,
+            "stale": stale,
+            "version": list.version(),
             "items": self.decorate(rows),
         }))
     }
@@ -499,10 +539,20 @@ impl Catalog {
     }
 
     async fn list(&self, session: &Session, uri: &str, refresh: bool) -> Result<Arc<List>, OpError> {
+        let asked = Instant::now();
+        let saved = || self.lists.lock().expect("lists lock").get(uri).cloned();
         if !refresh {
-            if let Some(list) = self.lists.lock().expect("lists lock").get(uri) {
-                return Ok(list.clone());
+            if let Some(list) = saved() {
+                return Ok(list);
             }
+        }
+        // One fetch per list at a time. Whoever waited for another fetch of
+        // the same list takes its answer instead of asking Spotify again.
+        let gate = self.gates.lock().expect("gates lock").entry(uri.to_owned()).or_default().clone();
+        let _turn = gate.lock().await;
+        let fetched_since = self.fetched.lock().expect("fetched lock").get(uri).is_some_and(|at| *at >= asked);
+        if let Some(list) = saved().filter(|_| fetched_since || !refresh) {
+            return Ok(list);
         }
         let list = if uri.ends_with(":collection") {
             self.liked_songs(session, uri).await?
@@ -524,6 +574,7 @@ impl Catalog {
         };
         let list = Arc::new(list);
         self.lists.lock().expect("lists lock").insert(uri.to_owned(), list.clone());
+        self.fetched.lock().expect("fetched lock").insert(uri.to_owned(), Instant::now());
         self.library_unsaved.store(true, Ordering::Relaxed);
         Ok(list)
     }
@@ -805,7 +856,8 @@ impl Catalog {
     /// The playlist is read from Spotify first, not from the cache, so the
     /// change is based on what is really there: tracks already in it are not
     /// added again, tracks not in it are not "removed", and a move is checked
-    /// against the real length.
+    /// against the real length and refused unless the track at `from` is the
+    /// one the app expects there.
     pub async fn edit_playlist(&self, session: &Session, playlist_uri: &str, edit: PlaylistEdit) -> OpResult {
         use librespot_protocol::playlist4_external::{op::Kind, Add, Item, ItemAttributes, Mov, Op, Rem};
 
@@ -813,9 +865,13 @@ impl Catalog {
         let spotify_uri = SpotifyUri::from_uri(playlist_uri).map_err(|_| OpError::bad_request("not a playlist"))?;
         let playlist = Playlist::get(session, &spotify_uri).await.map_err(|e| upstream("the playlist", e))?;
         let mut name = playlist.name().to_owned();
-        let mut uris: Vec<String> = playlist.tracks().filter_map(|t| t.to_uri().ok()).collect();
-        let unchanged = |name: &str, total: usize, reason: &str| {
-            Ok(json!({ "playlist": name, "changed": false, "total": total, "reason": reason }))
+        // Every entry keeps its place (an unreadable one as ""), so positions
+        // match the ones Spotify counts in.
+        let mut uris: Vec<String> = playlist.tracks().map(|t| t.to_uri().unwrap_or_default()).collect();
+        // The length the app sees, which leaves the unreadable entries out.
+        let readable = uris.iter().filter(|uri| !uri.is_empty()).count();
+        let unchanged = |name: &str, reason: &str| {
+            Ok(json!({ "playlist": name, "changed": false, "total": readable, "reason": reason }))
         };
 
         let mut op = Op::new();
@@ -828,7 +884,7 @@ impl Catalog {
                 let fresh: Vec<String> = tracks.iter().filter(|t| seen.insert(t)).cloned().collect();
                 detail = json!({ "added": fresh.len(), "skipped": tracks.len() - fresh.len() });
                 if fresh.is_empty() {
-                    return unchanged(&name, uris.len(), "already there");
+                    return unchanged(&name, "already there");
                 }
                 let mut change = Add::new();
                 for track in &fresh {
@@ -850,7 +906,7 @@ impl Catalog {
                 let gone: HashSet<&String> = tracks.iter().filter(|t| uris.contains(t)).collect();
                 detail = json!({ "removed": gone.len() });
                 if gone.is_empty() {
-                    return unchanged(&name, uris.len(), "not in the playlist");
+                    return unchanged(&name, "not in the playlist");
                 }
                 let mut change = Rem::new();
                 for track in &gone {
@@ -865,19 +921,15 @@ impl Catalog {
                 let gone: HashSet<String> = gone.into_iter().cloned().collect();
                 uris.retain(|uri| !gone.contains(uri));
             }
-            PlaylistEdit::Move { from, to } => {
-                if from >= uris.len() || to >= uris.len() {
-                    return Err(OpError::bad_request("the playlist is shorter than that"));
-                }
-                if from == to {
-                    return unchanged(&name, uris.len(), "already there");
-                }
+            PlaylistEdit::Move { from, to, track } => {
+                // From here on, positions in the whole playlist.
+                let Some((from, to, to_index)) = move_target(&uris, from, to, &track)? else {
+                    return unchanged(&name, "already there");
+                };
                 let mut change = Mov::new();
                 change.set_from_index(from as i32);
                 change.set_length(1);
-                // Spotify counts the destination in the list as it is before
-                // the track is taken out: "insert before the item now at N".
-                change.set_to_index(if to > from { to as i32 + 1 } else { to as i32 });
+                change.set_to_index(to_index);
                 op.set_kind(Kind::MOV);
                 op.mov = Some(change).into();
                 let track = uris.remove(from);
@@ -889,7 +941,7 @@ impl Catalog {
                     return Err(OpError::bad_request("a playlist needs a name"));
                 }
                 if new_name == name {
-                    return unchanged(&name, uris.len(), "already called that");
+                    return unchanged(&name, "already called that");
                 }
                 op = rename_op(&new_name);
                 name = new_name;
@@ -900,6 +952,7 @@ impl Catalog {
         // meantime is merged by Spotify rather than overwritten.
         send_changes(session, &format!("/playlist/v2/playlist/{id}/changes"), playlist.revision.clone(), op).await?;
 
+        uris.retain(|uri| !uri.is_empty());
         let total = uris.len();
         let art_url = self.lists.lock().expect("lists lock").get(playlist_uri).and_then(|l| l.art_url.clone());
         self.lists
@@ -946,7 +999,17 @@ impl Catalog {
         playlist_id(&uri).map_err(|_| upstream("the new playlist", "Spotify did not say where it is"))?;
         self.edit_playlist(session, &uri, PlaylistEdit::Rename(name.to_owned())).await?;
 
-        // 2. Into the user's list of playlists, or it would exist unseen.
+        // 2. Its tracks.
+        let mut total = 0;
+        if !tracks.is_empty() {
+            let added = self.edit_playlist(session, &uri, PlaylistEdit::Add(tracks)).await?;
+            total = added["total"].as_u64().unwrap_or(0);
+        }
+
+        // 3. Last, into the user's list of playlists. A playlist that is not
+        //    in that list is what Spotify calls deleted, so if anything above
+        //    failed or was cut off by the deadline, nothing appears and trying
+        //    again cannot leave a half-made duplicate behind.
         let root = self.rootlist(session).await?;
         let mut item = Item::new();
         item.set_uri(uri.clone());
@@ -958,13 +1021,9 @@ impl Catalog {
         op.add = Some(change).into();
         send_changes(session, &rootlist_changes(session), root.revision().to_vec(), op).await?;
 
-        // 3. Its tracks.
-        let mut total = 0;
-        if !tracks.is_empty() {
-            let added = self.edit_playlist(session, &uri, PlaylistEdit::Add(tracks)).await?;
-            total = added["total"].as_u64().unwrap_or(0);
-        }
-        self.refresh_sidebar(session).await;
+        // Nothing more may run after this: a slow step here would turn a
+        // finished create into a timeout, and a retry into a duplicate. The
+        // app re-reads the sidebar itself.
         Ok(json!({ "uri": uri, "playlist": name, "total": total }))
     }
 
@@ -991,7 +1050,7 @@ impl Catalog {
 
         self.lists.lock().expect("lists lock").remove(playlist_uri);
         self.library_unsaved.store(true, Ordering::Relaxed);
-        self.refresh_sidebar(session).await;
+        self.flush();
         Ok(json!({ "changed": true }))
     }
 
@@ -1002,15 +1061,6 @@ impl Catalog {
             .await
             .map_err(|e| upstream("your playlists", e))?;
         SelectedListContent::parse_from_bytes(&bytes).map_err(|e| upstream("your playlists", e))
-    }
-
-    /// Re-read the sidebar after the list of playlists changed.
-    async fn refresh_sidebar(&self, session: &Session) {
-        if let Ok(items) = self.fetch_sidebar(session).await {
-            *self.sidebar.lock().expect("sidebar lock") = items;
-            self.library_unsaved.store(true, Ordering::Relaxed);
-        }
-        self.flush();
     }
 
     /// The playlist Spotify itself publishes under exactly this name, such
@@ -1194,8 +1244,10 @@ pub enum PlaylistEdit {
     Add(Vec<String>),
     /// Take out every occurrence of these tracks.
     Remove(Vec<String>),
-    /// Move the track at `from` so that it ends up at `to` (both 0-based).
-    Move { from: usize, to: usize },
+    /// Move the track at `from` so that it ends up at `to` (both 0-based,
+    /// counting only the entries that can be read, as the app's list does).
+    /// `track` must be the one at `from`, or nothing moves.
+    Move { from: usize, to: usize, track: String },
     Rename(String),
 }
 
@@ -1204,6 +1256,34 @@ fn playlist_id(uri: &str) -> Result<&str, OpError> {
     uri.strip_prefix("spotify:playlist:")
         .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric()))
         .ok_or_else(|| OpError::bad_request(format!("not a playlist: '{uri}'")))
+}
+
+/// Where a track moved from `from` to `to` goes, or `None` when it is
+/// already there. `from` and `to` count only readable entries, as the app's
+/// list does; `uris` is the whole playlist, unreadable entries as "".
+/// Returns `from` and `to` in the whole playlist, and the destination the
+/// way Spotify counts it: in the list as it is before the track is taken
+/// out ("insert before the item now at N").
+/// The entry at `from` must be `track`: the screen the move came from may be
+/// older than the playlist, and moving by position alone would then move a
+/// different track.
+fn move_target(uris: &[String], from: usize, to: usize, track: &str) -> Result<Option<(usize, usize, i32)>, OpError> {
+    let readable: Vec<usize> = (0..uris.len()).filter(|&i| !uris[i].is_empty()).collect();
+    let (Some(&from), Some(&to)) = (readable.get(from), readable.get(to)) else {
+        return Err(stale_playlist());
+    };
+    if uris[from] != track {
+        return Err(stale_playlist());
+    }
+    if from == to {
+        return Ok(None);
+    }
+    Ok(Some((from, to, if to > from { to as i32 + 1 } else { to as i32 })))
+}
+
+/// The playlist is no longer what the screen showed; the app reloads it.
+fn stale_playlist() -> OpError {
+    OpError::new(ErrorCode::NotFound, "the playlist changed since it was shown, so nothing was moved")
 }
 
 fn require_tracks(uris: &[String]) -> Result<(), OpError> {
@@ -1418,6 +1498,45 @@ mod tests {
     use super::collection_write;
 
     #[test]
+    fn a_move_names_spotifys_destination_and_checks_the_track() {
+        use super::move_target;
+        use crate::proto::ErrorCode;
+        // Spotify counts the unreadable "", the app does not: it shows a, b, c.
+        let uris: Vec<String> = ["a", "", "b", "c"].iter().map(|u| u.to_string()).collect();
+        let shown = ["a", "b", "c"];
+        // What the app shows after Spotify makes the move (insert before the
+        // entry now at `to_index`, then take out the original), checked
+        // against the daemon's own copy of the list.
+        let moved = |from: usize, to: usize| {
+            let (from, to, to_index) = move_target(&uris, from, to, shown[from]).unwrap().unwrap();
+            let mut spotify = uris.clone();
+            spotify.insert(to_index as usize, uris[from].clone());
+            spotify.remove(if to_index as usize <= from { from + 1 } else { from });
+            let mut ours = uris.clone();
+            let track = ours.remove(from);
+            ours.insert(to, track);
+            assert_eq!(ours, spotify);
+            spotify.concat()
+        };
+        // Up, across the unreadable entry: "c" goes to the very front.
+        assert_eq!(move_target(&uris, 2, 0, "c").unwrap(), Some((3, 0, 0)));
+        assert_eq!(moved(2, 0), "cab");
+        // Down, across it: the destination is counted before "a" is taken out.
+        assert_eq!(move_target(&uris, 0, 1, "a").unwrap(), Some((0, 2, 3)));
+        assert_eq!(moved(0, 1), "bac");
+        assert_eq!(moved(1, 0), "bac");
+        assert_eq!(moved(0, 2), "bca");
+        assert_eq!(moved(1, 2), "acb");
+        assert_eq!(moved(2, 1), "acb");
+        assert_eq!(move_target(&uris, 1, 1, "b").unwrap(), None);
+        // The list changed under the screen: refuse, do not move "b".
+        assert_eq!(move_target(&uris, 1, 0, "a").unwrap_err().code, ErrorCode::NotFound);
+        // A position past what the app can see means the same.
+        assert_eq!(move_target(&uris, 0, 3, "a").unwrap_err().code, ErrorCode::NotFound);
+        assert_eq!(move_target(&uris, 3, 0, "c").unwrap_err().code, ErrorCode::NotFound);
+    }
+
+    #[test]
     fn radio_art_is_built_only_for_a_plain_artist_uri() {
         let art = super::radio_art("spotify:artist:0k17h0D3J5VfsdmQ1iZtE9").unwrap();
         assert!(art.ends_with("/img/radio/artist/0k17h0D3J5VfsdmQ1iZtE9/en"));
@@ -1515,6 +1634,8 @@ mod tests {
             tracks: Mutex::new(rows.iter().map(|row| (row.uri.clone(), row.clone())).collect()),
             albums: Mutex::default(),
             made_for_you: Mutex::default(),
+            fetched: Mutex::default(),
+            gates: Mutex::default(),
             unsaved: AtomicBool::new(false),
             indexing: AtomicBool::new(false),
             indexed: AtomicBool::new(false),
@@ -1580,6 +1701,33 @@ mod tests {
         assert_eq!(empty.playlists(None).await.unwrap_err().code, crate::proto::ErrorCode::Offline);
     }
 
+    #[test]
+    fn a_list_is_current_only_if_this_daemon_fetched_it_recently() {
+        let now = std::time::Instant::now();
+        // Loaded from disk: never fetched by this daemon.
+        assert!(!super::is_current(None, now));
+        assert!(super::is_current(Some(now), now));
+        let expiry = now + super::LIST_MAX_AGE;
+        assert!(super::is_current(Some(now), expiry - std::time::Duration::from_secs(1)));
+        assert!(!super::is_current(Some(now), expiry));
+    }
+
+    #[test]
+    fn a_list_gets_a_new_version_when_its_tracks_order_name_or_picture_differ() {
+        let list = |name: &str, uris: &[&str], art: Option<&str>| super::List {
+            name: name.into(),
+            uris: uris.iter().map(|u| u.to_string()).collect(),
+            art_url: art.map(Into::into),
+        };
+        let weekly = list("Discover Weekly", &["t:1", "t:2"], None).version();
+        assert_eq!(weekly, list("Discover Weekly", &["t:1", "t:2"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:3", "t:4"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:2", "t:1"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:1"], None).version());
+        assert_ne!(weekly, list("Weekly", &["t:1", "t:2"], None).version());
+        assert_ne!(weekly, list("Discover Weekly", &["t:1", "t:2"], Some("https://i.scdn.co/x")).version());
+    }
+
     #[tokio::test]
     async fn offline_a_saved_list_is_served_with_placeholders_for_unknown_tracks() {
         let library = library();
@@ -1588,9 +1736,13 @@ mod tests {
         assert_eq!(page["total"], 3);
         assert_eq!(titles(&page), ["Follow the Sun", "Sun Song", "Unavailable"]);
         assert_eq!(page["items"][2]["available"], false);
+        // Saved, so possibly out of date; every page names the same version.
+        assert_eq!(page["stale"], true);
+        assert_eq!(page["version"].as_str().unwrap().len(), 16);
         // Paging works the same from disk.
         let second = library.tracks(None, "spotify:playlist:p", 1, 1, false).await.unwrap();
         assert_eq!(titles(&second), ["Sun Song"]);
+        assert_eq!(second["version"], page["version"]);
         // A list never loaded cannot be shown offline.
         let unknown = library.tracks(None, "spotify:playlist:never", 0, 50, false).await.unwrap_err();
         assert_eq!(unknown.code, crate::proto::ErrorCode::Offline);

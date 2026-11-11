@@ -36,6 +36,24 @@ the daemon that matches.
   "sporetify", in line art on a round slide, with a play mark for its
   nucleus and the lens's progress arc around it.
 
+## 0.1.2 (not released yet)
+
+Fixes to editing playlists, and to lists that never refreshed.
+
+- Moving a track never moves the wrong one. If the playlist changed since
+  it was shown, nothing moves and the list is reloaded.
+- A new playlist appears only once it is complete: a create cut off
+  part-way leaves nothing behind, and trying again does not make a
+  duplicate.
+- Creating or deleting a playlist is no longer reported as failed when
+  only the reload of your playlists afterwards was slow.
+- Playlists Spotify rewrites on a schedule (Discover Weekly, Release Radar,
+  the Daily Mixes, daylist) and playlists edited on another device no
+  longer keep the tracks they had when Sporetify first saved them. A saved list
+  still opens at once; the app now checks it against Spotify in the
+  background and swaps in the new version when it has changed. Reported by
+  lutzlstein in #12.
+
 ## 0.1.1 (2026-10-13)
 
 Two fixes asked for in the marketplace review.
