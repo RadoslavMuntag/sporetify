@@ -1,5 +1,6 @@
 import QtQuick
 
+import "../common/Keymap.js" as Keymap
 import "../common/Loadable.js" as Loadable
 
 // Liked Songs and the user's playlists.
@@ -81,7 +82,7 @@ Rectangle {
     wrapMode: Text.WordWrap
     textFormat: Text.PlainText
     text: root.library.playlists.state === "error"
-      ? root.library.playlists.error.message + "\nPress R to retry."
+      ? root.library.playlists.error.message + "\nPress " + Keymap.keyLabel("reload") + " to retry."
       : "Loading…"
     color: root.library.playlists.state === "error" ? Theme.urgent : Theme.muted
     font.family: Theme.font.family

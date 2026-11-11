@@ -1,4 +1,5 @@
 import QtQuick
+import "../common/Keymap.js" as Keymap
 
 // A one-line text field ruled underneath, as on a printed form: a hairline,
 // heavier and in the accent colour while it has focus.
@@ -12,10 +13,26 @@ Item {
   signal accepted()
   signal cancelled()
   signal moved(int delta)
-  // Tab and Shift Tab; taken so focus never leaves the field by accident.
+  // Next and previous (Tab, Shift Tab); taken so focus never leaves the
+  // field by accident.
   signal tabbed(int delta)
   // Any other key, to add shortcuts that work while typing.
   signal otherKey(var event)
+
+  // The keys of the "field" scope in Keymap; everything else is typed, or
+  // offered to `otherKey` first.
+  function handle(event) {
+    switch (Keymap.actionFor(event.key, event.text, "field", event.modifiers)) {
+    case "fieldAccept": accepted(); break
+    case "fieldCancel": cancelled(); break
+    case "fieldUp": moved(-1); break
+    case "fieldDown": moved(1); break
+    case "fieldNext": tabbed(1); break
+    case "fieldPrevious": tabbed(-1); break
+    default: otherKey(event); return
+    }
+    event.accepted = true
+  }
 
   function grab(selectAll) {
     input.forceActiveFocus()
@@ -35,14 +52,7 @@ Item {
     font.family: Theme.font.family
     font.pixelSize: Theme.font.body
     onTextEdited: root.edited()
-    Keys.onEscapePressed: root.cancelled()
-    Keys.onReturnPressed: root.accepted()
-    Keys.onEnterPressed: root.accepted()
-    Keys.onUpPressed: root.moved(-1)
-    Keys.onDownPressed: root.moved(1)
-    Keys.onTabPressed: root.tabbed(1)
-    Keys.onBacktabPressed: root.tabbed(-1)
-    Keys.onPressed: function(event) { root.otherKey(event) }
+    Keys.onPressed: function(event) { root.handle(event) }
   }
   Text {
     visible: input.text === ""

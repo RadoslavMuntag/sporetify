@@ -1,5 +1,6 @@
 import QtQuick
 
+import "../common/Keymap.js" as Keymap
 import "../common/Position.js" as Position
 import "../common/Specimen.js" as Specimen
 
@@ -119,10 +120,11 @@ Item {
         textFormat: Text.PlainText
         text: {
           if (root.library.markedCount > 0)
-          return root.library.markedCount + " selected · A add to playlist · x remove · Esc clear"
-        if (root.library.kind === "") return "Pick a playlist on the left, or press / to search"
+          return root.library.markedCount + " selected · " + Keymap.keyLabel("addToPlaylist") + " add to playlist · "
+            + Keymap.keyLabel("removeFromPlaylist") + " remove · " + Keymap.keyLabel("cancel") + " clear"
+        if (root.library.kind === "") return "Pick a playlist on the left, or press " + Keymap.keyLabel("search") + " to search"
           if (root.library.collection.state === "error")
-            return root.library.collection.error.message + " · press R to retry"
+            return root.library.collection.error.message + " · press " + Keymap.keyLabel("reload") + " to retry"
           if (root.library.collection.state === "loading" && root.library.subtitle === "") return "Loading…"
           return root.library.subtitle
         }

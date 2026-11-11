@@ -183,6 +183,21 @@ TestCase {
     }
   }
 
+  function test_a_text_field_takes_only_its_own_keys() {
+    compare(Keymap.actionFor(Qt.Key_Return, "\r", "field"), "fieldAccept")
+    compare(Keymap.actionFor(Qt.Key_Enter, "\r", "field"), "fieldAccept")
+    compare(Keymap.actionFor(Qt.Key_Escape, "", "field"), "fieldCancel")
+    compare(Keymap.actionFor(Qt.Key_Up, "", "field"), "fieldUp")
+    compare(Keymap.actionFor(Qt.Key_Down, "", "field"), "fieldDown")
+    compare(Keymap.actionFor(Qt.Key_Tab, "\t", "field"), "fieldNext")
+    compare(Keymap.actionFor(Qt.Key_Backtab, "", "field"), "fieldPrevious")
+    // Letters and the browse keys are typed, not taken.
+    compare(Keymap.actionFor(Qt.Key_J, "j", "field"), null)
+    compare(Keymap.actionFor(Qt.Key_Space, " ", "field"), null)
+    // Its hints are built from the same table.
+    compare(Keymap.keyLabel("fieldAccept") + " " + Keymap.keyLabel("fieldCancel"), "⏎ Esc")
+  }
+
   function test_hints_come_from_the_same_table() {
     var hints = Keymap.hints(["player", "popup"])
     compare(hints[0].key, "␣")
