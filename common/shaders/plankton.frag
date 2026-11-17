@@ -477,6 +477,9 @@ void main() {
   }
 
   vec2 local = fract(px / vec2(cell, cell * 2.0));
+  // A little inside the cell: at its very edge the filter reads the
+  // neighbouring glyph, which drew a faint box around characters.
+  local = mix(vec2(0.08, 0.04), vec2(0.92, 0.96), local);
   float ink = texture(atlas, vec2((g + local.x) / glyphs, local.y)).a;
   fragColor = vec4(col.rgb, 1.0) * ink * alpha * qt_Opacity;
 }

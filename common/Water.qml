@@ -29,6 +29,8 @@ Item {
   property int bubbles: 6
   property int weeds: 0
   property bool passer: true
+  // Small organisms drifting across the far layer.
+  property int farCount: 4
 
   property var palette: []
   property color ground
@@ -83,8 +85,10 @@ Item {
     mipmap: true
   }
 
-  ShaderEffect {
-    anchors.fill: parent
+  // One part of the water (see shaders/water.frag): 0 the colour field,
+  // 1 the far layer, 2 the near layer, 3 the vignette.
+  component WaterPart: ShaderEffect {
+    property real part: 0
     fragmentShader: "shaders/water.frag.qsb"
     property var atlas: waterAtlas
     property size area: Qt.size(width, height)
@@ -109,6 +113,64 @@ Item {
     property color weedA: root.colourAt(0, root.accent)
     property color weedB: root.colourAt(1, root.accent)
   }
+
+  WaterPart { anchors.fill: parent; part: 0 }
+
+  // ---- The far layer: ripples, far weeds and small organisms drifting
+  //      across, all out of focus, so the eye lands on the playing one.
+  Item {
+    id: far
+    anchors.fill: parent
+    visible: root.blur <= 0
+    opacity: 0.9
+
+    WaterPart { anchors.fill: parent; part: 1 }
+
+    Repeater {
+      model: root.seed !== "" ? root.farCount : 0
+
+      Plankton {
+        id: drifter
+        required property int index
+        readonly property real phase: (Organism.hash(root.seed + "~far" + index) % 1000) / 1000
+        width: root.height * root.span * (0.4 + phase * 0.25)
+        height: width
+        y: root.height * (0.12 + ((index * 0.37 + phase) % 1) * 0.68) - height / 2
+        seed: "far:" + root.seed + ":" + index
+        alive: root.alive
+        awake: root.awake
+        palette: root.palette
+        ink: root.ink
+        accent: root.accent
+        light: root.light
+        cell: root.cell
+
+        // Across the water and round again, slowly, some each way. Each
+        // starts part of the way across, so the far layer is never empty.
+        readonly property bool rightward: index % 2 === 0
+        readonly property real begin: rightward ? -width : root.width + width
+        readonly property real end: rightward ? root.width + width : -width
+        readonly property int lap: 90000 + phase * 60000
+        x: begin + (end - begin) * phase
+        SequentialAnimation on x {
+          running: root.alive
+          NumberAnimation { to: drifter.end; duration: drifter.lap * (1 - drifter.phase) }
+          NumberAnimation { from: drifter.begin; to: drifter.end; duration: drifter.lap; loops: Animation.Infinite }
+        }
+      }
+    }
+  }
+  MultiEffect {
+    anchors.fill: far
+    visible: root.blur > 0
+    source: far
+    blurEnabled: true
+    blurMax: 16
+    blur: Math.min(1, root.blur * 0.45)
+    opacity: 0.9
+  }
+
+  WaterPart { anchors.fill: parent; part: 2 }
 
   // ---- The organisms. The playing one is large; the rest smaller and
   //      spread out, each with a home of its own taken from its id.
@@ -204,7 +266,13 @@ Item {
         width: root.height * 1.1
         height: width
         y: root.height * 0.55
-        x: -width + (root.width + width * 2) * ((root.clock / 140) % 1)
+        NumberAnimation on x {
+          running: root.alive
+          loops: Animation.Infinite
+          from: -passing.width
+          to: root.width + passing.width
+          duration: 140000
+        }
         visible: false
         seed: "passer:" + root.seed
         alive: root.alive
@@ -224,4 +292,7 @@ Item {
       }
     }
   }
+
+  // ---- The vignette, over everything: the edges sink into the deep.
+  WaterPart { anchors.fill: parent; part: 3 }
 }
