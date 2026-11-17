@@ -41,6 +41,8 @@ the daemon that matches.
 - In that look every track in a list shows a small mark of its organism,
   the open playlist and the cursor are lit in the accent colour, and the
   covers in the list header and the player bar are drawn in characters.
+- The mini-player no longer draws a creature next to the title, which
+  saves the GPU work it cost while open.
 - The now-playing bar shows the cover alone; the creature beside it is
   gone (the plate on the right shows it).
 - Fixed: turning creatures off while the app or the compact player was

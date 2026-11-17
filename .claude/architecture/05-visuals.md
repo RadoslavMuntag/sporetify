@@ -39,7 +39,7 @@ pool and galaxy may still need one.
 
 | Spore stage | Sporetify level | Where it shows |
 | --- | --- | --- |
-| Cell | Track | Organism in the bar, mini-player and now-playing scene |
+| Cell | Track | Organism in the bar icon and the now-playing scenes (the mini-player has none since 2026-11-17) |
 | Creature | Album | Album header: the organisms of its tracks gathered as one body |
 | Tribe | Artist | Artist page: a cluster of that artist's creatures |
 | Civilisation | Playlist | Playlist header: a colony pattern built from its tracks |

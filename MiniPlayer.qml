@@ -15,8 +15,6 @@ KeyboardPanel {
   id: panel
 
   property var service: null
-  property bool creatures: true
-  property var creatureColors: []
 
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
@@ -123,7 +121,7 @@ KeyboardPanel {
 
       // ---- What is playing. With a cover, it becomes a backdrop that runs
       //      from the top of the card down to the seek bar, dissolving
-      //      upward so the creature and title stay readable over it.
+      //      upward so the title stays readable over it.
       Item {
         id: hero
         readonly property string coverPath: panel.track && panel.track.art_path ? panel.track.art_path : ""
@@ -146,23 +144,9 @@ KeyboardPanel {
         width: parent.width
         spacing: Style.spacing.xl
 
-        Organism {
-          id: creature
-          visible: panel.creatures && panel.track !== null
-          anchors.verticalCenter: parent.verticalCenter
-          width: visible ? Style.space(56) : 0
-          height: Style.space(56)
-          seed: panel.track ? panel.track.id : ""
-          alive: visible && panel.open && panel.playing
-          awake: panel.playing
-          palette: panel.creatureColors
-          eye: panel.fg
-          pupil: Color.popups.background
-        }
-
         Column {
           anchors.verticalCenter: parent.verticalCenter
-          width: parent.width - (creature.visible ? creature.width + parent.spacing : 0)
+          width: parent.width
           spacing: Style.spacing.labelGap
 
           Text {

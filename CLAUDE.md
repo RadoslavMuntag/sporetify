@@ -291,7 +291,7 @@ lives inside the lens (now playing, screensaver); the app's chrome stays
 flat and square, as Omarchy's is.
 
 Built so far: the per-track creature (`common/Organism.js` and
-`Organism.qml`, filled or line art) in the bar and mini-player; the
+`Organism.qml`, filled or line art) in the bar icon (the mini-player has none: it cost GPU for little); the
 per-track plankton organism (`common/Plankton.js`, drawn in characters by
 `common/shaders/plankton.frag`; D17) in the lens and the tide pool; the
 lens (`common/Lens.qml`) and the music (`viz` frames from the daemon's

@@ -161,8 +161,6 @@ BarWidget {
   }
 
   MiniPlayer {
-    creatures: root.creatures
-    creatureColors: root.creatureColors
     anchorItem: button
     bar: root.bar
     owner: root
