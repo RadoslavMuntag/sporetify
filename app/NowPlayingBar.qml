@@ -39,7 +39,8 @@ Rectangle {
     function onPlayerChanged() { root.nowMs = Date.now() }
   }
 
-  Rectangle { width: parent.width; height: 1; color: Theme.line }
+  // The edge above the bar; in the water the gap is the edge.
+  Rectangle { visible: !root.water; width: parent.width; height: 1; color: Theme.line }
 
   component Cap: KeyCap {
     foreground: Theme.foreground

@@ -56,6 +56,8 @@ Rectangle {
 
   // Ruled off from the list, as a hairline.
   Rectangle {
+    // The edge between sidebar and list; in the water the gap is the edge.
+    visible: !root.water
     anchors.right: parent.right
     width: Theme.stroke.hair
     height: parent.height

@@ -618,10 +618,14 @@ FloatingWindow {
     SearchBar {
       id: searchBar
       color: keys.inWater ? "transparent" : Theme.background
+      inset: keys.inWater ? Theme.spacing.xl : 0
       visible: window.searchOpen && player.scope === "player"
       anchors.top: parent.top
+      // In the water, clear of the glass pane's top edge.
+      anchors.topMargin: keys.inWater ? keys.gap : 0
       anchors.left: sidebar.right
-      anchors.right: parent.right
+      // In the water the search sits in the list's pane, not over the pool.
+      anchors.right: keys.inWater && plate.visible ? plate.left : parent.right
       library: library
       cursor: tracks.currentIndex
       onCancelled: window.cancelSearch()
@@ -632,6 +636,7 @@ FloatingWindow {
     TrackList {
       id: tracks
       anchors.top: searchBar.bottom
+      anchors.topMargin: keys.inWater && !searchBar.visible ? keys.gap : 0
       anchors.bottom: nowPlaying.top
       anchors.left: sidebar.right
       anchors.right: plate.left
@@ -767,7 +772,13 @@ FloatingWindow {
       height: hintBar.implicitHeight + Theme.spacing.md * 2
       color: keys.inWater ? "transparent" : Theme.sunken
 
-      Rectangle { width: parent.width; height: 1; color: Theme.line }
+      // Between the bar and its hints; in the water, inside the glass.
+      Rectangle {
+        x: keys.inWater ? keys.gap * 2 : 0
+        width: parent.width - x * 2
+        height: 1
+        color: Theme.line
+      }
 
       HintBar {
         id: hintBar
