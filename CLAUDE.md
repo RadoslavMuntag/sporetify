@@ -265,7 +265,8 @@ Full detail is in `.claude/architecture/05-visuals.md`; the essentials:
 - **Every track is an organism.** A small creature is generated
   deterministically from the track id (same track, same creature, on every
   machine). It drifts in a tide-pool scene on the now-playing view and pulses
-  with the music. A tiny version is the bar icon.
+  with the music. Not in the bar or mini-player: an animated icon on an
+  always-shown bar made the shell redraw every frame (about half the iGPU).
 - **Scale is the navigation metaphor.** Track = cell, album = creature,
   artist = tribe, playlist = civilisation, all of Spotify = space. Moving
   between levels zooms rather than cuts. The library can be shown as a spiral
@@ -291,7 +292,7 @@ lives inside the lens (now playing, screensaver); the app's chrome stays
 flat and square, as Omarchy's is.
 
 Built so far: the per-track creature (`common/Organism.js` and
-`Organism.qml`, filled or line art) in the bar icon (the mini-player has none: it cost GPU for little); the
+`Organism.qml`, filled or line art), now used only as the lens's fallback; the
 per-track plankton organism (`common/Plankton.js`, drawn in characters by
 `common/shaders/plankton.frag`; D17) in the lens and the tide pool; the
 lens (`common/Lens.qml`) and the music (`viz` frames from the daemon's

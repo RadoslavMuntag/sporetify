@@ -20,10 +20,11 @@ fonts, sounds or recognisable creature designs.
   breathes only while its track plays and its surface is visible, and dozes
   when paused.
 - Off switches, in `~/.config/sporetify/app.json`: `creatures` (`Shift C` in
-  the app) turns every creature off on every surface, the plugin included
-  (its service reads the file), and a lens shows the cover instead;
-  `visuals` (`v`) is full, reduced (drawn, still) or off for the scenes.
-  The bar widget's own `creatures` setting turns them off in the bar only.
+  the app) turns the creatures off in the app and the compact player, and
+  a lens shows the cover instead; `visuals` (`v`) is full, reduced (drawn,
+  still) or off for the scenes. The plugin (bar, mini-player) draws none
+  since 2026-11-17: the animated bar icon made the shell redraw the bar
+  every frame while music played, about half the owner's iGPU.
 - Line art (`lineArt` on `Organism.qml`; the nucleus is a thin ring, after
   a stippled one looked bad to the owner) and the lens (`common/Lens.qml`)
   for the Field Guide direction chosen in [08-design.md](08-design.md);
@@ -39,7 +40,7 @@ pool and galaxy may still need one.
 
 | Spore stage | Sporetify level | Where it shows |
 | --- | --- | --- |
-| Cell | Track | Organism in the bar icon and the now-playing scenes (the mini-player has none since 2026-11-17) |
+| Cell | Track | Organism in the now-playing scenes (none in the bar or mini-player since 2026-11-17) |
 | Creature | Album | Album header: the organisms of its tracks gathered as one body |
 | Tribe | Artist | Artist page: a cluster of that artist's creatures |
 | Civilisation | Playlist | Playlist header: a colony pattern built from its tracks |
