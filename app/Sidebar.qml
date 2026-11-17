@@ -64,8 +64,9 @@ Rectangle {
 
   Text {
     id: heading
-    x: Theme.spacing.xxl
-    y: Theme.spacing.xl
+    // In the water the pane is inset, so the heading moves in with it.
+    x: Theme.spacing.xxl + (root.water ? Theme.spacing.xl : 0)
+    y: Theme.spacing.xl * (root.water ? 2 : 1)
     textFormat: Text.PlainText
     text: root.offline ? "LIBRARY · OFFLINE, SHOWING WHAT WAS SAVED" : "LIBRARY"
     color: root.offline ? Theme.urgent : Theme.muted
@@ -96,7 +97,10 @@ Rectangle {
     anchors.top: heading.bottom
     anchors.topMargin: Theme.spacing.md
     anchors.bottom: parent.bottom
-    width: parent.width
+    // In the water rows sit in from the glass edges; ListView keeps a
+    // delegate's own x at 0, so the list itself is inset.
+    x: root.water ? Theme.spacing.xl : 0
+    width: parent.width - x * 2
     clip: true
     model: root.items.length
     boundsBehavior: Flickable.StopAtBounds
@@ -115,8 +119,7 @@ Rectangle {
       readonly property bool cursor: ListView.isCurrentItem && root.focused
 
       // In the water rows are rounded and sit a little in from the edges.
-      x: root.water ? Theme.spacing.sm : 0
-      width: list.width - x * 2
+      width: list.width
       height: Theme.spacing.rowHeight
       radius: root.water ? Theme.space(4) : 0
       color: root.water && open ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)

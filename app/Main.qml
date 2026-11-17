@@ -556,7 +556,7 @@ FloatingWindow {
 
     // Glass under the sidebar, the list and the bar, with a little water
     // showing between them, as in the mockup.
-    readonly property int gap: Theme.spacing.sm
+    readonly property int gap: Theme.spacing.xl
     component Pane: Glass {
       property rect frame
       x: frame.x + keys.gap

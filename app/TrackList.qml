@@ -206,7 +206,10 @@ Item {
     id: list
     anchors.top: columns.bottom
     anchors.bottom: parent.bottom
-    width: parent.width
+    // In the water rows sit in from the glass edges; ListView keeps a
+    // delegate's own x at 0, so the list itself is inset.
+    x: root.water ? Theme.spacing.lg : 0
+    width: parent.width - x * 2
     clip: true
     model: root.library.total
     boundsBehavior: Flickable.StopAtBounds
@@ -240,7 +243,7 @@ Item {
         : (track && kind === "" && !track.available ? Theme.muted : Theme.foreground)
 
       // ---- Layout: number, cover, two lines of text, album, mark, time.
-      readonly property real pad: root.pad
+      readonly property real pad: root.pad - list.x
       readonly property real numberWidth: root.numberWidth
       readonly property real timeWidth: root.timeWidth
       readonly property real markWidth: root.markWidth
@@ -281,8 +284,7 @@ Item {
         onTriggered: root.library.wantArt(row.artUrl)
       }
 
-      x: root.water ? Theme.spacing.sm : 0
-      width: list.width - x * 2
+      width: list.width
       height: Theme.spacing.trackRow
       radius: root.water ? Theme.space(5) : 0
       color: kind === "heading" ? "transparent"
