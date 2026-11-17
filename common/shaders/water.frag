@@ -67,7 +67,7 @@ void main() {
   // ---- The colour field: lit from above, deepest at the bottom.
   vec2 g = (uv - vec2(0.5, -0.1)) / vec2(1.1, 0.85);
   float d = length(g);
-  vec3 top = mix(ground.rgb, accent.rgb, 0.26);
+  vec3 top = mix(ground.rgb, accent.rgb, 0.22);
   vec3 col = d < 0.52 ? mix(top, ground.rgb, d / 0.52) : mix(ground.rgb, deep.rgb, clamp((d - 0.52) / 0.48, 0.0, 1.0));
 
   // Three large soft lights drifting slowly.
@@ -82,7 +82,7 @@ void main() {
     vec2 q = (uv - c) * vec2(aspect, 1.0) / max(aspect, 1.0);
     float k = exp(-dot(q, q) / (r * r) * 1.6);
     vec4 t = fi == 0.0 ? tint0 : fi == 1.0 ? tint1 : tint2;
-    col = over(col, t.rgb, k * (0.08 + blur * 0.1));
+    col = over(col, t.rgb, k * (0.07 + blur * 0.09));
   }
 
   float depth = 1.0 - ci.y / max(1.0, grid.y) * 0.75;

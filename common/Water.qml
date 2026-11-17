@@ -61,14 +61,15 @@ Item {
       model: root.glyphs.length
       Text {
         required property int index
-        width: 16
-        height: 32
+        // At the cell's own size, so strokes keep their full strength.
+        width: Math.max(3, Math.round(root.cell))
+        height: width * 2
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         text: root.glyphs[index]
         color: root.ink
         font.family: "monospace"
-        font.pixelSize: 27
+        font.pixelSize: Math.round(width / 0.6)
         font.weight: Font.Medium
       }
     }
@@ -77,7 +78,8 @@ Item {
     id: waterAtlas
     sourceItem: atlasRow
     hideSource: true
-    smooth: true
+    smooth: false
+    // Mip levels soften the far layer.
     mipmap: true
   }
 
@@ -169,17 +171,27 @@ Item {
     }
   }
 
-  // ---- Glow: a soft copy of the organisms behind them, so the glyphs look
-  //      lit from inside. Off when crisp.
+  // ---- Glow: a blurred copy of the organisms added on top, so the
+  //      glyphs look lit from inside and light spills into the water.
   MultiEffect {
+    id: glowBlur
     anchors.fill: life
-    z: -1
-    visible: root.blur > 0
+    visible: false
+    layer.enabled: root.blur > 0
     source: life
     blurEnabled: true
-    blurMax: 32
-    blur: Math.min(1, 0.3 + root.blur * 0.3)
-    opacity: root.light ? 0.15 + root.blur * 0.12 : 0.3 + root.blur * 0.3
+    // Tight, as the mockup's bloom: a wide blur thins the light out.
+    blurMax: 16
+    blur: 0.5 + root.blur * 0.2
+    brightness: 0.1
+  }
+  ShaderEffect {
+    anchors.fill: life
+    visible: root.blur > 0
+    fragmentShader: "shaders/glow.frag.qsb"
+    property var source: glowBlur
+    property real strength: 0.9 + root.blur * 0.35
+    property real light: root.light ? 1 : 0
   }
 
   // ---- One large organism drifting past in front, out of focus.

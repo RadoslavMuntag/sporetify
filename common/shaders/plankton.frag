@@ -469,8 +469,11 @@ void main() {
     g = 1.0 + min(9.0, floor(pow(min(1.0, total / 1.4), 1.05) * 10.0));
     col = colour;
     // The brightest cells are lit a little beyond their colour.
+    // The brightest cells are lit beyond their colour, the rim and core
+    // most: that is what makes the organism glow against the water.
     if (total > 0.9) col.rgb = mix(col.rgb, vec3(1.0 - light), light > 0.5 ? 0.3 : 0.45);
-    alpha = clamp(0.2 + total * 1.05, 0.08, 1.0);
+    else if (total > 0.55) col.rgb = mix(col.rgb, vec3(1.0 - light), light > 0.5 ? 0.12 : 0.18);
+    alpha = clamp(0.25 + total * 1.2, 0.08, 1.0);
   }
 
   vec2 local = fract(px / vec2(cell, cell * 2.0));
