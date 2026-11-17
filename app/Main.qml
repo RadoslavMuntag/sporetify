@@ -522,7 +522,19 @@ FloatingWindow {
       anchors.fill: parent
       visible: keys.inWater
       seed: player.track ? player.track.id : ""
-      others: upNext.next !== "" ? [upNext.next] : []
+      // The queue swims behind the list, out of focus through the glass:
+      // the next track and the first few of the list on screen.
+      others: {
+        library.revision
+        var out = upNext.next !== "" ? [upNext.next] : []
+        for (var i = 0; i < Math.min(library.total, 6) && out.length < 4; i++) {
+          var row = library.rowAt(i)
+          if (row && row.uri && (row.kind === undefined || row.kind === "")) out.push(row.uri)
+        }
+        return out
+      }
+      roam: Qt.rect((sidebar.x + sidebar.width) / Math.max(1, width) + 0.05, 0.15,
+        Math.max(0.1, ((plate.visible ? plate.x : width) - sidebar.x - sidebar.width) / Math.max(1, width) - 0.1), 0.6)
       alive: window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
       awake: player.playing
       blur: Visuals.moving(window.visuals) ? 1 : 0
@@ -556,6 +568,8 @@ FloatingWindow {
       blur: sea.blur
       tint: Theme.background
       edge: Theme.foreground
+      light: Theme.mode === "light"
+      radius: Theme.space(6)
     }
     Pane {
       visible: sidebar.visible && keys.inWater
@@ -767,7 +781,7 @@ FloatingWindow {
         fontFamily: Theme.font.family
         fontSize: Theme.font.caption
         gap: Theme.spacing.xs
-        corner: 0
+        corner: keys.inWater ? Theme.space(3) : 0
       }
     }
 

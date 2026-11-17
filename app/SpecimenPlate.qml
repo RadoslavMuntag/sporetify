@@ -21,8 +21,10 @@ Rectangle {
   property bool inWater: false
   // Where the organism should swim, in this plate's coordinates, and how
   // much room it has.
-  readonly property point waterAt: Qt.point(root.pad + plateLens.width / 2, root.pad + figureRow.height + Theme.spacing.lg + plateLens.height / 2)
-  readonly property real waterRoom: plateLens.width
+  readonly property real waterTop: root.pad + figureRow.height + Theme.spacing.lg
+  readonly property real waterBottom: overlay.y - Theme.spacing.lg
+  readonly property point waterAt: Qt.point(root.width / 2, (waterTop + waterBottom) / 2)
+  readonly property real waterRoom: Math.max(0, Math.min(root.width - root.pad * 2, waterBottom - waterTop))
 
   readonly property var track: player.track
   readonly property real pad: Theme.spacing.huge
@@ -77,7 +79,7 @@ Rectangle {
       id: plateLens
       width: parent.width
       height: width
-      opacity: root.inWater ? 0 : 1
+      visible: !root.inWater
       seed: root.track ? root.track.id : ""
       creature: root.creatures
       coverPath: root.track && root.track.art_path ? root.track.art_path : ""
@@ -96,7 +98,7 @@ Rectangle {
     }
 
     Spectrum {
-      visible: root.moving && root.track !== null
+      visible: root.moving && root.track !== null && !root.inWater
       width: parent.width
       height: Theme.space(26)
       bands: root.player.bands
@@ -108,6 +110,7 @@ Rectangle {
     }
 
     Column {
+      visible: !root.inWater
       width: parent.width
       spacing: Theme.spacing.xs
 
@@ -132,11 +135,11 @@ Rectangle {
       }
     }
 
-    Rectangle { visible: root.track !== null; width: parent.width; height: Theme.stroke.hair; color: Theme.line }
+    Rectangle { visible: root.track !== null && !root.inWater; width: parent.width; height: Theme.stroke.hair; color: Theme.line }
 
     // What the creature is made of, read off the generator, and the length.
     Column {
-      visible: root.track !== null && root.creatures
+      visible: root.track !== null && root.creatures && !root.inWater
       width: parent.width
       spacing: Theme.spacing.xs
 
@@ -163,6 +166,49 @@ Rectangle {
           }
         }
       }
+    }
+  }
+
+  // ---- In the water: the track over the pool, at the bottom.
+  Column {
+    id: overlay
+    visible: root.inWater
+    x: root.pad
+    width: root.width - root.pad * 2
+    y: root.height - root.pad - height
+    spacing: Theme.spacing.xs
+
+    Text {
+      width: parent.width
+      elide: Text.ElideRight
+      textFormat: Text.PlainText
+      text: root.track ? root.track.title : "Nothing playing"
+      color: Theme.foreground
+      style: Text.Outline
+      styleColor: Qt.rgba(Theme.sunken.r, Theme.sunken.g, Theme.sunken.b, 0.4)
+      font.family: Theme.font.family
+      font.pixelSize: Math.round(Theme.font.body * 1.5)
+      font.bold: true
+    }
+    Text {
+      width: parent.width
+      elide: Text.ElideRight
+      textFormat: Text.PlainText
+      text: root.track ? root.track.artists.join(", ") : ""
+      color: Theme.muted
+      font.family: Theme.font.family
+      font.pixelSize: Theme.font.body
+    }
+    Text {
+      visible: root.track !== null && root.creatures
+      width: parent.width
+      elide: Text.ElideRight
+      textFormat: Text.PlainText
+      text: root.track ? Specimen.traits(root.track.id) : ""
+      color: Theme.muted
+      opacity: 0.75
+      font.family: Theme.font.family
+      font.pixelSize: Theme.font.caption
     }
   }
 }

@@ -114,8 +114,11 @@ Rectangle {
         : (!!item && !folder && root.library.kind === "playlist" && item.uri === root.library.uri)
       readonly property bool cursor: ListView.isCurrentItem && root.focused
 
-      width: list.width
+      // In the water rows are rounded and sit a little in from the edges.
+      x: root.water ? Theme.spacing.sm : 0
+      width: list.width - x * 2
       height: Theme.spacing.rowHeight
+      radius: root.water ? Theme.space(4) : 0
       color: root.water && open ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)
         : cursor || hover.containsMouse ? Theme.hoverFill : "transparent"
 
@@ -131,15 +134,19 @@ Rectangle {
         x: row.indent
         width: parent.width - row.indent - Theme.spacing.xxl
         elide: Text.ElideRight
-        textFormat: Text.PlainText
+        // Styled only for the accent glyph; the name itself is escaped.
+        textFormat: Text.StyledText
         // A folder shows whether it is folded; Liked Songs wears a heart
-        // (nf-md-heart) and For you a sparkle (nf-md-creation).
+        // (nf-md-heart) and For you a sparkle (nf-md-creation). In the
+        // water every playlist wears a "~", and the glyphs take the accent.
         text: {
           if (!row.item) return ""
-          if (row.folder) return (root.collapsed[row.item.id] === true ? "▸ " : "▾ ") + row.item.name
-          if (row.liked) return "󰋑  " + row.item.name
-          if (row.forYou) return "󰙴  " + row.item.name
-          return row.item.name
+          var name = String(row.item.name).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          var glyph = row.folder ? (root.collapsed[row.item.id] === true ? "▸" : "▾")
+            : row.liked ? "󰋑" : row.forYou ? "󰙴" : root.water ? "~" : ""
+          if (glyph === "") return name
+          if (root.water && !row.folder) return "<font color=\"" + Theme.accent + "\">" + glyph + "</font>&nbsp;&nbsp;" + name
+          return glyph + (row.folder ? " " : "&nbsp;&nbsp;") + name
         }
         color: row.open ? Theme.accent : (row.folder ? Theme.muted : Theme.foreground)
         font.family: Theme.font.family

@@ -24,6 +24,8 @@ Item {
   // tall its space is as a fraction of the scene's height.
   property point home: Qt.point(0.5, 0.42)
   property real span: 0.62
+  // Where the other organisms keep their homes, as fractions of the scene.
+  property rect roam: Qt.rect(0.2, 0.25, 0.6, 0.45)
   // How much life the water has; small scenes want less.
   property int specks: 30
   property int bubbles: 6
@@ -194,8 +196,8 @@ Item {
         required property int index
         readonly property bool main: index === 0 && root.seed !== ""
         readonly property real side: root.height * root.span * (main ? 1 : 0.4)
-        readonly property real hx: main ? root.home.x : 0.2 + (Organism.hash(modelData + "~hx") % 1000) / 1000 * 0.6
-        readonly property real hy: main ? root.home.y : 0.25 + (Organism.hash(modelData + "~hy") % 1000) / 1000 * 0.45
+        readonly property real hx: main ? root.home.x : root.roam.x + (Organism.hash(modelData + "~hx") % 1000) / 1000 * root.roam.width
+        readonly property real hy: main ? root.home.y : root.roam.y + (Organism.hash(modelData + "~hy") % 1000) / 1000 * root.roam.height
         property real dx: 0
         property real dy: 0
         width: side

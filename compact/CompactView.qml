@@ -199,6 +199,8 @@ Item {
     blur: water.blur
     tint: Theme.background
     edge: Theme.foreground
+    light: Theme.mode === "light"
+    radius: root.px(Theme.space(6))
 
     // ---- Name, artist, time and traits
     Column {

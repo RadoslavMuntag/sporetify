@@ -46,7 +46,7 @@ Rectangle {
     fontFamily: Theme.font.family
     fontSize: Theme.font.caption
     padding: Theme.spacing.xs
-    corner: 0
+    corner: root.water ? Theme.space(3) : 0
   }
 
   Item {
@@ -140,13 +140,14 @@ Rectangle {
         }
         Cap { anchors.verticalCenter: parent.verticalCenter; label: Keymap.keyLabel("previous") }
         // nf-md-skip_previous, nf-md-pause / nf-md-play, nf-md-skip_next
-        IconButton { icon: "󰒮"; enabled: root.track !== null; onClicked: root.player.run("previous") }
+        IconButton { icon: "󰒮"; boxed: root.water; enabled: root.track !== null; onClicked: root.player.run("previous") }
         IconButton {
           icon: root.player.playing ? "󰏤" : "󰐊"
           iconSize: Theme.font.iconLarge
+          filled: root.water
           onClicked: root.player.run("playPause")
         }
-        IconButton { icon: "󰒭"; enabled: root.track !== null; onClicked: root.player.run("next") }
+        IconButton { icon: "󰒭"; boxed: root.water; enabled: root.track !== null; onClicked: root.player.run("next") }
         Cap { anchors.verticalCenter: parent.verticalCenter; label: Keymap.keyLabel("next") }
         // nf-md-repeat; lit when on.
         IconButton {

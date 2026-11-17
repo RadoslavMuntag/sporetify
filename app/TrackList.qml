@@ -128,7 +128,8 @@ Item {
         text: root.library.name
         color: Theme.foreground
         font.family: Theme.font.family
-        font.pixelSize: Theme.font.heading
+        // The mockup's playlist title is large: 1.7 of its body size.
+        font.pixelSize: root.water ? Math.round(Theme.font.body * 1.7) : Theme.font.heading
         font.bold: true
       }
       Text {
@@ -141,6 +142,9 @@ Item {
           if (root.library.collection.state === "error")
             return root.library.collection.error.message + " · press " + Keymap.keyLabel("reload") + " to retry"
           if (root.library.collection.state === "loading" && root.library.subtitle === "") return "Loading…"
+          // A list of tracks is a colony: one organism per track.
+          if (root.water && root.trackList && root.library.total > 0)
+            return root.library.subtitle + " · a colony of " + root.library.total
           return root.library.subtitle
         }
         color: root.library.markedCount > 0 ? Theme.accent
@@ -277,8 +281,10 @@ Item {
         onTriggered: root.library.wantArt(row.artUrl)
       }
 
-      width: list.width
+      x: root.water ? Theme.spacing.sm : 0
+      width: list.width - x * 2
       height: Theme.spacing.trackRow
+      radius: root.water ? Theme.space(5) : 0
       color: kind === "heading" ? "transparent"
         : root.water && cursor ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
         : (cursor || hover.containsMouse) ? Theme.hoverFill : "transparent"
@@ -287,7 +293,7 @@ Item {
 
       // A hairline under every row, as in a ruled catalogue.
       Rectangle {
-        visible: row.kind !== "heading"
+        visible: row.kind !== "heading" && !root.water
         anchors.bottom: parent.bottom
         x: row.pad
         width: parent.width - row.pad * 2
