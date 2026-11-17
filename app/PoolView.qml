@@ -18,11 +18,16 @@ Rectangle {
   property bool moving: true
   property bool live: true
   property bool creatures: true
+  // The Living ASCII pool is behind this view (D18): the organism swims
+  // there, so the lens is left out.
+  property bool inWater: false
+  readonly property point waterAt: Qt.point(lens.x + lens.width / 2, lens.y + lens.height / 2)
+  readonly property real waterRoom: lens.width
 
   readonly property var track: player.track
   readonly property real pad: Theme.spacing.huge
 
-  color: Theme.background
+  color: inWater ? "transparent" : Theme.background
 
   property real nowMs: Date.now()
   readonly property real positionMs: player.player && track
@@ -69,6 +74,7 @@ Rectangle {
       root.height - head.height - words.height - root.pad * 4)
     width: Math.max(0, room)
     height: width
+    opacity: root.inWater ? 0 : 1
     x: (root.width - width) / 2
     y: head.y + head.height + root.pad
     pool: true
@@ -77,7 +83,7 @@ Rectangle {
     creature: root.drawn && root.creatures
     coverPath: root.track && root.track.art_path ? root.track.art_path : ""
     progress: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
-    alive: root.visible && root.live && root.player.playing && root.moving
+    alive: root.visible && root.live && root.player.playing && root.moving && !root.inWater
     awake: root.player.playing
     pulse: root.moving ? root.player.beat : 0
     energy: root.moving ? Specimen.low(root.player.bands) : 0

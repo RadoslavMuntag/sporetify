@@ -512,6 +512,60 @@ FloatingWindow {
     // Under everything, so pictures taken with `capture` have it too.
     Rectangle { anchors.fill: parent; color: Theme.background }
 
+    // ---- The Living ASCII pool behind the whole window (D18). The playing
+    //      track's organism swims where the plate or the pool view leaves
+    //      open water; the panels are glass over it.
+    readonly property bool inWater: Visuals.drawn(window.visuals) && prefs.creatures
+    readonly property Item opening: pool.visible ? pool : plate.visible ? plate : null
+    Water {
+      id: sea
+      anchors.fill: parent
+      visible: keys.inWater
+      seed: player.track ? player.track.id : ""
+      others: upNext.next !== "" ? [upNext.next] : []
+      alive: window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
+      awake: player.playing
+      blur: Visuals.moving(window.visuals) ? 1 : 0
+      home: keys.opening
+        ? Qt.point((keys.opening.x + keys.opening.waterAt.x) / Math.max(1, width), (keys.opening.y + keys.opening.waterAt.y) / Math.max(1, height))
+        : Qt.point(0.82, 0.4)
+      span: keys.opening ? Math.min(0.9, keys.opening.waterRoom / Math.max(1, height)) : 0.3
+      specks: 26
+      bubbles: 5
+      passer: false
+      palette: Theme.creatureColors
+      ground: Theme.background
+      deep: Theme.sunken
+      ink: Theme.foreground
+      accent: Theme.accent
+      muted: Theme.muted
+      light: Theme.mode === "light"
+    }
+
+    // Glass under the sidebar, the list and the bar.
+    component Pane: Glass {
+      backdrop: keys.inWater ? sea : null
+      area: Qt.rect(x, y, width, height)
+      blur: sea.blur
+      tint: Theme.background
+      edge: Theme.foreground
+    }
+    Pane {
+      visible: sidebar.visible && keys.inWater
+      x: sidebar.x; y: sidebar.y; width: sidebar.width; height: sidebar.height
+    }
+    Pane {
+      visible: keys.inWater && !window.poolShown
+      x: sidebar.x + sidebar.width
+      y: 0
+      width: (plate.visible ? plate.x : parent.width) - x
+      height: nowPlaying.y
+    }
+    Pane {
+      visible: keys.inWater
+      x: 0; y: nowPlaying.y; width: parent.width; height: parent.height - nowPlaying.y
+    }
+
     Keys.onPressed: function(event) {
       // The help overlay swallows every key: the moving keys scroll it when
       // it does not fit, any other key closes it.
@@ -529,6 +583,7 @@ FloatingWindow {
 
     Sidebar {
       id: sidebar
+      color: keys.inWater ? "transparent" : Theme.sunken
       anchors.top: parent.top
       anchors.bottom: nowPlaying.top
       visible: prefs.sidebar
@@ -542,6 +597,7 @@ FloatingWindow {
 
     SearchBar {
       id: searchBar
+      color: keys.inWater ? "transparent" : Theme.background
       visible: window.searchOpen && player.scope === "player"
       anchors.top: parent.top
       anchors.left: sidebar.right
@@ -650,6 +706,7 @@ FloatingWindow {
       moving: Visuals.moving(window.visuals)
       creatures: prefs.creatures
       live: window.visible && screen.shown
+      inWater: keys.inWater
     }
 
     PoolView {
@@ -665,10 +722,12 @@ FloatingWindow {
       moving: Visuals.moving(window.visuals)
       creatures: prefs.creatures
       live: window.visible && screen.shown
+      inWater: keys.inWater
     }
 
     NowPlayingBar {
       id: nowPlaying
+      color: keys.inWater ? "transparent" : Theme.sunken
       anchors.bottom: hints.top
       width: parent.width
       player: player
@@ -684,7 +743,7 @@ FloatingWindow {
       anchors.bottom: parent.bottom
       width: parent.width
       height: hintBar.implicitHeight + Theme.spacing.md * 2
-      color: Theme.sunken
+      color: keys.inWater ? "transparent" : Theme.sunken
 
       Rectangle { width: parent.width; height: 1; color: Theme.line }
 

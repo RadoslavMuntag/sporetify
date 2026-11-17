@@ -96,7 +96,7 @@ app/                 the full app: Main, Theme, Library, Sidebar, TrackList, Now
 compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
-                     Organism, Plankton (+ Plankton.js), Lens, TidePool, UpNext, Spectrum,
+                     Organism, Plankton (+ Plankton.js), Water, Glass, Lens, TidePool, UpNext, Spectrum,
                      Specimen.js, Visuals.js, OnScreen; shaders/ (GLSL and the checked-in .qsb)
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
@@ -280,7 +280,11 @@ Full detail is in `.claude/architecture/05-visuals.md`; the essentials:
   spatial view exists; the visuals decorate the app, they are never the only
   way to do something.
 
-**Direction: Field Guide** (decision D16). Every track is a specimen:
+**Direction: Living ASCII** (decision D18, replacing D16's chrome): the
+app and the compact player sit on an ASCII pool (`common/Water.qml`)
+with glass panels (`common/Glass.qml`) over it, and every track is a
+plankton organism drawn in characters (D17). Before that it was
+**Field Guide** (D16): Every track is a specimen:
 hairline rules, catalogue numbers from the track id, the creature drawn as
 line art under a lens whose tick ring is the progress bar. The tide pool
 lives inside the lens (now playing, screensaver); the app's chrome stays

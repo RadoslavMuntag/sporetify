@@ -102,6 +102,24 @@ function traits(P) {
   return ""
 }
 
+// The same, as rows for a table: [{ name, value }], the kind first.
+var kindName = { medusa: "medusa", ctenophore: "comb jelly", radiolarian: "radiolarian", volvox: "volvox", diatom: "diatom" }
+function table(P) {
+  var rows = [{ name: "kind", value: kindName[P.kind] }]
+  function row(name, value) { rows.push({ name: name, value: String(value) }) }
+  switch (P.kind) {
+  case "medusa": row("tentacles", P.tentacles); row("canals", P.canals); row("arms", P.oralArms || "none"); break
+  case "ctenophore": row("form", P.form === "cydippid" ? "round" : "long"); row("rows", 8); row("plates", P.plates); break
+  case "radiolarian": row("shells", P.shells.length); row("spines", P.spines.length); row("threads", P.axopods); break
+  case "volvox": row("cells", P.cells); row("daughters", P.daughters.length); break
+  case "diatom":
+    row("form", P.form)
+    if (P.form === "pennate") row("striae", P.striae); else row("rays", P.rays)
+    break
+  }
+  return rows
+}
+
 var kindIndex = { medusa: 0, ctenophore: 1, radiolarian: 2, volvox: 3, diatom: 4 }
 
 function v4(a, b, c, d) { return { x: a || 0, y: b || 0, z: c || 0, w: d || 0 } }

@@ -33,6 +33,11 @@ the daemon that matches.
   or diatom, with no face, lit at the rim and moving in its own way (a
   slow bell beat, light running down comb rows, a rolling colony). The bar
   and mini-player keep the small creature for now.
+- A new look, Living ASCII: the app and the compact player sit on a pool
+  drawn in characters, with light rippling through it, weeds, plankton and
+  bubbles, and the playing track's organism swimming in it. The sidebar,
+  list and player bar are glass over the water. With visuals or creatures
+  off the app is plain and flat as before.
 - The now-playing bar shows the cover alone; the creature beside it is
   gone (the plate on the right shows it).
 - Fixed: turning creatures off while the app or the compact player was

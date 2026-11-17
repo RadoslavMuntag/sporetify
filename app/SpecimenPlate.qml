@@ -16,11 +16,18 @@ Rectangle {
   property bool live: true
   // Draw the creature; off, the lens shows the cover.
   property bool creatures: true
+  // The Living ASCII pool is behind this plate (D18): the organism swims
+  // there, so the lens is left out and the plate is open water.
+  property bool inWater: false
+  // Where the organism should swim, in this plate's coordinates, and how
+  // much room it has.
+  readonly property point waterAt: Qt.point(root.pad + plateLens.width / 2, root.pad + figureRow.height + Theme.spacing.lg + plateLens.height / 2)
+  readonly property real waterRoom: plateLens.width
 
   readonly property var track: player.track
   readonly property real pad: Theme.spacing.huge
 
-  color: Theme.background
+  color: inWater ? "transparent" : Theme.background
 
   property real nowMs: Date.now()
   readonly property real positionMs: player.player && track
@@ -53,6 +60,7 @@ Rectangle {
     spacing: Theme.spacing.lg
 
     Item {
+      id: figureRow
       width: parent.width
       height: figure.height
       Caption {
@@ -66,13 +74,15 @@ Rectangle {
     }
 
     Lens {
+      id: plateLens
       width: parent.width
       height: width
+      opacity: root.inWater ? 0 : 1
       seed: root.track ? root.track.id : ""
       creature: root.creatures
       coverPath: root.track && root.track.art_path ? root.track.art_path : ""
       progress: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
-      alive: root.live && root.player.playing && root.moving
+      alive: root.live && root.player.playing && root.moving && !root.inWater
       awake: root.player.playing
       pulse: root.moving ? root.player.beat : 0
       palette: Theme.creatureColors
@@ -131,12 +141,7 @@ Rectangle {
       spacing: Theme.spacing.xs
 
       Repeater {
-        // "3 lobes" -> { name: "lobes", value: "3" }
-        model: root.track ? Specimen.traits(root.track.id).split(" · ")
-          .map(function(trait) {
-            var space = trait.indexOf(" ")
-            return { name: trait.slice(space + 1), value: trait.slice(0, space) }
-          })
+        model: root.track ? Specimen.table(root.track.id)
           .concat([{ name: "length", value: Position.clock(root.track.duration_ms) }]) : []
 
         Row {

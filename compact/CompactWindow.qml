@@ -92,6 +92,11 @@ FloatingWindow {
       window.act(action)
       return "ok"
     }
+    // Save a picture of the window to `path` (PNG). For tests and docs.
+    function capture(path: string): string {
+      view.grabToImage(function(result) { result.saveToFile(path) })
+      return "ok"
+    }
     function close(): string {
       Qt.quit()
       return "ok"
