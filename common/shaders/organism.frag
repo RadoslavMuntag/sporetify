@@ -1,15 +1,28 @@
 #version 440
 
-// A plankton organism drawn as characters (the "organism studies"). The item
-// is cut into cells one `cell` px wide and two tall. For each cell the
-// organism's light is worked out from its parameters and the time, and the
-// cell shows the glyph of that brightness from `atlas`, in the colour of the
-// part that lit it most. Thin glass lines (spines) use line glyphs instead.
+// One plankton organism as a field of light over the character grid (the
+// "organism studies", decisions D17 and D18). This runs once per character
+// cell, not per pixel: the item covers the box the organism can reach,
+// inside a FieldLayer that renders a whole layer one texel per cell, and
+// shaders/glyphs.frag turns the cells into characters. So the organism can
+// be drawn in detail for the cost of a few thousand fragments. Cells it
+// does not light are left alone (discarded), so the water and other
+// organisms under its box show.
 //
-// Everything that moves is a function of `time` (seconds), so the host only
-// animates one number, and only while the organism is alive.
+// It swims. Everything is a function of `time`, so the host animates one
+// number, and only while the scene is alive:
+//   - it follows a slow, meandering loop around `home` (`roam` px each way);
+//     medusae move along it in strokes and coast between them, comb jellies
+//     glide, radiolarians and volvox drift, diatoms glide back and forth;
+//   - swimmers face the way they go;
+//   - tentacles trail along the path the body took a moment ago, so they
+//     bend through a turn and stream out behind a stroke, and hang when it
+//     is still.
+// With `wander` off it stays near `home` and only sways (a lens).
 //
-// Compile with scripts/shaders.sh after a change; the .qsb is checked in.
+// Output, per cell: rgb the colour of the brightest part; alpha a code.
+// Up to 0.8 it is the brightness (0..1.4 scaled into 0..0.8); above 0.8 a
+// line glyph for glass spines (0.84 -, 0.88 |, 0.92 /, 0.96 \, 1.0 °).
 //
 // Parameters by kind (lengths in units of the organism's radius R):
 //   0 medusa      p0 bell, beat period, tentacles, tentacle length
@@ -32,55 +45,50 @@ layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 0) uniform buf {
   mat4 qt_Matrix;
   float qt_Opacity;
-  vec2 area;      // item size, px
-  vec2 clipAt;    // centre of the circle drawn inside, px
+  vec2 origin;    // where this box starts in the layer, px (on a cell corner)
+  vec2 box;       // its size, px (whole cells)
+  vec2 home;      // px
+  vec2 roam;      // px each way around home
+  vec2 clipAt;    // centre of a circle to draw inside, px
   float bound;    // its radius, px; 0 for no limit
   float cell;     // cell width, px
   float radius;   // R, px
+  float wanderOn; // 1 swims about, 0 stays near home
+  float amp;      // brightness, 0..1
   float time;
-  float seed;     // per-track phase, 0..100
-  float kind;
-  float light;    // 1 on a light theme
-  float glyphs;   // glyphs in the atlas
+  float phase;    // per-track, 0..100
+  float kindIndex;
   vec4 p0;
   vec4 p1;
   vec4 p2;
   vec4 p3;
   vec4 p4;
   vec4 p5;
-  vec4 bodyColour;      // body colour
-  vec4 markColour;      // detail colour
+  vec4 bodyColour;
+  vec4 markColour;
   vec4 glass;     // the theme's foreground
-  vec4 accent;
+  vec4 accentColour;
   vec4 rain0;
   vec4 rain1;
   vec4 rain2;
   vec4 rain3;
   vec4 rain4;
 };
-layout(binding = 1) uniform sampler2D atlas;
 
 const float TAU = 6.2831853;
 const float PI = 3.1415927;
-
-// Atlas: " .·:-=+*#%@" then "-|/\°".
-const float G_DASH = 11.0;
-const float G_BAR = 12.0;
-const float G_FS = 13.0;
-const float G_BS = 14.0;
-const float G_DEG = 15.0;
 
 // What lights the cell: the sum, and the colour of the brightest part.
 float total;
 float best;
 vec4 colour;
-// A glass line glyph, shown where nothing brighter is.
+// A glass line glyph (code 1..5), shown where nothing brighter is.
 float lineG;
 float lineA;
-vec4 lineC;
 
-vec2 C;    // cell centre, in R from the organism's centre (y down)
+vec2 C;    // cell centre, in R from the organism's position, world axes (y down)
 float K;   // cell width in R; a cell is K wide and 2K tall
+float A;   // heading: 0 points up
 
 void add(float v, vec4 c) {
   if (v <= 0.0) return;
@@ -115,14 +123,14 @@ void thread(vec2 a, vec2 b, float v, vec4 c) {
   if (segDist(a, b) < K * 0.5) add(v, c);
 }
 
-void glassLine(vec2 a, vec2 b, vec4 c, float alpha) {
+void glassLine(vec2 a, vec2 b, float alpha) {
   float d = segDist(a, b);
   if (d >= K * 0.5 || alpha < lineA) return;
   vec2 dir = b - a;
   float ax = abs(dir.x), ay = abs(dir.y) * 0.5;
-  float g = ay < ax * 0.45 ? G_DASH : ax < ay * 0.45 ? G_BAR : dir.x * dir.y < 0.0 ? G_FS : G_BS;
-  if (length(C - b) < K) g = G_DEG;
-  lineG = g; lineA = alpha; lineC = c;
+  float g = ay < ax * 0.45 ? 1.0 : ax < ay * 0.45 ? 2.0 : dir.x * dir.y < 0.0 ? 3.0 : 4.0;
+  if (length(C - b) < K) g = 5.0;
+  lineG = g; lineA = alpha;
 }
 
 vec2 rot(vec2 p, float a) {
@@ -135,47 +143,143 @@ vec2 toBody(vec2 p, float a) { return rot(p, -a); }
 float hash1(float n) { return fract(sin(n * 12.9898 + 4.1414) * 43758.5453); }
 float ease(float x) { return x * x * (3.0 - 2.0 * x); }
 
+// ------------------------------------------------------------ motion
+
+// How fast each kind travels, in R per second, as in the studies.
+float speedR() {
+  return kindIndex < 0.5 ? 0.14 : kindIndex < 1.5 ? 0.11 : kindIndex < 2.5 ? 0.045 : kindIndex < 3.5 ? 0.05 : 0.035;
+}
+float period() { return kindIndex < 0.5 ? p0.y : 5.0; }
+// Where in its beat a medusa is: 0..1, contraction in the first 0.3.
+float beatAt(float t) { return fract(t / period() + fract(phase * 0.37)); }
+
+// The path's own clock. A medusa moves along it in strokes: most of the
+// way during the contraction, then coasting to a stop.
+float pathClock(float t) {
+  if (kindIndex > 0.5) return t;
+  float x = t / period() + fract(phase * 0.37);
+  float n = floor(x), ph = x - n;
+  float g = ph < 0.3 ? 0.6 * (1.0 - cos(ph / 0.3 * PI)) * 0.5
+    : 0.6 + 0.4 * (1.0 - exp(-(ph - 0.3) * 5.0)) / (1.0 - exp(-3.5));
+  return (n + g) * period();
+}
+
+bool swims() { return wanderOn > 0.5 && length(roam) > radius * 0.2; }
+
+// A slow meandering loop around home: never stops, so a swimmer always
+// has a way to face, and turns gently.
+vec2 loopAt(float s) {
+  float L = max(length(roam), 1.0);
+  // Turning no faster than the studies let anything steer (about 0.06
+  // rad/s): a small loop is swum slowly rather than spun round.
+  float w = min(speedR() * radius / L, 0.06);
+  float dir = fract(phase * 0.173) < 0.5 ? -1.0 : 1.0;
+  float th = dir * w * s + 0.9 * sin(0.29 * w * s + phase * 1.3) + phase * 2.0;
+  float r = 1.0 + 0.3 * sin(0.47 * w * s + phase * 3.1);
+  return home + vec2(cos(th) * roam.x, sin(th) * roam.y) * r;
+}
+
+vec2 posAt(float t) {
+  if (!swims()) return home + radius * vec2(sin(t * 0.07 + phase) * 0.06, sin(t * 0.09 + phase * 2.0) * 0.07);
+  vec2 p = loopAt(pathClock(t));
+  if (kindIndex < 0.5) {
+    // Sinking a little while it coasts, lifted again by the next stroke.
+    float ph = beatAt(t);
+    p.y += radius * 0.05 * (ph < 0.3 ? 1.0 - smoothstep(0.0, 0.3, ph) : (ph - 0.3) / 0.7);
+  }
+  return p;
+}
+
+float headingAt(float t) {
+  bool pennate = kindIndex > 3.5 && p0.x > 0.5;
+  if (!swims()) {
+    if (kindIndex < 0.5) return sin(t * 0.05 + phase) * 0.12;
+    if (kindIndex < 1.5) return sin(t * 0.04 + phase) * 0.25;
+    if (pennate) return PI * 0.5 + sin(t * 0.03 + phase) * 0.15;
+    return 0.0;
+  }
+  if (kindIndex > 1.5 && !pennate) return 0.0;
+  float s = pathClock(t);
+  vec2 v = loopAt(s + 0.5) - loopAt(s - 0.5);
+  float a = atan(v.x, -v.y);
+  // A medusa stays roughly upright: going down, it sinks bell up.
+  if (kindIndex < 0.5) a = clamp(a, -0.35, 0.35);
+  return a;
+}
+
+// Which way each part of a trailing tentacle lies, as the studies' chains
+// do it: down from the body, leaning back toward where the body came from
+// by up to a half as it speeds up, each segment following the path a
+// moment further back, so a tentacle bends through a turn. `dirs[j]` is
+// the world direction of segment j (1..10).
+vec2 dirs[11];
+void tentacleDirs() {
+  vec2 down = rot(vec2(0.0, 1.0), A);
+  for (int j = 0; j < 11; j++) dirs[j] = down;
+  if (!swims()) return;
+  vec2 now = posAt(time);
+  float sp = length(now - posAt(time - 1.0)) / radius;
+  float w = min(0.5, sp * 4.0);
+  if (w < 0.01) return;
+  vec2 before = now;
+  for (int j = 1; j < 11; j++) {
+    vec2 p = posAt(time - float(j) * 0.7);
+    vec2 back = p - before;
+    float l = length(back);
+    if (l > 1e-3) dirs[j] = normalize(mix(down, back / l, w));
+    before = p;
+  }
+}
+
 // ------------------------------------------------------------ medusa
 void medusa() {
-  float bell = p0.x, period = p0.y, tentacles = p0.z, tLen = p0.w;
+  float bell = p0.x, per = p0.y, tentacles = p0.z, tLen = p0.w;
   float arms = p1.x, armLen = p1.y, canals = p1.z, gonads = p1.w;
   float tilt = p2.x, turn = p2.y;
 
   // A contraction of about 1.5 s, then a long slow relax.
-  float ph = fract(time / period + seed);
+  float ph = beatAt(time);
   float c = ph < 0.3 ? ease(ph / 0.3) : 1.0 - ease((ph - 0.3) / 0.7);
   float H = bell * (1.0 + 0.3 * c), Wm = 1.0 - 0.12 * c, pinch = 0.07 + c * 0.28, Wr = Wm * (1.0 - pinch);
-  float a = sin(time * 0.05 + seed) * 0.12;
-  // Bell and tentacles together are centred, so the rim sits above the middle.
-  vec2 o = vec2(0.0, -(tLen - bell) * 0.5);
-  vec2 q = toBody(C - o, a);     // body coordinates, y down, rim at 0
+  vec2 q = toBody(C, A);     // body coordinates, y down, rim at 0
 
-  // Tentacles hang from the rim, splay with each beat and sway slowly.
-  for (int i = 0; i < 22; i++) {
-    if (float(i) >= tentacles) break;
-    float th = float(i) / tentacles * TAU + turn;
-    float z = sin(th);
-    vec2 root = vec2(cos(th) * Wr * 0.97, sin(th) * Wr * tilt);
-    float s = q.y - root.y;
-    if (s < 0.0 || s > tLen) continue;
-    float spread = sin(cos(th) * (0.1 + 0.45 * c));
-    float sway = sin(time * 0.4 - s * 3.0 + th * 3.0) * 0.05 * s;
-    float x = root.x + spread * s + sway;
-    if (abs(q.x - x) < K * 0.5) add((0.2 + 0.1 * z) * (1.0 - 0.65 * s / tLen), bodyColour);
-    if (s < K * 2.0 && abs(q.x - root.x) < K * 0.5) add(0.35 + 0.2 * z, markColour);
-  }
+  // Tentacles: from the rim, hanging and trailing (tentacleDirs), splayed
+  // a little more at each beat and waving slowly along their length.
+  if (length(C) < tLen + 1.6) {
+    tentacleDirs();
+    float seg = tLen / 10.0;
+    for (int i = 0; i < 22; i++) {
+      if (float(i) >= tentacles) break;
+      float th = float(i) / tentacles * TAU + turn;
+      float z = sin(th);
+      vec2 p = rot(vec2(cos(th) * Wr * 0.97, sin(th) * Wr * tilt), A);
+      if (length(C - p) < K * 1.2 && abs(C.x - p.x) < K * 0.5) add(0.35 + 0.2 * z, markColour);
+      float splay = -cos(th) * (0.1 + 0.45 * c), wave = 0.0;
+      for (int j = 1; j < 11; j++) {
+        wave += sin(time * 0.4 - float(j) * 0.45 + th * 3.0) * 0.05;
+        vec2 q2 = p + rot(dirs[j], splay * (1.0 - float(j) / 12.0) + wave) * seg;
+        if (segDist(p, q2) < K * 0.5) {
+          add((0.2 + 0.1 * z) * (1.0 - 0.65 * float(j) / 10.0), bodyColour);
+          break;
+        }
+        p = q2;
+      }
+    }
 
-  // Oral arms: thicker, with a slow frill.
-  for (int i = 0; i < 4; i++) {
-    if (float(i) >= arms) break;
-    float th = float(i) / arms * TAU + 0.785 + turn;
-    vec2 root = vec2(cos(th) * Wr * 0.16, -H * 0.1);
-    float s = q.y - root.y;
-    if (s < 0.0 || s > armLen) continue;
-    float f = s / armLen, wd = 0.07 * (1.0 - f * 0.7);
-    float x = root.x - sin(cos(th) * 0.18) * s + sin(time * 0.35 + f * 12.6 + th) * wd;
-    float d = abs(q.x - x) / max(wd, K * 0.5);
-    if (d < 1.0) add(0.3 * (1.0 - f * 0.5) * (1.0 - d * d), bodyColour);
+    // Oral arms: thicker, with a slow frill, trailing the same way.
+    float aseg = armLen / 6.0;
+    for (int i = 0; i < 4; i++) {
+      if (float(i) >= arms) break;
+      float th = float(i) / arms * TAU + 0.785 + turn;
+      vec2 p = rot(vec2(cos(th) * Wr * 0.16, -H * 0.1), A);
+      for (int j = 1; j < 7; j++) {
+        float f = float(j) / 6.0, wd = 0.07 * (1.0 - f * 0.7);
+        vec2 d = rot(dirs[j], -cos(th) * 0.18);
+        p += d * aseg;
+        vec2 fr = vec2(-d.y, d.x) * sin(time * 0.35 + float(j) * 1.4 + th) * wd;
+        dot2(p + fr, max(wd, K * 0.5), 0.3 * (1.0 - f * 0.5), bodyColour);
+      }
+    }
   }
 
   // The bell: clear, brightest at the rim, canals and gonads seen through it.
@@ -220,28 +324,28 @@ vec4 rain(float i) {
 void ctenophore() {
   bool isRound = p0.x > 0.5;
   float a = 0.95, b = p0.y, egg = p0.z, plates = p0.w;
-  float wave = p1.x, tLen = p1.y, spin = time * p1.z + seed;
-  float ang = sin(time * 0.04 + seed) * 0.25;
-  vec2 o = isRound ? vec2(0.0, -(tLen - 0.95) * 0.5) : vec2(0.0, 0.0);
-  vec2 q = toBody(C - o, ang);
+  float wave = p1.x, tLen = p1.y, spin = time * p1.z + phase;
+  vec2 q = toBody(C, A);
 
-  // Two fishing tentacles trailing behind, with side filaments.
-  if (isRound) {
+  // Two fishing tentacles streaming behind, with side filaments.
+  if (isRound && length(C) < tLen + 1.6) {
+    tentacleDirs();
+    float seg = tLen / 10.0;
     for (int i = 0; i < 2; i++) {
       float side = i == 0 ? 1.0 : -1.0;
-      vec2 root = vec2(side * 0.45 * b, 0.15 * a);
-      float s = q.y - root.y;
-      if (s >= 0.0 && s <= tLen) {
-        float x = root.x + side * 0.3 * s + sin(time * 0.4 - s * 2.5 + side * 2.0) * 0.06 * s;
-        if (abs(q.x - x) < K * 0.5) add(0.15 * (1.0 - 0.5 * s / tLen), bodyColour);
-      }
-      for (int j = 1; j < 9; j++) {
-        float sj = tLen * float(j) / 9.0;
-        vec2 p = root + vec2(side * 0.3 * sj + sin(time * 0.4 - sj * 2.5 + side * 2.0) * 0.06 * sj, sj);
-        float fl = 0.22 * (1.0 - float(j) / 9.0);
-        float fa = PI * 0.5 - side * (1.1 + 0.15 * sin(time * 0.3 + float(j)));
-        vec2 e = p + vec2(cos(fa), sin(fa)) * fl;
-        if (segDist(rot(p, ang) + o, rot(e, ang) + o) < K * 0.5) add(0.09, bodyColour);
+      vec2 p = rot(vec2(side * 0.45 * b, 0.15 * a), A);
+      float wave = 0.0;
+      for (int j = 1; j < 11; j++) {
+        wave += sin(time * 0.4 - float(j) * 0.45 + side * 2.0) * 0.06;
+        vec2 d = rot(dirs[j], -side * 0.3 + wave);
+        vec2 q2 = p + d * seg;
+        thread(p, q2, 0.15 * (1.0 - 0.5 * float(j) / 10.0), bodyColour);
+        if (mod(float(j), 2.0) > 0.5) {
+          float fl = 0.22 * (1.0 - float(j) / 10.0);
+          float fa = side * (1.1 + 0.15 * sin(time * 0.3 + float(j)));
+          thread(q2, q2 + rot(d, fa) * fl, 0.09, bodyColour);
+        }
+        p = q2;
       }
     }
   }
@@ -266,20 +370,22 @@ void ctenophore() {
   }
 
   // The statocyst at the leading pole.
-  dot2(rot(vec2(0.0, -0.9 * a), ang) + o, max(K * 0.6, 0.04), 0.8, accent);
+  dot2(rot(vec2(0.0, -0.9 * a), A), max(K * 0.6, 0.04), 0.8, accentColour);
 
   // Eight comb rows; light runs down them and splits into colours.
-  for (int i = 0; i < 8; i++) {
-    float th = float(i) / 8.0 * TAU + spin, z = cos(th);
-    float vis = z < -0.2 ? 0.25 : 0.45 + 0.55 * max(0.0, z);
-    for (int j = 0; j < 22; j++) {
-      if (float(j) >= plates) break;
-      float u = -0.84 + 1.56 * float(j) / (plates - 1.0);
-      float rr = b * (1.0 + egg * u) * sqrt(max(0.0, 1.0 - u * u));
-      vec2 p = rot(vec2(sin(th) * rr * 1.02, u * a), ang) + o;
-      if (abs(p.x - C.x) > K * 0.5 || abs(p.y - C.y) > K) continue;
-      float br = pow(max(0.0, sin(float(j) * 0.5 - time * wave * TAU)), 3.0);
-      add((0.08 + 0.55 * br) * vis, rain(floor(float(j) * 0.35 + float(i) * 0.6 - time * wave * 1.2)));
+  if (length(C) < 1.4) {
+    for (int i = 0; i < 8; i++) {
+      float th = float(i) / 8.0 * TAU + spin, z = cos(th);
+      float vis = z < -0.2 ? 0.25 : 0.45 + 0.55 * max(0.0, z);
+      for (int j = 0; j < 22; j++) {
+        if (float(j) >= plates) break;
+        float u = -0.84 + 1.56 * float(j) / (plates - 1.0);
+        float rr = b * (1.0 + egg * u) * sqrt(max(0.0, 1.0 - u * u));
+        vec2 p = rot(vec2(sin(th) * rr * 1.02, u * a), A);
+        if (abs(p.x - C.x) > K * 0.5 || abs(p.y - C.y) > K) continue;
+        float br = pow(max(0.0, sin(float(j) * 0.5 - time * wave * TAU)), 3.0);
+        add((0.08 + 0.55 * br) * vis, rain(floor(float(j) * 0.35 + float(i) * 0.6 - time * wave * 1.2)));
+      }
     }
   }
 }
@@ -287,7 +393,7 @@ void ctenophore() {
 // ------------------------------------------------------------ radiolarian
 void radiolarian() {
   float shells = p0.x, pods = p0.y, podLen = p0.z, rc = p0.w;
-  float spines = p1.x, longSpines = p1.y, every = p1.z, a = time * p1.w + seed;
+  float spines = p1.x, longSpines = p1.y, every = p1.z, a = time * p1.w + phase;
 
   // Fine threads, with granules creeping outward.
   for (int i = 0; i < 34; i++) {
@@ -310,7 +416,7 @@ void radiolarian() {
     float isLong = longSpines > 0.5 && mod(float(i), every) < 0.5 ? 1.0 : 0.0;
     float e = mix(1.12, 1.4, hash1(float(i) + 4.4)) + isLong * 0.45;
     vec2 d = vec2(cos(an), sin(an));
-    glassLine(d * rc, d * e, glass, 0.85);
+    glassLine(d * rc, d * e, 0.85);
     thread(d * 0.95, d * e, 0.12, glass);
   }
 
@@ -360,7 +466,7 @@ vec3 untilt(vec3 q, float spin, float tilt) {
 }
 
 void volvox() {
-  float count = p0.x, tilt = p0.y, spin = time * p0.z + seed, daughters = p0.w;
+  float count = p0.x, tilt = p0.y, spin = time * p0.z + phase, daughters = p0.w;
   float u = length(C), v;
   if (u > 1.0) v = 0.3 * max(0.0, 1.0 - (u - 1.0) / (0.04 + K));
   else v = 0.035 + 0.3 * pow(u, 10.0);
@@ -395,13 +501,12 @@ void diatom() {
   bool pennate = p0.x > 0.5;
   float width = p0.y, tip = p0.z, striae = p0.w, rings = p1.x, rays = p1.y, drops = p1.z, glide = p1.w;
   if (pennate) {
-    // Glides along its longSpines axis, stops, glides back.
-    float ang = PI * 0.5 + sin(time * 0.03 + seed) * 0.15;
-    float g = sin(fract(time / glide + seed) * TAU) * 0.12;
-    vec2 o = rot(vec2(0.0, -g), ang);
-    vec2 q = toBody(C - o, ang);
-    float A = 1.15, B = width * 1.4, k = tip * 0.6;
-    float tt = q.y / A;
+    // Glides along its long axis, stops, glides back.
+    float g = sin(fract(time / glide + phase) * TAU) * 0.12;
+    vec2 o = rot(vec2(0.0, -g), A);
+    vec2 q = toBody(C - o, A);
+    float AA = 1.15, B = width * 1.4, k = tip * 0.6;
+    float tt = q.y / AA;
     if (abs(tt) <= 1.04) {
       float w = B * pow(max(0.0, 1.0 - tt * tt), k);
       if (w >= K * 0.3) {
@@ -423,11 +528,11 @@ void diatom() {
     for (int i = 0; i < 4; i++) {
       if (float(i) >= drops) break;
       vec2 d = i == 0 ? p2.xy : i == 1 ? p2.zw : i == 2 ? p3.xy : p3.zw;
-      dot2(rot(vec2(d.x * B, d.y * A), ang) + o, max(K * 0.6, 0.05), 0.75, markColour);
+      dot2(rot(vec2(d.x * B, d.y * AA), A) + o, max(K * 0.6, 0.05), 0.75, markColour);
     }
   } else {
     // Round ones only turn.
-    float a = time * 0.012 + seed, Rd = 0.95;
+    float a = time * 0.012 + phase, Rd = 0.95;
     float r = length(C), u = r / Rd;
     if (u <= 1.1) {
       float th = atan(C.y, C.x) - a, v = 0.55 * exp(-pow((u - 1.0) / 0.05, 2.0));
@@ -444,42 +549,44 @@ void diatom() {
   }
 }
 
-void main() {
-  vec2 px = qt_TexCoord0 * area;
-  vec2 cellIndex = floor(px / vec2(cell, cell * 2.0));
-  vec2 centre = (cellIndex + 0.5) * vec2(cell, cell * 2.0);
-  if (bound > 0.0 && length(centre - clipAt) > bound) discard;
-  C = (centre - area * 0.5) / radius;
-  K = cell / radius;
-  total = 0.0; best = 0.0; colour = glass;
-  lineG = 0.0; lineA = 0.0; lineC = glass;
+// How far the organism reaches from its position, in R.
+float extent() {
+  if (kindIndex < 0.5) return p0.w + 1.6;
+  if (kindIndex < 1.5) return p0.x > 0.5 ? p1.y + 1.6 : 1.3;
+  if (kindIndex < 2.5) return p0.z * 1.2 + 0.2;
+  return 1.4;
+}
 
-  if (kind < 0.5) medusa();
-  else if (kind < 1.5) ctenophore();
-  else if (kind < 2.5) radiolarian();
-  else if (kind < 3.5) volvox();
+void main() {
+  // Each fragment is one cell; its centre in px.
+  vec2 px = origin + qt_TexCoord0 * box;
+  if (radius < cell * 0.9 || amp <= 0.0) discard;
+  if (bound > 0.0 && length(px - clipAt) > bound) discard;
+
+  vec2 pos = posAt(time);
+  A = headingAt(time);
+  // A medusa or comb jelly kept still (a lens) is centred on its whole
+  // length, so the bell and the tentacles share the space.
+  if (!swims()) {
+    if (kindIndex < 0.5) pos += rot(vec2(0.0, -(p0.w - p0.x) * 0.5), A) * radius;
+    else if (kindIndex < 1.5 && p0.x > 0.5) pos += rot(vec2(0.0, -(p1.y - 0.95) * 0.5), A) * radius;
+  }
+  C = (px - pos) / radius;
+  K = cell / radius;
+  if (length(C) > extent() + 1.0) discard;
+
+  total = 0.0; best = 0.0; colour = glass;
+  lineG = 0.0; lineA = 0.0;
+
+  if (kindIndex < 0.5) medusa();
+  else if (kindIndex < 1.5) ctenophore();
+  else if (kindIndex < 2.5) radiolarian();
+  else if (kindIndex < 3.5) volvox();
   else diatom();
 
-  float g, alpha;
-  vec4 col;
-  if (lineG > 0.0 && total < 0.32) {
-    g = lineG; col = lineC; alpha = lineA;
-  } else {
-    if (total < 0.04) discard;
-    g = 1.0 + min(9.0, floor(pow(min(1.0, total / 1.4), 1.05) * 10.0));
-    col = colour;
-    // The brightest cells are lit a little beyond their colour.
-    // The brightest cells are lit beyond their colour, the rim and core
-    // most: that is what makes the organism glow against the water.
-    if (total > 0.9) col.rgb = mix(col.rgb, vec3(1.0 - light), light > 0.5 ? 0.3 : 0.45);
-    else if (total > 0.55) col.rgb = mix(col.rgb, vec3(1.0 - light), light > 0.5 ? 0.12 : 0.18);
-    alpha = clamp(0.25 + total * 1.2, 0.08, 1.0);
-  }
-
-  vec2 local = fract(px / vec2(cell, cell * 2.0));
-  // A little inside the cell: at its very edge the filter reads the
-  // neighbouring glyph, which drew a faint box around characters.
-  local = mix(vec2(0.08, 0.04), vec2(0.92, 0.96), local);
-  float ink = texture(atlas, vec2((g + local.x) / glyphs, local.y)).a;
-  fragColor = vec4(col.rgb, 1.0) * ink * alpha * qt_Opacity;
+  // Small organisms fade in as they grow, as in the studies.
+  total *= amp * min(1.0, radius / (cell * 3.0));
+  if (lineG > 0.0 && total < 0.32) fragColor = vec4(glass.rgb, 0.8 + 0.04 * lineG);
+  else if (total >= 0.04) fragColor = vec4(colour.rgb, min(total, 1.4) / 1.4 * 0.8);
+  else discard;
 }

@@ -99,10 +99,9 @@ Item {
     alive: root.live && root.playing && Visuals.moving(root.visuals)
     awake: root.playing
     blur: Visuals.moving(root.visuals) ? 1 : 0
-    home: !root.showCard ? Qt.point(0.5, 0.5) : root.side ? Qt.point(0.22, 0.5) : Qt.point(0.5, 0.36)
-    span: !root.showCard ? 0.8 : root.side ? 0.8 : 0.55
-    specks: 12
-    bubbles: 4
+    home: !root.showCard ? Qt.point(0.5, 0.5) : root.side ? Qt.point(0.22, 0.5) : Qt.point(0.5, 0.42)
+    span: !root.showCard ? 0.7 : root.side ? 0.7 : 0.45
+    specks: 22
     passer: !root.side
     palette: Theme.creatureColors
     ground: Theme.background
@@ -111,7 +110,8 @@ Item {
     accent: Theme.accent
     muted: Theme.muted
     light: Theme.mode === "light"
-    cell: Math.max(5, root.px(5))
+    // The studies' small pool has about 78 columns across.
+    columns: 78
 
     MouseArea {
       anchors.fill: parent
@@ -194,7 +194,8 @@ Item {
     width: root.width - x - root.pad
     height: root.side ? root.height - labels.y - labels.height - root.gap - root.pad : info.implicitHeight + inset * 2
     y: root.side ? labels.y + labels.height + root.gap : root.height - root.pad - height
-    backdrop: root.scene ? water : null
+    surface: root.scene ? water.surface : null
+    scene: Qt.size(water.width, water.height)
     area: Qt.rect(x, y, width, height)
     blur: water.blur
     tint: Theme.background

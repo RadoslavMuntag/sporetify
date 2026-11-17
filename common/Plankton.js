@@ -16,6 +16,10 @@ var colourNames = ["green", "cyan", "blue", "magenta", "yellow", "orange", "red"
 // equally present: a medusa's tentacles reach three R below its bell and a
 // radiolarian's threads two and a half R out, a volvox is just a ball.
 var size = { medusa: 0.21, ctenophore: 0.19, radiolarian: 0.2, volvox: 0.4, diatom: 0.4 }
+// R for each kind relative to the pool's size for the playing organism, as
+// in the studies, so a medusa with its tentacles and a volvox ball read as
+// equally present.
+var presence = { medusa: 0.72, ctenophore: 0.7, radiolarian: 0.55, volvox: 0.95, diatom: 0.95 }
 
 function rng(id, salt) {
   var g = Organism.generator(Organism.hash(String(id) + "~" + salt))

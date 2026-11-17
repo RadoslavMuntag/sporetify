@@ -34,8 +34,11 @@ the daemon that matches.
   slow bell beat, light running down comb rows, a rolling colony). The bar
   and mini-player keep the small creature for now.
 - A new look, Living ASCII: the app and the compact player sit on a pool
-  drawn in characters, with light rippling through it, weeds, plankton and
-  bubbles, and the playing track's organism swimming in it. The sidebar,
+  drawn in characters, with light rippling through it, marine snow and
+  small organisms far off, and the playing track's organism swimming in
+  it among the queue's: medusae pulse along with their tentacles trailing,
+  comb jellies glide. On a track change the new one grows and swims to
+  the middle. The sidebar,
   list and player bar are glass over the water. With visuals or creatures
   off the app is plain and flat as before.
 - In that look every track in a list shows a small mark of its organism,

@@ -288,6 +288,34 @@ shaders plus a blurred copy and three glass panes are drawn every frame
 while playing), the row-size form for lists, and the mockup's glyph
 mosaic covers.
 
+Rebuilt like the studies (2026-11-17, owner: the studies' pool was "far
+superior": more natural motion, better blur, fuller colour, more
+detail). What changed, and why:
+
+- Fields at a texel per character cell, as the studies compute theirs:
+  `shaders/organism.frag` and `shaders/pond.frag` write into one small
+  texture per layer (`FieldLayer`), each organism only within the box it
+  can reach. Cells 4.4 to 7 px (`columns` 140), as the studies.
+- Organisms swim: a slow meandering loop about their home, medusae in
+  strokes that coast, comb jellies gliding, at the studies' speeds and
+  turning no faster than 0.06 rad/s; medusae stay within 20° of upright.
+  Tentacles hang and lean back toward where the body came from, by up to
+  half with speed, each segment following the path a moment further back
+  (the studies' chains). All analytic in `time`: no per-frame script.
+- Track change: `Pool.js` keeps each organism in its slot; the new one
+  grows (2.5 s) and glides home (4 s), the old shrinks into the queue.
+- The studies' water: the gradient, three large blurred discs drifting
+  over 48 to 67 s at about 16%, the ripples in the far layer, marine snow,
+  four far organisms, a passer-by, the vignette.
+- Cost: first build measured 96% GPU busy (app copy, 1400x820 at 1.25x,
+  playing). One full-screen pass costs ~10 points here, so: one pass over
+  the screen (`compose.frag`), background, far layer and passer merged at
+  a third of the size (`underlay.frag`), glow from a quarter-size copy,
+  glass reading one 1/6 copy of the scene, no MultiEffect, the pool's clock
+  stepped at 30 fps, the water's colour at 4. Measured after: app list
+  view 47% busy at 550 MHz, pool view 34%, compact player 13% at 450 MHz
+  (of 1200 MHz max); paused 0.4%.
+
 ## V6 · Motion
 
 The helix loader (bounded by the request deadline, appears only after

@@ -541,9 +541,9 @@ FloatingWindow {
       home: keys.opening
         ? Qt.point((keys.opening.x + keys.opening.waterAt.x) / Math.max(1, width), (keys.opening.y + keys.opening.waterAt.y) / Math.max(1, height))
         : Qt.point(0.82, 0.4)
-      span: keys.opening ? Math.min(0.9, keys.opening.waterRoom / Math.max(1, height)) : 0.3
-      specks: 26
-      bubbles: 5
+      // The studies size the playing organism at about 0.3 of its space.
+      span: keys.opening ? Math.min(0.7, keys.opening.waterRoom * 0.6 / Math.max(1, height)) : 0.3
+      specks: 30
       passer: false
       palette: Theme.creatureColors
       ground: Theme.background
@@ -563,7 +563,8 @@ FloatingWindow {
       y: frame.y + keys.gap
       width: frame.width - keys.gap * 2
       height: frame.height - keys.gap * 2
-      backdrop: keys.inWater ? sea : null
+      surface: keys.inWater ? sea.surface : null
+      scene: Qt.size(sea.width, sea.height)
       area: Qt.rect(x, y, width, height)
       blur: sea.blur
       tint: Theme.background
