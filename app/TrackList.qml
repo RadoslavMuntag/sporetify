@@ -1,8 +1,11 @@
 import QtQuick
 
+import "../common"
+
 import "../common/Keymap.js" as Keymap
 import "../common/Position.js" as Position
 import "../common/Specimen.js" as Specimen
+import "../common/Plankton.js" as Plankton
 
 // The open collection's tracks. Rows are fixed height and exist for the
 // whole list from the start; a row shows a placeholder until its page of
@@ -15,6 +18,9 @@ Item {
   property bool focused: false
   // Show a cover on each row.
   property bool covers: true
+  // The Living ASCII look (D18): the list is glass over the water, every
+  // track shows its organism's mark, and the cursor is an accent fill.
+  property bool water: false
   property alias currentIndex: list.currentIndex
   signal activated(int index)
 
@@ -24,7 +30,7 @@ Item {
 
   // ---- Column layout, shared by the column labels and every row.
   readonly property real pad: Theme.spacing.huge
-  readonly property real numberWidth: Theme.space(36)
+  readonly property real numberWidth: Theme.space(water ? 48 : 36)
   readonly property real timeWidth: Theme.space(52)
   readonly property real markWidth: Theme.space(24)
   // On an album page every row would show the same cover.
@@ -86,17 +92,17 @@ Item {
     spacing: Theme.spacing.xxl
 
     // Album cover or artist portrait, when the place has one.
-    Image {
+    GlyphCover {
       id: art
       visible: root.library.artPath !== ""
       anchors.verticalCenter: parent.verticalCenter
       width: visible ? Theme.space(72) : 0
       height: Theme.space(72)
       source: root.library.artPath !== "" ? "file://" + root.library.artPath : ""
-      sourceSize.width: Theme.space(144)
-      sourceSize.height: Theme.space(144)
-      fillMode: Image.PreserveAspectCrop
-      asynchronous: true
+      mosaic: root.water
+      deep: Theme.sunken
+      ink: Theme.foreground
+      light: Theme.mode === "light"
     }
 
     Column {
@@ -179,7 +185,7 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       width: parent.width
       height: Theme.font.caption * 1.4
-      ColumnLabel { x: root.pad; text: "#" }
+      ColumnLabel { x: root.pad; text: root.water ? "LIFE" : "#" }
       ColumnLabel { x: columns.textX; text: "TITLE" }
       ColumnLabel { x: columns.textX + columns.flexible * 0.6; text: "ALBUM" }
       ColumnLabel { anchors.right: parent.right; anchors.rightMargin: root.pad; text: "TIME" }
@@ -214,6 +220,13 @@ Item {
       // "" for a track, otherwise "heading", "album", "artist" or "playlist".
       readonly property string kind: track !== null && track.kind !== undefined ? track.kind : ""
       readonly property bool isPlaying: track !== null && kind === "" && track.uri === root.playingUri
+      readonly property var organism: root.water && track !== null && kind === "" ? Plankton.create(track.uri) : null
+      // Its body colour, or its detail colour when the body is plain glass.
+      readonly property color markColour: {
+        if (!organism) return Theme.muted
+        var u = Plankton.uniforms(organism)
+        return Plankton.colour(Theme.creatureColors, u.main !== "fg" ? u.main : u.mark, Theme.foreground)
+      }
       readonly property bool cursor: ListView.isCurrentItem && root.focused
       readonly property bool marked: {
         root.library.revision
@@ -266,7 +279,11 @@ Item {
 
       width: list.width
       height: Theme.spacing.trackRow
-      color: (cursor || hover.containsMouse) && kind !== "heading" ? Theme.hoverFill : "transparent"
+      color: kind === "heading" ? "transparent"
+        : root.water && cursor ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+        : (cursor || hover.containsMouse) ? Theme.hoverFill : "transparent"
+      border.width: root.water && cursor ? Theme.stroke.hair : 0
+      border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.45)
 
       // A hairline under every row, as in a ruled catalogue.
       Rectangle {
@@ -279,7 +296,7 @@ Item {
       }
 
       // The cursor: corner brackets, top left and bottom right.
-      Bracket { visible: row.cursor }
+      Bracket { visible: row.cursor && !root.water }
 
       // A bar down the left edge of a selected row.
       Rectangle {
@@ -319,10 +336,16 @@ Item {
           case "artist": return "󰠃"
           case "playlist": return "󰲸"
           }
+          // In the water, a track shows its organism instead of a number.
+          if (root.water && row.organism) return Plankton.mark(row.organism)
           // A list with sections numbers its tracks itself (see Pages.numberTracks).
           return String(row.track && row.track.n ? row.track.n : row.index + 1)
         }
-        color: row.isPlaying || row.marked ? Theme.accent : Theme.muted
+        color: row.isPlaying || row.marked ? Theme.accent
+          : root.water && row.organism ? row.markColour
+          : Theme.muted
+        // Marks such as "<=>" must not be joined into one arrow.
+        font.features: { "liga": 0, "calt": 0 }
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
       }
@@ -387,6 +410,7 @@ Item {
             color: row.ink
             font.family: Theme.font.family
             font.pixelSize: Theme.font.body
+            font.bold: root.water && row.isPlaying
           }
           Text {
             id: number

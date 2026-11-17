@@ -9,6 +9,8 @@ Rectangle {
 
   required property var library
   property bool focused: false
+  // The Living ASCII look (D18): the open list is an accent fill.
+  property bool water: false
   property alias currentIndex: list.currentIndex
   readonly property int count: list.count
   signal activated(int index)
@@ -114,7 +116,8 @@ Rectangle {
 
       width: list.width
       height: Theme.spacing.rowHeight
-      color: cursor || hover.containsMouse ? Theme.hoverFill : "transparent"
+      color: root.water && open ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)
+        : cursor || hover.containsMouse ? Theme.hoverFill : "transparent"
 
       Bracket { visible: row.cursor }
       Rectangle {

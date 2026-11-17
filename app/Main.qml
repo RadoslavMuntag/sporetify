@@ -542,8 +542,15 @@ FloatingWindow {
       light: Theme.mode === "light"
     }
 
-    // Glass under the sidebar, the list and the bar.
+    // Glass under the sidebar, the list and the bar, with a little water
+    // showing between them, as in the mockup.
+    readonly property int gap: Theme.spacing.sm
     component Pane: Glass {
+      property rect frame
+      x: frame.x + keys.gap
+      y: frame.y + keys.gap
+      width: frame.width - keys.gap * 2
+      height: frame.height - keys.gap * 2
       backdrop: keys.inWater ? sea : null
       area: Qt.rect(x, y, width, height)
       blur: sea.blur
@@ -552,18 +559,16 @@ FloatingWindow {
     }
     Pane {
       visible: sidebar.visible && keys.inWater
-      x: sidebar.x; y: sidebar.y; width: sidebar.width; height: sidebar.height
+      frame: Qt.rect(sidebar.x, sidebar.y, sidebar.width + keys.gap / 2, sidebar.height + keys.gap / 2)
     }
     Pane {
       visible: keys.inWater && !window.poolShown
-      x: sidebar.x + sidebar.width
-      y: 0
-      width: (plate.visible ? plate.x : parent.width) - x
-      height: nowPlaying.y
+      frame: Qt.rect(sidebar.x + sidebar.width - (sidebar.visible ? keys.gap / 2 : 0), 0,
+        (plate.visible ? plate.x : parent.width) - sidebar.x - sidebar.width + (sidebar.visible ? keys.gap / 2 : 0), nowPlaying.y + keys.gap / 2)
     }
     Pane {
       visible: keys.inWater
-      x: 0; y: nowPlaying.y; width: parent.width; height: parent.height - nowPlaying.y
+      frame: Qt.rect(0, nowPlaying.y - keys.gap / 2, parent.width, parent.height - nowPlaying.y + keys.gap / 2)
     }
 
     Keys.onPressed: function(event) {
@@ -584,6 +589,7 @@ FloatingWindow {
     Sidebar {
       id: sidebar
       color: keys.inWater ? "transparent" : Theme.sunken
+      water: keys.inWater
       anchors.top: parent.top
       anchors.bottom: nowPlaying.top
       visible: prefs.sidebar
@@ -619,6 +625,7 @@ FloatingWindow {
       library: library
       player: player
       covers: prefs.covers
+      water: keys.inWater
       focused: window.pane === "list"
       onActivated: function(index) {
         window.pane = "list"
@@ -728,6 +735,7 @@ FloatingWindow {
     NowPlayingBar {
       id: nowPlaying
       color: keys.inWater ? "transparent" : Theme.sunken
+      water: keys.inWater
       anchors.bottom: hints.top
       width: parent.width
       player: player

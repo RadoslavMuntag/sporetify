@@ -272,6 +272,16 @@ The look moves from Field Guide to Living ASCII, the owner's pick from the
 - Visuals or creatures off: no water, panels opaque, the lens/cover as
   before.
 
+Layout pass (same day): a small gap of water between the glass panes;
+the open playlist an accent fill; list rows show the organism's one-line
+mark (`Plankton.mark`, e.g. `(¯)~`, `<=>`) in a LIFE column, the cursor
+row an accent fill with an accent edge, the playing title bold in accent;
+the plate reads THE POOL; the list header's and the bar's covers are
+glyph mosaics (`common/GlyphCover.qml`, `shaders/mosaic.frag`). Row
+covers stay plain, as a shader per delegate is not a cheap delegate. The
+bar keeps its ruler and slider (they are dragged), not the mockup's
+character progress and volume.
+
 Checked: GPU captures of both surfaces against the demo daemon in a dark
 theme and catppuccin-latte. Not yet: cost measured on a real screen (two
 shaders plus a blurred copy and three glass panes are drawn every frame

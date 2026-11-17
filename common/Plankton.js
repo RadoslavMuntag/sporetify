@@ -120,6 +120,21 @@ function table(P) {
   return rows
 }
 
+// The organism at row size: a one-line mark of four characters or fewer,
+// telling the kind first and a trait second. "(¯)~" a medusa, "<|>" a
+// round comb jelly, "*o*" a spiny radiolarian, "(::)" a volvox, "<=>" a
+// pennate diatom.
+function mark(P) {
+  switch (P.kind) {
+  case "medusa": return "(¯)" + (P.tentacles > 16 ? "≈" : "~")
+  case "ctenophore": return P.form === "cydippid" ? "<|>" : "{|}"
+  case "radiolarian": return P.spines.length > 12 ? "*o*" : "-o-"
+  case "volvox": return P.daughters.length > 4 ? "(oo)" : "(::)"
+  case "diatom": return P.form === "pennate" ? "<=>" : "(+)"
+  }
+  return "·"
+}
+
 var kindIndex = { medusa: 0, ctenophore: 1, radiolarian: 2, volvox: 3, diatom: 4 }
 
 function v4(a, b, c, d) { return { x: a || 0, y: b || 0, z: c || 0, w: d || 0 } }

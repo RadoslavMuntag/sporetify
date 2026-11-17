@@ -38,6 +38,9 @@ the daemon that matches.
   bubbles, and the playing track's organism swimming in it. The sidebar,
   list and player bar are glass over the water. With visuals or creatures
   off the app is plain and flat as before.
+- In that look every track in a list shows a small mark of its organism,
+  the open playlist and the cursor are lit in the accent colour, and the
+  covers in the list header and the player bar are drawn in characters.
 - The now-playing bar shows the cover alone; the creature beside it is
   gone (the plate on the right shows it).
 - Fixed: turning creatures off while the app or the compact player was

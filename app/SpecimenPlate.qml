@@ -43,7 +43,7 @@ Rectangle {
     function onPlayerChanged() { root.nowMs = Date.now() }
   }
 
-  Rectangle { width: Theme.stroke.hair; height: parent.height; color: Theme.line }
+  Rectangle { visible: !root.inWater; width: Theme.stroke.hair; height: parent.height; color: Theme.line }
 
   component Caption: Text {
     textFormat: Text.PlainText
@@ -65,7 +65,7 @@ Rectangle {
       height: figure.height
       Caption {
         id: figure
-        text: "FIG. 1 · " + (root.track ? (root.player.playing ? "NOW PLAYING" : "PAUSED") : "AT REST")
+        text: root.inWater ? "THE POOL" : "FIG. 1 · " + (root.track ? (root.player.playing ? "NOW PLAYING" : "PAUSED") : "AT REST")
       }
       Caption {
         anchors.right: parent.right
