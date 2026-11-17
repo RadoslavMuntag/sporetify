@@ -17,6 +17,15 @@ echo "== qml: tests"
 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen \
   /usr/lib/qt6/bin/qmltestrunner -input tests | grep -Ev '^PASS'
 
+echo "== shaders"
+# The checked-in .qsb files must match their sources. Skipped without qsb
+# (qt6-shadertools); CI installs it.
+if command -v qsb >/dev/null 2>&1 || [[ -x /usr/lib/qt6/bin/qsb ]]; then
+  scripts/shaders.sh --check
+else
+  echo "qsb not installed; shader check skipped"
+fi
+
 echo "== lint"
 tests/lint.sh
 

@@ -88,6 +88,7 @@ Rectangle {
     eye: Theme.mode === "light" ? Theme.background : Theme.foreground
     pupil: Theme.mode === "light" ? Theme.foreground : Theme.sunken
     stroke: Math.max(Theme.stroke.hair, Theme.stroke.hair * lens.width / Theme.space(260))
+    light: Theme.mode === "light"
   }
 
   Column {

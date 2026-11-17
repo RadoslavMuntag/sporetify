@@ -237,6 +237,18 @@ Not yet: the cost on a real screen while visible and playing (the
 budget is a few percent of one core), and the swim seen in motion; both
 need a window on the owner's screen.
 
+Plankton (2026-11-17, D17): the lens's specimen and the pool's three
+swimmers are now `common/Plankton.qml`, the organisms from the "Organism
+studies" mockup. `common/Plankton.js` grows them (same hash and salts as
+the mockup) and packs them into six vec4 uniforms; the fragment shader
+`common/shaders/plankton.frag` works out each character cell's light and
+picks its glyph from an atlas drawn once from `Text`. Motion is one
+`clock` uniform animated only while alive. The shader cuts itself to the
+lens's circle (`bound`, `clipAt`). If the shader fails to load, the old
+line-art creature is drawn. Not yet: seen on a real screen, its cost
+measured, and the tentacles that trail with movement in the mockup
+(here they sway in place, as nothing simulates per frame).
+
 ## V6 · Motion
 
 The helix loader (bounded by the request deadline, appears only after

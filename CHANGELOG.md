@@ -28,6 +28,11 @@ the daemon that matches.
   in moving light, with the previous and next tracks' creatures at the
   edges, swimming one place along on a track change. `z` in the compact
   player shows the same pool in its lens.
+- The lens and the tide pool show a new organism for each track, drawn in
+  characters on the GPU: a medusa, comb jelly, radiolarian, volvox colony
+  or diatom, with no face, lit at the rim and moving in its own way (a
+  slow bell beat, light running down comb rows, a rolling colony). The bar
+  and mini-player keep the small creature for now.
 - The now-playing bar shows the cover alone; the creature beside it is
   gone (the plate on the right shows it).
 - Fixed: turning creatures off while the app or the compact player was

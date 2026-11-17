@@ -155,6 +155,7 @@ Item {
     eye: Theme.mode === "light" ? Theme.background : Theme.foreground
     pupil: Theme.mode === "light" ? Theme.foreground : Theme.sunken
     stroke: Math.max(Theme.stroke.hair, root.zoom)
+    light: Theme.mode === "light"
 
     MouseArea {
       anchors.fill: parent
