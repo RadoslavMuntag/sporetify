@@ -21,8 +21,8 @@ Item {
   // The Living ASCII look (D18): the list is glass over the water, every
   // track shows its organism's mark, and the cursor is an accent fill.
   property bool water: false
-  // How far rules stay in from the edges, so they end inside the glass.
-  readonly property real inset: water ? Theme.spacing.xl : 0
+  // How far rules and the rows' fills stay in from the glass edges.
+  readonly property real inset: water ? Theme.spacing.md : 0
   property alias currentIndex: list.currentIndex
   signal activated(int index)
 
@@ -161,9 +161,8 @@ Item {
     id: rule
     anchors.top: header.bottom
     anchors.topMargin: Theme.spacing.xl
-    // In the water, kept inside the glass pane.
     x: root.inset
-    width: parent.width - root.inset * 2.5
+    width: parent.width - root.inset * 2
     height: Theme.stroke.hair
     color: Theme.line
   }
@@ -201,7 +200,7 @@ Item {
     Rectangle {
       anchors.bottom: parent.bottom
       x: root.inset
-      width: parent.width - root.inset * 2.5
+      width: parent.width - root.inset * 2
       height: Theme.stroke.hair
       color: Theme.line
     }
@@ -211,11 +210,10 @@ Item {
     id: list
     anchors.top: columns.bottom
     anchors.bottom: parent.bottom
-    // In the water rows sit in from the glass edges; ListView keeps a
-    // delegate's own x at 0, so the list itself is inset.
-    x: root.water ? Theme.spacing.lg : 0
-    // The glass ends a gap short of the right edge, where the pool begins.
-    width: parent.width - x * 2 - (root.water ? Theme.spacing.xl / 2 : 0)
+    anchors.bottomMargin: root.inset
+    // ListView keeps a delegate's own x at 0, so the list itself is inset.
+    x: root.inset
+    width: parent.width - x * 2
     clip: true
     model: root.library.total
     boundsBehavior: Flickable.StopAtBounds

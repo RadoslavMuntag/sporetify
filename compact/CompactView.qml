@@ -189,7 +189,8 @@ Item {
   Glass {
     id: card
     visible: root.showCard
-    readonly property int inset: root.px(Theme.spacing.lg)
+    // Text sits as far in from the glass as in the app's panes.
+    readonly property int inset: root.px(Theme.spacing.xxl)
     x: root.side ? Math.round(root.width * 0.42) : root.pad
     width: root.width - x - root.pad
     height: root.side ? root.height - labels.y - labels.height - root.gap - root.pad : info.implicitHeight + inset * 2

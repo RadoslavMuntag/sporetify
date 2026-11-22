@@ -16,6 +16,11 @@ Rectangle {
   property real panelHeight: Theme.space(480)
   // Left and right margin for content that is not edge to edge.
   readonly property real pad: Theme.spacing.huge
+  // The Living ASCII look (D18): rounded like the glass panes, and a
+  // list's cursor is a rounded accent fill set in from the card's edges.
+  property bool water: false
+  // How far a list's fills stay in from the card's edges.
+  readonly property real inset: Theme.spacing.md
   default property alias content: body.data
   signal dismissed()
 
@@ -34,6 +39,7 @@ Rectangle {
     height: Math.min(parent.height - Theme.spacing.huge * 4,
       root.contentHeight > 0 ? chrome + root.contentHeight : root.panelHeight)
     color: Theme.background
+    radius: root.water ? Theme.space(6) : 0
     border.width: Theme.stroke.hair
     border.color: Theme.border
 

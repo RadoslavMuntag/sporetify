@@ -41,6 +41,12 @@ the daemon that matches.
   the middle. The sidebar,
   list and player bar are glass over the water. With visuals or creatures
   off the app is plain and flat as before.
+- The glass panes and what is on them line up: lists, rows and rules
+  stay inside their pane instead of running into its edges or past its
+  foot, the gaps between panes are even, the hints fit on one line (the
+  rest are under `?`), and the playlist picker, prompts and notices are
+  rounded like the panes. The compact player's card leaves more room
+  around its text.
 - In that look every track in a list shows a small mark of its organism,
   the open playlist and the cursor are lit in the accent colour, and the
   covers in the list header and the player bar are drawn in characters.

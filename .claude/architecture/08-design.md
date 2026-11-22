@@ -316,6 +316,25 @@ detail). What changed, and why:
   view 47% busy at 550 MHz, pool view 34%, compact player 13% at 450 MHz
   (of 1200 MHz max); paused 0.4%.
 
+Layout tidied (2026-11-21, owner: the UI elements were "all over the
+place. gaps, ui elements overlapping, spilling"). The panes were drawn by
+`Main.qml` from padded-out frames while each panel guessed its own inset
+(`xl`, `lg`, `xl / 2`, `× 2.5`), so rows touched the glass edges and the
+list ran a half gap past its pane's foot. Now, in the water, `Main.qml`
+lays each panel out a gap (`spacing.xl`) in from its neighbours and the
+window, and draws its pane exactly over the panel (sidebar; search bar and
+list; bar and hints). Panels then pad their own content the same way:
+fills and rules `spacing.md` in from the glass, text `spacing.huge`, so
+the sidebar's names, the list's columns, the bar and the hints share one
+left edge. The sidebar and picker cursors in the water are the list's
+accent fill and edge (square brackets poked out of rounded fills); sheets
+and the toast are rounded; the toast sits inside the list's pane. The
+hint bar keeps to one line (`HintBar.singleLine`, with `pinned` actions
+that always show: `?` and quit). Compact card padding `lg` → `xxl`.
+Checked in offscreen pictures with the glass drawn as a flat stand-in,
+at 800, 1100 and 1600 px wide, in gruvbox and catppuccin-latte, and the
+flat look (visuals off) unchanged but for the one-line hints.
+
 ## V6 · Motion
 
 The helix loader (bounded by the request deadline, appears only after
