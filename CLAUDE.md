@@ -417,6 +417,15 @@ Things that bite:
   pauses, skips, changes volume, restarts the daemon or the shell, or closes
   the app window, check `player.get`; if something is playing, do not touch
   the live player. Test UI against a paused state, or ask first.
+- librespot's `Player` joins its threads when the last handle is dropped,
+  and a track load caught on a dead connection never finishes. Never let
+  the last handle go on the daemon's main thread; `session()` drops it on a
+  thread of its own. librespot also marks a session invalid (keep-alive
+  timeout) without ending the Connect task: check `is_invalid()`.
+- To reproduce a lost network without root: librespot takes an HTTP proxy
+  (`SessionConfig::proxy`); a proxy that stops passing data on the
+  connections already open, without closing them, behaves like a vanished
+  address. Playing takes the account's playback away from the owner's player.
 - A Connect device ignores every command except activate until it is active,
   and activation resets its volume. See `Playback::command` in
   `daemon/src/player.rs`.

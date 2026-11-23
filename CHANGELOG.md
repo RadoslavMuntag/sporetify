@@ -15,6 +15,11 @@ Fixes to editing playlists, and to lists that never refreshed.
   duplicate.
 - Creating or deleting a playlist is no longer reported as failed when
   only the reload of your playlists afterwards was slow.
+- The player no longer gets stuck when the network changes under it (a
+  cable pulled, a switch to Wi-Fi). It used to keep saying "playing" with
+  no sound, and nothing could start it again short of restarting the
+  daemon. Now it reconnects once Spotify's connection is found dead (about
+  a minute and a half) and carries on from where the sound stopped.
 - Playlists Spotify rewrites on a schedule (Discover Weekly, Release Radar,
   the Daily Mixes, daylist) and playlists edited on another device no
   longer keep the tracks they had when Sporetify first saved them. A saved list

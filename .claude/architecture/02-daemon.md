@@ -48,6 +48,18 @@ Commands are optimistic inside the daemon too: `Playback::command` hands the
 command to librespot's queue, updates state at once, and returns. librespot's
 player events then confirm or correct it.
 
+A lost connection: when the network goes away under an open connection (a
+cable pulled, a switch to another network), nothing closes it, and librespot
+notices only through its keep-alive, about 80 s later. It then marks the
+session invalid but keeps the Connect task running, so `session()` checks
+`is_invalid()` every 2 s and ends the session itself; the run loop
+reconnects. If music was playing, the next session resumes it from the
+position last heard playing (librespot's `PositionChanged`, reported every
+second and kept inside the daemon), provided it reconnects within 5 minutes.
+The old player is dropped on a thread of its own: librespot joins its
+threads on drop, and a track load caught on the dead connection never
+finishes, which on the daemon's main thread hung everything.
+
 ## Requests and deadlines
 
 Every socket request becomes a supervised task with a deadline (client-supplied,
