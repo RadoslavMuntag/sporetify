@@ -55,7 +55,9 @@ Item {
   // ---- The glyphs, drawn once into a texture: blank, the brightness ramp,
   //      then the line glyphs for glass spines.
   readonly property string glyphs: " .·:-=+*#%@-|/\\°"
-  readonly property int atlasCell: 16
+  // Drawn at the cell's own size: shrinking larger glyphs averaged their
+  // thin strokes into faint grey.
+  readonly property int atlasCell: Math.max(3, Math.round(cell))
 
   Row {
     id: atlasRow
@@ -80,8 +82,7 @@ Item {
     id: glyphAtlas
     sourceItem: atlasRow
     hideSource: true
-    smooth: true
-    mipmap: true
+    smooth: false
     // Redrawn only when a glyph changes, never per frame.
   }
 

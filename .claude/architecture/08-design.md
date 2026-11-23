@@ -249,6 +249,45 @@ line-art creature is drawn. Not yet: seen on a real screen, its cost
 measured, and the tentacles that trail with movement in the mockup
 (here they sway in place, as nothing simulates per frame).
 
+## Living ASCII (2026-11-17, D18)
+
+The look moves from Field Guide to Living ASCII, the owner's pick from the
+"Living ASCII" mockup. Built in one pass:
+
+- `common/Water.qml`: the pool. `shaders/water.frag` draws the colour
+  field, three drifting lights, caustics on a soft far layer, weeds,
+  plankton specks and bubbles as characters, with a vignette. Over it the
+  playing organism (Plankton.qml) near `home` and the up-next one smaller,
+  each gliding on property animations; a blurred copy under them for glow;
+  in the compact player one large organism passing out of focus in front.
+  One clock for all of it, paused unless alive.
+- `common/Glass.qml`: a pane sampling the water behind it (a visible
+  `ShaderEffectSource` of its own rectangle, blurred by `MultiEffect`) under
+  a tint. A hidden source is never rendered and left the pane empty.
+- Compact player: water fills the window, a glass card holds the track
+  with an ASCII progress bar; `z` hides the card.
+- App: water behind the window; sidebar, list and bar (with hints) are
+  glass; the plate and the pool view are open water and the organism
+  swims where their lens was.
+- Visuals or creatures off: no water, panels opaque, the lens/cover as
+  before.
+
+Layout pass (same day): a small gap of water between the glass panes;
+the open playlist an accent fill; list rows show the organism's one-line
+mark (`Plankton.mark`, e.g. `(¯)~`, `<=>`) in a LIFE column, the cursor
+row an accent fill with an accent edge, the playing title bold in accent;
+the plate reads THE POOL; the list header's and the bar's covers are
+glyph mosaics (`common/GlyphCover.qml`, `shaders/mosaic.frag`). Row
+covers stay plain, as a shader per delegate is not a cheap delegate. The
+bar keeps its ruler and slider (they are dragged), not the mockup's
+character progress and volume.
+
+Checked: GPU captures of both surfaces against the demo daemon in a dark
+theme and catppuccin-latte. Not yet: cost measured on a real screen (two
+shaders plus a blurred copy and three glass panes are drawn every frame
+while playing), the row-size form for lists, and the mockup's glyph
+mosaic covers.
+
 ## V6 · Motion
 
 The helix loader (bounded by the request deadline, appears only after

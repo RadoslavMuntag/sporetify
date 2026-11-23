@@ -18,13 +18,15 @@ TestCase {
     compare(Specimen.catalogue("x").length, 4)
   }
 
-  function test_traits_count_the_creature() {
-    var id = "spotify:track:7qiZfU4dY1lWllzX7mPBI3"
-    var shape = Organism.create(id)
-    var text = Specimen.traits(id)
-    verify(text.indexOf(shape.lobes.length + " lobe") === 0, text)
-    verify(text.indexOf(shape.eyes.length + " eye") !== -1, text)
-    verify(text.indexOf(shape.cilia.length + " hair") !== -1, text)
+  function test_traits_name_the_organism() {
+    var ids = ["spotify:track:7qiZfU4dY1lWllzX7mPBI3", "a", "b", "c", "d", "e", "f"]
+    for (var i = 0; i < ids.length; i++) {
+      var rows = Specimen.table(ids[i])
+      compare(rows[0].name, "kind")
+      verify(rows.length >= 3, JSON.stringify(rows))
+      // The line starts with the kind, as the table does.
+      compare(Specimen.traits(ids[i]).indexOf(rows[0].value), 0)
+    }
     compare(Specimen.count(1, "eye"), "1 eye")
     compare(Specimen.count(0, "hair"), "0 hairs")
   }
@@ -94,5 +96,18 @@ TestCase {
     // Out-of-range levels are held to 0..1.
     compare(Specimen.low([2, 2, 2, 2]), 1)
     compare(Specimen.low([-1]), 0)
+  }
+
+  function test_bar_is_always_the_given_width() {
+    for (var p = 0; p <= 1.0001; p += 0.05) {
+      var b = Specimen.bar(p, 20)
+      compare(b.done.length + b.rest.length, 20)
+    }
+    compare(Specimen.bar(0, 10).done, "●")
+    compare(Specimen.bar(1, 10).rest, "")
+    compare(Specimen.bar(0.5, 11).done, "=====●")
+    // Nonsense is held in range.
+    compare(Specimen.bar(-3, 5).done, "●")
+    compare(Specimen.bar(NaN, 5).done, "●")
   }
 }

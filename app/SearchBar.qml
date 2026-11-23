@@ -9,6 +9,8 @@ Rectangle {
   required property var library
   // The track list's cursor, kept for when the search is left.
   property int cursor: 0
+  // How far rules stay in from the edges, so they end inside the glass.
+  property real inset: 0
   property alias text: field.text
   signal cancelled()
   signal finished()
@@ -135,7 +137,9 @@ Rectangle {
   // The current tab's underline sits on this rule.
   Rectangle {
     anchors.top: tabs.bottom
-    width: parent.width
+    // In the water, kept inside the glass pane.
+    x: root.inset
+    width: parent.width - root.inset * 2.5
     height: Theme.stroke.hair
     color: Theme.line
   }

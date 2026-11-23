@@ -1,5 +1,6 @@
 .pragma library
 .import "Organism.js" as Organism
+.import "Plankton.js" as Plankton
 
 // The Field Guide's view of a track: every track is a specimen with a
 // catalogue number and a few traits read off its creature, studied under a
@@ -17,10 +18,15 @@ function count(n, word) {
   return n + " " + word + (n === 1 ? "" : "s")
 }
 
-// What the creature for `id` is made of: "3 lobes · 2 eyes · 7 hairs".
+// What the organism for `id` is, in a line: "medusa · 16 tentacles · 8 canals".
 function traits(id) {
-  var shape = Organism.create(id)
-  return [count(shape.lobes.length, "lobe"), count(shape.eyes.length, "eye"), count(shape.cilia.length, "hair")].join(" · ")
+  var P = Plankton.create(id)
+  return Plankton.table(P)[0].value + " · " + Plankton.traits(P)
+}
+
+// The same as table rows, [{ name, value }], the kind first.
+function table(id) {
+  return Plankton.table(Plankton.create(id))
 }
 
 // Graph-paper lines across a circle of radius 1, `steps` to a radius:
@@ -55,4 +61,14 @@ function low(bands) {
   var sum = 0
   for (var i = 0; i < n; i++) sum += Math.max(0, Math.min(1, bands[i] || 0))
   return sum / n
+}
+
+// A progress bar in characters, as the Living ASCII cards draw it: `done`
+// is "=" up to the playing position followed by "●", `rest` is "-" for the
+// remainder, `cells` characters in all.
+function bar(progress, cells) {
+  var n = Math.max(2, Math.floor(cells))
+  var p = Math.max(0, Math.min(1, progress || 0))
+  var on = Math.round(p * (n - 1))
+  return { done: new Array(on + 1).join("=") + "●", rest: new Array(n - on).join("-") }
 }

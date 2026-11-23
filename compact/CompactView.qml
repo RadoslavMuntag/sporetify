@@ -8,10 +8,11 @@ import "../common/Position.js" as Position
 import "../common/Specimen.js" as Specimen
 import "../common/Visuals.js" as Visuals
 
-// What the compact player shows: the playing track as a specimen under the
-// lens, with its name, artist and time. Lays itself out from its own
-// proportions, lens above the text when square or tall, beside it when
-// wide, and scales up with the window so it looks right at any size.
+// What the compact player shows, in the Living ASCII look (D18): the pool
+// fills the window with the playing track's organism in it, and a glass
+// card holds its name, artist and time, below the organism when square or
+// tall, beside it when wide. Scales up with the window. `pool` (`z`) hides
+// the card, leaving just the water.
 Item {
   id: root
 
@@ -23,7 +24,8 @@ Item {
   property bool creatures: true
   // Whether the window is showing; nothing moves or ticks otherwise.
   property bool live: true
-  // The tide pool in the lens (`z`), and the track after this one for its edge.
+  // Just the pool, without the card (`z`); and the track after this one,
+  // which swims nearby.
   property bool pool: false
   property string nextSeed: ""
   signal lensClicked()
@@ -84,12 +86,68 @@ Item {
     font.pixelSize: root.px(Theme.font.body)
   }
 
+  readonly property bool scene: Visuals.drawn(root.visuals) && root.creatures
+  readonly property bool showCard: !root.pool || !root.scene
+
+  // ---- The pool, behind everything
+  Water {
+    id: water
+    anchors.fill: parent
+    visible: root.scene
+    seed: root.track ? root.track.id : ""
+    others: root.nextSeed !== "" ? [root.nextSeed] : []
+    alive: root.live && root.playing && Visuals.moving(root.visuals)
+    awake: root.playing
+    blur: Visuals.moving(root.visuals) ? 1 : 0
+    home: !root.showCard ? Qt.point(0.5, 0.5) : root.side ? Qt.point(0.22, 0.5) : Qt.point(0.5, 0.36)
+    span: !root.showCard ? 0.8 : root.side ? 0.8 : 0.55
+    specks: 12
+    bubbles: 4
+    passer: !root.side
+    palette: Theme.creatureColors
+    ground: Theme.background
+    deep: Theme.sunken
+    ink: Theme.foreground
+    accent: Theme.accent
+    muted: Theme.muted
+    light: Theme.mode === "light"
+    cell: Math.max(5, root.px(5))
+
+    MouseArea {
+      anchors.fill: parent
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.lensClicked()
+    }
+  }
+
+  // ---- Without the scene: the cover where the organism would be.
+  Rectangle {
+    anchors.fill: parent
+    visible: !root.scene
+    color: Theme.sunken
+  }
+  Image {
+    visible: !root.scene && status === Image.Ready
+    readonly property real room: root.side
+      ? Math.min(root.height - root.pad * 2, root.width * 0.4 - root.pad * 2)
+      : Math.min(root.width - root.pad * 2, card.y - labels.y - labels.height - root.gap * 2)
+    width: Math.max(0, room)
+    height: width
+    x: root.side ? root.pad : (root.width - width) / 2
+    y: root.side ? (root.height - height) / 2 : labels.y + labels.height + root.gap
+    source: root.track && root.track.art_path ? "file://" + root.track.art_path : ""
+    sourceSize.width: Math.ceil(width)
+    sourceSize.height: Math.ceil(height)
+    fillMode: Image.PreserveAspectCrop
+    asynchronous: true
+  }
+
   // ---- Top line: state and catalogue number, and where the keys are
   Item {
     id: labels
-    x: root.side ? lens.x + lens.width + root.pad : root.pad
+    x: root.pad
     y: root.pad
-    width: root.width - x - root.pad
+    width: root.width - root.pad * 2
     height: keysHint.height
 
     Label {
@@ -99,6 +157,8 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       text: (root.track ? (root.playing ? "now playing" : "paused") + " · No. " + Specimen.catalogue(root.track.id) : "sporetify").toUpperCase()
       color: Theme.muted
+      style: Text.Outline
+      styleColor: Qt.rgba(Theme.sunken.r, Theme.sunken.g, Theme.sunken.b, 0.5)
       font.pixelSize: root.px(Theme.font.caption)
       font.letterSpacing: root.px(Theme.font.caption) * 0.12
     }
@@ -125,91 +185,55 @@ Item {
     }
   }
 
-  // ---- The lens
-  Lens {
-    id: lens
-    // Wide: at most a little under half the width, so the text keeps room.
-    readonly property real room: root.side
-      ? Math.min(root.height - root.pad * 2, root.width * 0.45)
-      : Math.min(root.width - root.pad * 2, above.y - labels.y - labels.height - root.gap * 2)
-    width: Math.max(0, room)
-    height: width
-    x: root.side ? root.pad : (root.width - width) / 2
-    y: root.side ? (root.height - height) / 2 : labels.y + labels.height + root.gap + (above.y - root.gap - labels.y - labels.height - root.gap - height) / 2
-
-    seed: root.track ? root.track.id : ""
-    progress: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
-    creature: Visuals.drawn(root.visuals) && root.creatures
-    coverPath: root.track && root.track.art_path ? root.track.art_path : ""
-    alive: root.live && root.playing && Visuals.moving(root.visuals)
-    awake: root.playing
-    pulse: root.showSpectrum ? root.player.beat : 0
-    pool: root.pool
-    nextSeed: root.nextSeed
-    energy: root.showSpectrum ? Specimen.low(root.player.bands) : 0
-    palette: Theme.creatureColors
-    ground: Theme.sunken
-    ink: Theme.foreground
-    accent: Theme.accent
-    // Eyes are drawn light with dark pupils in either kind of theme.
-    eye: Theme.mode === "light" ? Theme.background : Theme.foreground
-    pupil: Theme.mode === "light" ? Theme.foreground : Theme.sunken
-    stroke: Math.max(Theme.stroke.hair, root.zoom)
+  // ---- The card: glass over the water
+  Glass {
+    id: card
+    visible: root.showCard
+    readonly property int inset: root.px(Theme.spacing.lg)
+    x: root.side ? Math.round(root.width * 0.42) : root.pad
+    width: root.width - x - root.pad
+    height: root.side ? root.height - labels.y - labels.height - root.gap - root.pad : info.implicitHeight + inset * 2
+    y: root.side ? labels.y + labels.height + root.gap : root.height - root.pad - height
+    backdrop: root.scene ? water : null
+    area: Qt.rect(x, y, width, height)
+    blur: water.blur
+    tint: Theme.background
+    edge: Theme.foreground
     light: Theme.mode === "light"
+    radius: root.px(Theme.space(6))
 
-    MouseArea {
-      anchors.fill: parent
-      cursorShape: Qt.PointingHandCursor
-      onClicked: root.lensClicked()
-    }
-  }
+    // ---- Name, artist, time and traits
+    Column {
+      id: info
+      x: card.inset
+      width: card.width - card.inset * 2
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: root.px(Theme.spacing.xs)
 
-  // What the lens sits above when stacked: the spectrum, or the text.
-  readonly property Item above: spectrum.visible ? spectrum : info
-
-  // ---- The music, as fine lines on a hairline
-  Spectrum {
-    id: spectrum
-    visible: root.showSpectrum
-    x: labels.x
-    width: labels.width
-    height: root.px(Theme.space(26))
-    y: info.y - root.gap - height
-    bands: root.player.bands
-    lines: Math.max(16, Math.round(width / root.px(Theme.space(7))))
-    ink: Theme.foreground
-    accent: Theme.accent
-    stroke: Math.max(Theme.stroke.hair, root.zoom)
-    smooth: root.live
-  }
-
-  // ---- Name, artist, time and traits
-  Column {
-    id: info
-    x: labels.x
-    width: labels.width
-    y: root.height - root.pad - height
-    spacing: root.px(Theme.spacing.xs)
-
-    Label {
-      width: parent.width
-      text: root.headline
-      // A track's name stays on one line; a message may need two.
-      wrapMode: root.track ? Text.NoWrap : Text.Wrap
-      maximumLineCount: root.track ? 1 : 2
-      font.pixelSize: root.px(Theme.font.heading)
-      font.bold: true
-      color: !root.track && root.player.scope === "fault" ? Theme.urgent : Theme.foreground
-    }
-    Item {
-      width: parent.width
-      height: byline.implicitHeight
-
+      Spectrum {
+        id: spectrum
+        visible: root.showSpectrum && root.side
+        width: parent.width
+        height: visible ? root.px(Theme.space(22)) : 0
+        bands: root.player.bands
+        lines: Math.max(16, Math.round(width / root.px(Theme.space(7))))
+        ink: Theme.foreground
+        accent: Theme.accent
+        stroke: Math.max(Theme.stroke.hair, root.zoom)
+        smooth: root.live
+      }
       Label {
-        id: byline
-        anchors.left: parent.left
-        anchors.right: clock.left
-        anchors.rightMargin: root.gap
+        width: parent.width
+        text: root.headline
+        // A track's name stays on one line; a message may need two.
+        wrapMode: root.track ? Text.NoWrap : Text.Wrap
+        maximumLineCount: root.track ? 1 : 2
+        font.pixelSize: root.px(Theme.font.heading)
+        font.bold: true
+        color: !root.track && root.player.scope === "fault" ? Theme.urgent : Theme.foreground
+      }
+      Label {
+        width: parent.width
         text: root.byline
         // Messages wrap; a long setup command may break anywhere.
         wrapMode: root.track ? Text.NoWrap : Text.WrapAtWordBoundaryOrAnywhere
@@ -217,29 +241,55 @@ Item {
         color: root.bylineIsError ? Theme.urgent : Theme.muted
       }
       Label {
-        id: clock
-        anchors.right: parent.right
-        visible: root.track !== null
-        width: visible ? implicitWidth : 0
-        text: root.track ? Position.clock(root.positionMs) + " / " + Position.clock(root.track.duration_ms) : ""
+        width: parent.width
+        visible: root.track !== null && root.side && root.track.album !== undefined && root.track.album !== ""
+        text: root.track && root.track.album ? root.track.album : ""
         color: Theme.muted
         font.pixelSize: root.px(Theme.font.bodySmall)
       }
-    }
-    Label {
-      width: parent.width
-      visible: root.track !== null && root.side && root.track.album !== undefined && root.track.album !== ""
-      text: root.track && root.track.album ? root.track.album : ""
-      color: Theme.muted
-      font.pixelSize: root.px(Theme.font.bodySmall)
-    }
-    Label {
-      width: parent.width
-      visible: root.track !== null && Visuals.drawn(root.visuals) && root.creatures
-      text: root.track ? Specimen.traits(root.track.id) : ""
-      color: Theme.muted
-      opacity: 0.75
-      font.pixelSize: root.px(Theme.font.caption)
+      // The position, in characters: lit up to where the track is.
+      Text {
+        id: progressBar
+        visible: root.track !== null
+        width: parent.width
+        clip: true
+        textFormat: Text.StyledText
+        font.family: Theme.font.family
+        font.pixelSize: root.px(Theme.font.bodySmall)
+        readonly property int cells: Math.max(4, Math.floor(width / Math.max(1, metrics.averageCharacterWidth)))
+        readonly property var parts: Specimen.bar(root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0, cells)
+        color: Qt.rgba(Theme.foreground.r, Theme.foreground.g, Theme.foreground.b, 0.3)
+        text: "<font color=\"" + Theme.accent + "\">" + parts.done + "</font>" + parts.rest
+        FontMetrics {
+          id: metrics
+          font: progressBar.font
+        }
+      }
+      Item {
+        visible: root.track !== null
+        width: parent.width
+        height: clock.implicitHeight
+        Label {
+          id: clock
+          text: root.track ? Position.clock(root.positionMs) : ""
+          color: Theme.muted
+          font.pixelSize: root.px(Theme.font.caption)
+        }
+        Label {
+          anchors.right: parent.right
+          text: root.track ? Position.clock(root.track.duration_ms) : ""
+          color: Theme.muted
+          font.pixelSize: root.px(Theme.font.caption)
+        }
+      }
+      Label {
+        width: parent.width
+        visible: root.track !== null && root.scene
+        text: root.track ? Specimen.traits(root.track.id) : ""
+        color: Theme.muted
+        opacity: 0.75
+        font.pixelSize: root.px(Theme.font.caption)
+      }
     }
   }
 }

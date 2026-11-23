@@ -11,6 +11,8 @@ Rectangle {
   required property var player
   // Whether the window is showing, so the clock only ticks when seen.
   property bool live: true
+  // The Living ASCII look (D18): the cover as a glyph mosaic.
+  property bool water: false
   // The user clicked the title (album) or the artist line.
   signal albumRequested()
   signal artistRequested()
@@ -37,14 +39,15 @@ Rectangle {
     function onPlayerChanged() { root.nowMs = Date.now() }
   }
 
-  Rectangle { width: parent.width; height: 1; color: Theme.line }
+  // The edge above the bar; in the water the gap is the edge.
+  Rectangle { visible: !root.water; width: parent.width; height: 1; color: Theme.line }
 
   component Cap: KeyCap {
     foreground: Theme.foreground
     fontFamily: Theme.font.family
     fontSize: Theme.font.caption
     padding: Theme.spacing.xs
-    corner: 0
+    corner: root.water ? Theme.space(3) : 0
   }
 
   Item {
@@ -55,7 +58,7 @@ Rectangle {
     implicitHeight: middle.implicitHeight
 
     // ---- Cover, fetched by the daemon and shown from its file
-    Image {
+    GlyphCover {
       id: cover
       readonly property string path: root.track && root.track.art_path ? root.track.art_path : ""
       visible: path !== ""
@@ -63,10 +66,10 @@ Rectangle {
       width: visible ? Theme.space(46) : 0
       height: Theme.space(46)
       source: path !== "" ? "file://" + path : ""
-      sourceSize.width: Theme.space(92)
-      sourceSize.height: Theme.space(92)
-      fillMode: Image.PreserveAspectCrop
-      asynchronous: true
+      mosaic: root.water
+      deep: Theme.sunken
+      ink: Theme.foreground
+      light: Theme.mode === "light"
     }
 
     // ---- Track
@@ -138,13 +141,14 @@ Rectangle {
         }
         Cap { anchors.verticalCenter: parent.verticalCenter; label: Keymap.keyLabel("previous") }
         // nf-md-skip_previous, nf-md-pause / nf-md-play, nf-md-skip_next
-        IconButton { icon: "󰒮"; enabled: root.track !== null; onClicked: root.player.run("previous") }
+        IconButton { icon: "󰒮"; boxed: root.water; enabled: root.track !== null; onClicked: root.player.run("previous") }
         IconButton {
           icon: root.player.playing ? "󰏤" : "󰐊"
           iconSize: Theme.font.iconLarge
+          filled: root.water
           onClicked: root.player.run("playPause")
         }
-        IconButton { icon: "󰒭"; enabled: root.track !== null; onClicked: root.player.run("next") }
+        IconButton { icon: "󰒭"; boxed: root.water; enabled: root.track !== null; onClicked: root.player.run("next") }
         Cap { anchors.verticalCenter: parent.verticalCenter; label: Keymap.keyLabel("next") }
         // nf-md-repeat; lit when on.
         IconButton {

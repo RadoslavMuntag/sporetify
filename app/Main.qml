@@ -512,6 +512,79 @@ FloatingWindow {
     // Under everything, so pictures taken with `capture` have it too.
     Rectangle { anchors.fill: parent; color: Theme.background }
 
+    // ---- The Living ASCII pool behind the whole window (D18). The playing
+    //      track's organism swims where the plate or the pool view leaves
+    //      open water; the panels are glass over it.
+    readonly property bool inWater: Visuals.drawn(window.visuals) && prefs.creatures
+    readonly property Item opening: pool.visible ? pool : plate.visible ? plate : null
+    Water {
+      id: sea
+      anchors.fill: parent
+      visible: keys.inWater
+      seed: player.track ? player.track.id : ""
+      // The queue swims behind the list, out of focus through the glass:
+      // the next track and the first few of the list on screen.
+      others: {
+        library.revision
+        var out = upNext.next !== "" ? [upNext.next] : []
+        for (var i = 0; i < Math.min(library.total, 6) && out.length < 4; i++) {
+          var row = library.rowAt(i)
+          if (row && row.uri && (row.kind === undefined || row.kind === "")) out.push(row.uri)
+        }
+        return out
+      }
+      roam: Qt.rect((sidebar.x + sidebar.width) / Math.max(1, width) + 0.05, 0.15,
+        Math.max(0.1, ((plate.visible ? plate.x : width) - sidebar.x - sidebar.width) / Math.max(1, width) - 0.1), 0.6)
+      alive: window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
+      awake: player.playing
+      blur: Visuals.moving(window.visuals) ? 1 : 0
+      home: keys.opening
+        ? Qt.point((keys.opening.x + keys.opening.waterAt.x) / Math.max(1, width), (keys.opening.y + keys.opening.waterAt.y) / Math.max(1, height))
+        : Qt.point(0.82, 0.4)
+      span: keys.opening ? Math.min(0.9, keys.opening.waterRoom / Math.max(1, height)) : 0.3
+      specks: 26
+      bubbles: 5
+      passer: false
+      palette: Theme.creatureColors
+      ground: Theme.background
+      deep: Theme.sunken
+      ink: Theme.foreground
+      accent: Theme.accent
+      muted: Theme.muted
+      light: Theme.mode === "light"
+    }
+
+    // Glass under the sidebar, the list and the bar, with a little water
+    // showing between them, as in the mockup.
+    readonly property int gap: Theme.spacing.xl
+    component Pane: Glass {
+      property rect frame
+      x: frame.x + keys.gap
+      y: frame.y + keys.gap
+      width: frame.width - keys.gap * 2
+      height: frame.height - keys.gap * 2
+      backdrop: keys.inWater ? sea : null
+      area: Qt.rect(x, y, width, height)
+      blur: sea.blur
+      tint: Theme.background
+      edge: Theme.foreground
+      light: Theme.mode === "light"
+      radius: Theme.space(6)
+    }
+    Pane {
+      visible: sidebar.visible && keys.inWater
+      frame: Qt.rect(sidebar.x, sidebar.y, sidebar.width + keys.gap / 2, sidebar.height + keys.gap / 2)
+    }
+    Pane {
+      visible: keys.inWater && !window.poolShown
+      frame: Qt.rect(sidebar.x + sidebar.width - (sidebar.visible ? keys.gap / 2 : 0), 0,
+        (plate.visible ? plate.x : parent.width) - sidebar.x - sidebar.width + (sidebar.visible ? keys.gap / 2 : 0), nowPlaying.y + keys.gap / 2)
+    }
+    Pane {
+      visible: keys.inWater
+      frame: Qt.rect(0, nowPlaying.y - keys.gap / 2, parent.width, parent.height - nowPlaying.y + keys.gap / 2)
+    }
+
     Keys.onPressed: function(event) {
       // The help overlay swallows every key: the moving keys scroll it when
       // it does not fit, any other key closes it.
@@ -529,6 +602,8 @@ FloatingWindow {
 
     Sidebar {
       id: sidebar
+      color: keys.inWater ? "transparent" : Theme.sunken
+      water: keys.inWater
       anchors.top: parent.top
       anchors.bottom: nowPlaying.top
       visible: prefs.sidebar
@@ -542,10 +617,15 @@ FloatingWindow {
 
     SearchBar {
       id: searchBar
+      color: keys.inWater ? "transparent" : Theme.background
+      inset: keys.inWater ? Theme.spacing.xl : 0
       visible: window.searchOpen && player.scope === "player"
       anchors.top: parent.top
+      // In the water, clear of the glass pane's top edge.
+      anchors.topMargin: keys.inWater ? keys.gap : 0
       anchors.left: sidebar.right
-      anchors.right: parent.right
+      // In the water the search sits in the list's pane, not over the pool.
+      anchors.right: keys.inWater && plate.visible ? plate.left : parent.right
       library: library
       cursor: tracks.currentIndex
       onCancelled: window.cancelSearch()
@@ -556,6 +636,7 @@ FloatingWindow {
     TrackList {
       id: tracks
       anchors.top: searchBar.bottom
+      anchors.topMargin: keys.inWater && !searchBar.visible ? keys.gap : 0
       anchors.bottom: nowPlaying.top
       anchors.left: sidebar.right
       anchors.right: plate.left
@@ -563,6 +644,7 @@ FloatingWindow {
       library: library
       player: player
       covers: prefs.covers
+      water: keys.inWater
       focused: window.pane === "list"
       onActivated: function(index) {
         window.pane = "list"
@@ -650,6 +732,7 @@ FloatingWindow {
       moving: Visuals.moving(window.visuals)
       creatures: prefs.creatures
       live: window.visible && screen.shown
+      inWater: keys.inWater
     }
 
     PoolView {
@@ -665,10 +748,13 @@ FloatingWindow {
       moving: Visuals.moving(window.visuals)
       creatures: prefs.creatures
       live: window.visible && screen.shown
+      inWater: keys.inWater
     }
 
     NowPlayingBar {
       id: nowPlaying
+      color: keys.inWater ? "transparent" : Theme.sunken
+      water: keys.inWater
       anchors.bottom: hints.top
       width: parent.width
       player: player
@@ -684,9 +770,15 @@ FloatingWindow {
       anchors.bottom: parent.bottom
       width: parent.width
       height: hintBar.implicitHeight + Theme.spacing.md * 2
-      color: Theme.sunken
+      color: keys.inWater ? "transparent" : Theme.sunken
 
-      Rectangle { width: parent.width; height: 1; color: Theme.line }
+      // Between the bar and its hints; in the water, inside the glass.
+      Rectangle {
+        x: keys.inWater ? keys.gap * 2 : 0
+        width: parent.width - x * 2
+        height: 1
+        color: Theme.line
+      }
 
       HintBar {
         id: hintBar
@@ -700,7 +792,7 @@ FloatingWindow {
         fontFamily: Theme.font.family
         fontSize: Theme.font.caption
         gap: Theme.spacing.xs
-        corner: 0
+        corner: keys.inWater ? Theme.space(3) : 0
       }
     }
 

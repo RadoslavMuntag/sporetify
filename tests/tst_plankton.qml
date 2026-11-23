@@ -89,4 +89,17 @@ TestCase {
     verify(Plankton.phase("a") !== Plankton.phase("b"))
     verify(Plankton.phase("a") >= 0 && Plankton.phase("a") < 100)
   }
+
+  function test_marks_are_short_and_tell_the_kind() {
+    var seen = {}
+    for (var i = 0; i < 400; i++) {
+      var P = Plankton.create("spotify:track:" + i)
+      var m = Plankton.mark(P)
+      verify(m.length >= 3 && m.length <= 4, m)
+      seen[P.kind + m] = true
+      compare(Plankton.mark(Plankton.create("spotify:track:" + i)), m)
+    }
+    // Every kind shows both of its forms somewhere in 400 tracks.
+    verify(Object.keys(seen).length >= 9, JSON.stringify(Object.keys(seen)))
+  }
 }
