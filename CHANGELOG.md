@@ -41,6 +41,10 @@ the daemon that matches.
 - In that look every track in a list shows a small mark of its organism,
   the open playlist and the cursor are lit in the accent colour, and the
   covers in the list header and the player bar are drawn in characters.
+- The bar and the mini-player no longer draw a creature. The animated bar
+  icon made the shell redraw the bar every frame while music played, which
+  kept the GPU busy even with the app closed. The bar widget's Creatures
+  setting is gone with it.
 - The now-playing bar shows the cover alone; the creature beside it is
   gone (the plate on the right shows it).
 - Fixed: turning creatures off while the app or the compact player was

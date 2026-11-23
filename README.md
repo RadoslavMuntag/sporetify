@@ -145,10 +145,10 @@ This builds the daemon here and links the checkout as the plugin.
 
 Each track has its own small creature, grown from the track itself, shown
 in the specimen plate on the right while it plays. `Shift C` in the app turns the creatures off
-everywhere (app, compact player, bar and mini-player); a lens then shows
-the album cover. `v` sets the other visuals (lens, spectrum, plate) to
-moving, still or off. The bar widget's Creatures setting turns them off in
-the bar only.
+in the app and the compact player; a lens then shows the album cover. `v`
+sets the other visuals (lens, spectrum, plate) to moving, still or off.
+The bar and the mini-player draw no creatures: kept animating on a
+surface that is always shown, they cost the GPU far more than they gave.
 
 `z` goes into the lens: the playing track's creature, large, drifting in a
 tide pool with the next track's creature dozing at its edge; they swim one

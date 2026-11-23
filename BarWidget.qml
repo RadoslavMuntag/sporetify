@@ -29,20 +29,6 @@ BarWidget {
   readonly property int maxTitleWidth: Style.space(Number(setting("maxTitleWidth", 220)))
   readonly property bool titleVisible: showTitle && !vertical && track !== null
 
-  // Each track's creature replaces the plain icon when this is on, and the
-  // app's creatures switch has not turned them off everywhere.
-  readonly property bool creatures: String(setting("creatures", "On")) !== "Off"
-    && (service ? service.creaturesAllowed !== false : true)
-  readonly property color ink: bar ? bar.barForeground : Color.foreground
-  function mix(a, b, t) {
-    return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1)
-  }
-  // The shell exposes few colours, so the creature palette is mixed from them.
-  readonly property var creatureColors: [
-    Color.accent, mix(Color.accent, ink, 0.35), mix(Color.accent, Color.urgent, 0.5),
-    Color.urgent, mix(Color.urgent, ink, 0.3)
-  ]
-
   readonly property string stateText: {
     switch (phase) {
     case "asleep": return track ? "Paused" : "Asleep"
@@ -109,7 +95,6 @@ BarWidget {
       anchors.verticalCenter: parent.verticalCenter
       // nf-md-music
       text: "󰝚"
-      iconComponent: root.creatures && root.track !== null ? creatureIcon : null
       active: root.faulted
       opacity: root.dormant ? Style.normalBorderAlpha * 1.5 : 1
       tooltipText: root.tooltip
@@ -147,22 +132,7 @@ BarWidget {
     }
   }
 
-  Component {
-    id: creatureIcon
-    Organism {
-      seed: root.track ? root.track.id : ""
-      // The bar is always on screen, so only a playing track animates.
-      alive: root.playing
-      awake: root.playing
-      palette: root.creatureColors
-      eye: root.ink
-      pupil: Color.background
-    }
-  }
-
   MiniPlayer {
-    creatures: root.creatures
-    creatureColors: root.creatureColors
     anchorItem: button
     bar: root.bar
     owner: root
