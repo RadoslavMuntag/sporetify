@@ -23,6 +23,9 @@ Item {
   property bool creatures: true
   // Whether the window is showing; nothing moves or ticks otherwise.
   property bool live: true
+  // The tide pool in the lens (`z`), and the track after this one for its edge.
+  property bool pool: false
+  property string nextSeed: ""
   signal lensClicked()
 
   readonly property var track: player.track
@@ -141,6 +144,9 @@ Item {
     alive: root.live && root.playing && Visuals.moving(root.visuals)
     awake: root.playing
     pulse: root.showSpectrum ? root.player.beat : 0
+    pool: root.pool
+    nextSeed: root.nextSeed
+    energy: root.showSpectrum ? Specimen.low(root.player.bands) : 0
     palette: Theme.creatureColors
     ground: Theme.sunken
     ink: Theme.foreground
