@@ -121,7 +121,7 @@ FloatingWindow {
       if (window.keysOpen) {
         event.accepted = true
         // Shift on its way to `?`, or a key still held, is not a new press.
-        var modifier = [Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr].indexOf(event.key) !== -1
+        var modifier = [Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_CapsLock].indexOf(event.key) !== -1
         if (!modifier && !event.isAutoRepeat) window.keysOpen = false
         return
       }

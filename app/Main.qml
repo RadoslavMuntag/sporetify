@@ -328,12 +328,14 @@ FloatingWindow {
       pane = "list"
       return
     case "visuals":
-      prefs.visuals = Visuals.next(visuals)
+      var nextLevel = Visuals.next(visuals)
+      if (Visuals.legacyOff(prefs.visuals, prefs.creatures)) prefs.creatures = true
+      prefs.visuals = nextLevel
       library.notice("Visuals: " + prefs.visuals, false)
       return
     case "creatures":
       // Fix the level first: with none saved it is read from this switch.
-      prefs.visuals = visuals
+      prefs.visuals = Visuals.legacyOff(prefs.visuals, prefs.creatures) ? "full" : visuals
       prefs.creatures = !prefs.creatures
       library.notice("Creatures " + (prefs.creatures ? "on" : "off"), false)
       return
@@ -616,7 +618,9 @@ FloatingWindow {
       }
       var action = Keymap.actionFor(event.key, event.text, window.scopes, event.modifiers)
       // A modal card keeps what its field did not use; only quitting works.
-      if ((picker.visible || prompt.visible) && action !== "quit") {
+      // With the focus here instead of in its field, keys work as usual, so
+      // the card can always be closed.
+      if ((picker.visible || prompt.visible) && !keys.activeFocus && action !== "quit") {
         event.accepted = true
         return
       }
