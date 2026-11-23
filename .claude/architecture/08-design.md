@@ -288,6 +288,53 @@ shaders plus a blurred copy and three glass panes are drawn every frame
 while playing), the row-size form for lists, and the mockup's glyph
 mosaic covers.
 
+Rebuilt like the studies (2026-11-17, owner: the studies' pool was "far
+superior": more natural motion, better blur, fuller colour, more
+detail). What changed, and why:
+
+- Fields at a texel per character cell, as the studies compute theirs:
+  `shaders/organism.frag` and `shaders/pond.frag` write into one small
+  texture per layer (`FieldLayer`), each organism only within the box it
+  can reach. Cells 4.4 to 7 px (`columns` 140), as the studies.
+- Organisms swim: a slow meandering loop about their home, medusae in
+  strokes that coast, comb jellies gliding, at the studies' speeds and
+  turning no faster than 0.06 rad/s; medusae stay within 20° of upright.
+  Tentacles hang and lean back toward where the body came from, by up to
+  half with speed, each segment following the path a moment further back
+  (the studies' chains). All analytic in `time`: no per-frame script.
+- Track change: `Pool.js` keeps each organism in its slot; the new one
+  grows (2.5 s) and glides home (4 s), the old shrinks into the queue.
+- The studies' water: the gradient, three large blurred discs drifting
+  over 48 to 67 s at about 16%, the ripples in the far layer, marine snow,
+  four far organisms, a passer-by, the vignette.
+- Cost: first build measured 96% GPU busy (app copy, 1400x820 at 1.25x,
+  playing). One full-screen pass costs ~10 points here, so: one pass over
+  the screen (`compose.frag`), background, far layer and passer merged at
+  a third of the size (`underlay.frag`), glow from a quarter-size copy,
+  glass reading one 1/6 copy of the scene, no MultiEffect, the pool's clock
+  stepped at 30 fps, the water's colour at 4. Measured after: app list
+  view 47% busy at 550 MHz, pool view 34%, compact player 13% at 450 MHz
+  (of 1200 MHz max); paused 0.4%.
+
+Layout tidied (2026-11-21, owner: the UI elements were "all over the
+place. gaps, ui elements overlapping, spilling"). The panes were drawn by
+`Main.qml` from padded-out frames while each panel guessed its own inset
+(`xl`, `lg`, `xl / 2`, `× 2.5`), so rows touched the glass edges and the
+list ran a half gap past its pane's foot. Now, in the water, `Main.qml`
+lays each panel out a gap (`spacing.xl`) in from its neighbours and the
+window, and draws its pane exactly over the panel (sidebar; search bar and
+list; bar and hints). Panels then pad their own content the same way:
+fills and rules `spacing.md` in from the glass, text `spacing.huge`, so
+the sidebar's names, the list's columns, the bar and the hints share one
+left edge. The sidebar and picker cursors in the water are the list's
+accent fill and edge (square brackets poked out of rounded fills); sheets
+and the toast are rounded; the toast sits inside the list's pane. The
+hint bar keeps to one line (`HintBar.singleLine`, with `pinned` actions
+that always show: `?` and quit). Compact card padding `lg` → `xxl`.
+Checked in offscreen pictures with the glass drawn as a flat stand-in,
+at 800, 1100 and 1600 px wide, in gruvbox and catppuccin-latte, and the
+flat look (visuals off) unchanged but for the one-line hints.
+
 ## V6 · Motion
 
 The helix loader (bounded by the request deadline, appears only after

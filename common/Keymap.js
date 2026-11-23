@@ -188,7 +188,7 @@ function hints(scopes, primaryOnly) {
   for (var i = 0; i < actions.length; i++) {
     if (!inScopes(actions[i], list)) continue
     if (primaryOnly && !actions[i].primary) continue
-    out.push({ key: keyLabel(actions[i].id), label: actions[i].label })
+    out.push({ id: actions[i].id, key: keyLabel(actions[i].id), label: actions[i].label })
   }
   return out
 }

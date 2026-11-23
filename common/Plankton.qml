@@ -2,10 +2,11 @@ import QtQuick
 
 import "Plankton.js" as Plankton
 
-// The track's plankton organism, drawn as characters on the GPU
-// (shaders/plankton.frag). The shape comes from Plankton.js; all of its
-// motion comes from one number, `clock`, which runs only while `alive`.
-// Paused, hidden or reduced, the organism is drawn still and costs nothing.
+// The track's plankton organism on its own, kept in place (a lens, the
+// tide pool): an OrganismField that stays near the middle and a GlyphLayer
+// that draws it in characters. All of its motion comes from one number,
+// `clock`, which runs only while `alive`. Paused, hidden or reduced, the
+// organism is drawn still and costs nothing.
 //
 // If the shader cannot be loaded the old line-art creature is drawn
 // instead, so a lens is never empty.
@@ -35,97 +36,56 @@ Item {
   property color ground
   property real stroke: 1
 
-  readonly property var shape: Plankton.create(seed, kind)
-  readonly property var packed: Plankton.uniforms(shape)
   readonly property real unit: Math.min(width, height)
-
-  function named(name) { return name === "fg" ? ink : Plankton.colour(palette, name, ink) }
+  readonly property size grid: Qt.size(Math.max(1, Math.ceil(width / cell)), Math.max(1, Math.ceil(height / (cell * 2))))
 
   // Seconds. Looping once an hour is a small jump nobody watches for.
-  property real clock: 6
+  property real clock: 30
   NumberAnimation on clock {
-    from: 6
-    to: 3606
+    from: 30
+    to: 3630
     duration: 3600000
     loops: Animation.Infinite
     running: true
     paused: !root.alive
   }
 
-  // ---- The glyphs, drawn once into a texture: blank, the brightness ramp,
-  //      then the line glyphs for glass spines.
-  readonly property string glyphs: " .·:-=+*#%@-|/\\°"
-  // Drawn at the cell's own size: shrinking larger glyphs averaged their
-  // thin strokes into faint grey.
-  readonly property int atlasCell: Math.max(3, Math.round(cell))
-
-  Row {
-    id: atlasRow
-    Repeater {
-      model: root.glyphs.length
-      Text {
-        required property int index
-        width: root.atlasCell
-        height: root.atlasCell * 2
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        text: root.glyphs[index]
-        color: root.ink
-        font.family: "monospace"
-        font.pixelSize: Math.round(root.atlasCell / 0.6)
-        font.weight: Font.Medium
-      }
+  FieldLayer {
+    id: organismLayer
+    cell: root.cell
+    grid: root.grid
+    OrganismField {
+      seed: root.seed
+      kind: root.kind
+      wander: false
+      radius: root.seed !== "" ? root.unit * (Plankton.size[shape.kind] || 0.25) : 0
+      home: Qt.point(root.width / 2, root.height / 2)
+      time: root.clock
+      cell: root.cell
+      bound: root.bound
+      clipAt: root.clipAt
+      // A dozing organism is a little dimmer.
+      amp: root.awake ? 1 : 0.75
+      palette: root.palette
+      ink: root.ink
+      accentColour: root.accent
     }
   }
 
-  ShaderEffectSource {
-    id: glyphAtlas
-    sourceItem: atlasRow
-    hideSource: true
-    smooth: false
-    // Redrawn only when a glyph changes, never per frame.
-  }
-
-  ShaderEffect {
-    id: effect
+  GlyphLayer {
+    id: glyphs
     anchors.fill: parent
-    visible: root.seed !== "" && status !== ShaderEffect.Error
-    fragmentShader: "shaders/plankton.frag.qsb"
-
-    property var atlas: glyphAtlas
-    property size area: Qt.size(width, height)
-    property real bound: root.bound
-    property point clipAt: root.clipAt
-    property real cell: root.cell
-    property real radius: root.unit * Plankton.size[root.shape.kind]
-    property real time: root.clock
-    property real seed: Plankton.phase(root.seed)
-    property real kind: root.packed.kind
-    property real light: root.light ? 1 : 0
-    property real glyphs: root.glyphs.length
-    property vector4d p0: Qt.vector4d(root.packed.p[0].x, root.packed.p[0].y, root.packed.p[0].z, root.packed.p[0].w)
-    property vector4d p1: Qt.vector4d(root.packed.p[1].x, root.packed.p[1].y, root.packed.p[1].z, root.packed.p[1].w)
-    property vector4d p2: Qt.vector4d(root.packed.p[2].x, root.packed.p[2].y, root.packed.p[2].z, root.packed.p[2].w)
-    property vector4d p3: Qt.vector4d(root.packed.p[3].x, root.packed.p[3].y, root.packed.p[3].z, root.packed.p[3].w)
-    property vector4d p4: Qt.vector4d(root.packed.p[4].x, root.packed.p[4].y, root.packed.p[4].z, root.packed.p[4].w)
-    property vector4d p5: Qt.vector4d(root.packed.p[5].x, root.packed.p[5].y, root.packed.p[5].z, root.packed.p[5].w)
-    property color bodyColour: root.named(root.packed.main)
-    property color markColour: root.named(root.packed.mark)
-    property color glass: root.ink
-    property color accent: root.accent
-    // The comb rows' light: cyan, blue, magenta, green, yellow.
-    property color rain0: root.named("cyan")
-    property color rain1: root.named("blue")
-    property color rain2: root.named("magenta")
-    property color rain3: root.named("green")
-    property color rain4: root.named("yellow")
-    // A dozing organism is a little dimmer.
-    opacity: root.awake ? 1 : 0.75
+    visible: root.seed !== "" && !failed
+    cell: root.cell
+    grid: root.grid
+    light: root.light
+    ink: root.ink
+    field: organismLayer.texture
   }
 
   Loader {
     anchors.fill: parent
-    active: effect.status === ShaderEffect.Error && root.seed !== ""
+    active: glyphs.failed && root.seed !== ""
     sourceComponent: Organism {
       seed: root.seed
       alive: root.alive

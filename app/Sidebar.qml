@@ -16,6 +16,8 @@ Rectangle {
   signal activated(int index)
 
   color: Theme.sunken
+  // In the water the rows' fills sit this far in from the glass edges.
+  readonly property real inset: water ? Theme.spacing.md : 0
 
   // Folder ids that are folded shut: { id: true }.
   property var collapsed: ({})
@@ -66,9 +68,9 @@ Rectangle {
 
   Text {
     id: heading
-    // In the water the pane is inset, so the heading moves in with it.
-    x: Theme.spacing.xxl + (root.water ? Theme.spacing.xl : 0)
-    y: Theme.spacing.xl * (root.water ? 2 : 1)
+    // In line with the names below it.
+    x: root.inset + Theme.spacing.xxl
+    y: Theme.spacing.huge
     textFormat: Text.PlainText
     text: root.offline ? "LIBRARY · OFFLINE, SHOWING WHAT WAS SAVED" : "LIBRARY"
     color: root.offline ? Theme.urgent : Theme.muted
@@ -81,8 +83,8 @@ Rectangle {
   Text {
     anchors.top: heading.bottom
     anchors.topMargin: Theme.spacing.xl
-    x: Theme.spacing.xxl
-    width: parent.width - Theme.spacing.xxl * 2
+    x: heading.x
+    width: parent.width - heading.x * 2
     visible: root.items.length === 0
     wrapMode: Text.WordWrap
     textFormat: Text.PlainText
@@ -99,9 +101,9 @@ Rectangle {
     anchors.top: heading.bottom
     anchors.topMargin: Theme.spacing.md
     anchors.bottom: parent.bottom
-    // In the water rows sit in from the glass edges; ListView keeps a
-    // delegate's own x at 0, so the list itself is inset.
-    x: root.water ? Theme.spacing.xl : 0
+    anchors.bottomMargin: root.inset
+    // ListView keeps a delegate's own x at 0, so the list itself is inset.
+    x: root.inset
     width: parent.width - x * 2
     clip: true
     model: root.items.length
@@ -126,10 +128,13 @@ Rectangle {
       radius: root.water ? Theme.space(4) : 0
       color: root.water && open ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)
         : cursor || hover.containsMouse ? Theme.hoverFill : "transparent"
+      // In the water the cursor is an accent edge, as in the track list.
+      border.width: root.water && cursor ? Theme.stroke.hair : 0
+      border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.45)
 
-      Bracket { visible: row.cursor }
+      Bracket { visible: row.cursor && !root.water }
       Rectangle {
-        visible: row.open
+        visible: row.open && !root.water
         width: Theme.space(2)
         height: parent.height
         color: Theme.accent

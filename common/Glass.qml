@@ -1,18 +1,19 @@
 import QtQuick
-import QtQuick.Effects
 
 // A pane of glass over the Living ASCII water (D18): whatever swims behind
-// it, blurred, a little more saturated and lightly tinted, so text on it
-// stays readable while the pool shows through as colour. Samples
-// `backdrop` directly; no desktop blur.
+// it, softened, its colour lifted and lightly tinted, so text on it stays
+// readable while the pool shows through as colour (shaders/glass.frag).
 //
-// `area` is this pane's rectangle in `backdrop`'s coordinates. The host
-// knows it (both are usually children of the same item) and passes it, so
-// nothing is mapped per frame.
+// It reads the water from `surface`, Water's small copy of the whole scene,
+// so the water is drawn once however many panes there are. `area` is this
+// pane's rectangle in the scene, `scene` the scene's size; the host knows
+// both (pane and water are usually children of one item) and passes them,
+// so nothing is mapped per frame. Without a surface the pane is plain.
 Item {
   id: root
 
-  property Item backdrop: null
+  property Item surface: null
+  property size scene: Qt.size(1, 1)
   property rect area: Qt.rect(x, y, width, height)
   // 0 crisp, 1 balanced, 1.9 dreamy; at 0 the pane is plain.
   property real blur: 1
@@ -21,70 +22,27 @@ Item {
   property bool light: false
   property real radius: 0
 
-  readonly property bool sampling: blur > 0 && backdrop !== null
+  readonly property bool sampling: blur > 0 && surface !== null
 
-  // The glass itself, cut to the rounded shape as one layer. The mask is
-  // made with the layer, so the effect has it from the start.
-  Item {
-    id: pane
+  ShaderEffect {
     anchors.fill: parent
-    layer.enabled: root.radius > 0
-    layer.effect: MultiEffect {
-      maskEnabled: true
-      maskSource: shape
-      maskThresholdMin: 0.5
-      maskSpreadAtMin: 1.0
-    }
-
-    // Drawn under the blur: a hidden source is never rendered, which left
-    // the pane empty.
-    ShaderEffectSource {
-      id: behind
-      anchors.fill: parent
-      visible: root.sampling
-      sourceItem: root.backdrop
-      sourceRect: root.area
-      live: root.sampling
-    }
-    MultiEffect {
-      anchors.fill: parent
-      visible: root.sampling
-      source: behind
-      blurEnabled: true
-      blurMax: 48
-      blur: 1
-      blurMultiplier: 0.5 + root.blur * 0.5
-      // The mockup lifts the colour behind its glass (saturate 150%).
-      saturation: 0.5
-    }
-    Rectangle {
-      anchors.fill: parent
-      // Without blur the pane is nearly opaque, so text never sits on detail.
-      color: Qt.rgba(root.tint.r, root.tint.g, root.tint.b, !root.sampling ? 0.9 : root.light ? 0.5 : 0.42)
-    }
+    fragmentShader: "shaders/glass.frag.qsb"
+    property size extent: Qt.size(width, height)
+    property rect pane: root.area
+    property size scene: root.scene
+    property real radius: root.radius
+    property real blur: root.blur
+    property real sampling: root.sampling ? 1 : 0
+    // The mockup's glass: the background colour at 55% over the water.
+    property real strength: root.light ? 0.6 : 0.55
+    property color tint: root.tint
+    property color edge: root.edge
+    // Something must be bound even when there is no water; it is not read.
+    property var surface: root.surface ? root.surface : blank
   }
-  Rectangle {
-    id: shape
-    anchors.fill: parent
-    visible: false
-    layer.enabled: true
-    radius: root.radius
-  }
-
-  Rectangle {
-    anchors.fill: parent
-    radius: root.radius
-    color: "transparent"
-    border.width: 1
-    border.color: Qt.rgba(root.edge.r, root.edge.g, root.edge.b, 0.13)
-  }
-  // A highlight along the top edge, as light catches glass.
-  Rectangle {
-    visible: root.sampling
-    x: root.radius
-    width: parent.width - root.radius * 2
-    height: 1
-    y: 1
-    color: Qt.rgba(root.edge.r, root.edge.g, root.edge.b, 0.08)
+  ShaderEffectSource {
+    id: blank
+    sourceItem: Item { width: 1; height: 1 }
+    textureSize: Qt.size(1, 1)
   }
 }

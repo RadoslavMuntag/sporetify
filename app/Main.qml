@@ -541,9 +541,9 @@ FloatingWindow {
       home: keys.opening
         ? Qt.point((keys.opening.x + keys.opening.waterAt.x) / Math.max(1, width), (keys.opening.y + keys.opening.waterAt.y) / Math.max(1, height))
         : Qt.point(0.82, 0.4)
-      span: keys.opening ? Math.min(0.9, keys.opening.waterRoom / Math.max(1, height)) : 0.3
-      specks: 26
-      bubbles: 5
+      // The studies size the playing organism at about 0.3 of its space.
+      span: keys.opening ? Math.min(0.7, keys.opening.waterRoom * 0.6 / Math.max(1, height)) : 0.3
+      specks: 30
       passer: false
       palette: Theme.creatureColors
       ground: Theme.background
@@ -555,15 +555,19 @@ FloatingWindow {
     }
 
     // Glass under the sidebar, the list and the bar, with a little water
-    // showing between them, as in the mockup.
-    readonly property int gap: Theme.spacing.xl
+    // showing between them, as in the mockup. In the water every panel is
+    // laid out a gap in from its neighbours and the window's edges, and its
+    // pane is drawn exactly where the panel is; the panels pad their own
+    // content, so nothing they draw can reach past the glass.
+    readonly property int gap: inWater ? Theme.spacing.xl : 0
     component Pane: Glass {
       property rect frame
-      x: frame.x + keys.gap
-      y: frame.y + keys.gap
-      width: frame.width - keys.gap * 2
-      height: frame.height - keys.gap * 2
-      backdrop: keys.inWater ? sea : null
+      x: frame.x
+      y: frame.y
+      width: frame.width
+      height: frame.height
+      surface: keys.inWater ? sea.surface : null
+      scene: Qt.size(sea.width, sea.height)
       area: Qt.rect(x, y, width, height)
       blur: sea.blur
       tint: Theme.background
@@ -573,16 +577,18 @@ FloatingWindow {
     }
     Pane {
       visible: sidebar.visible && keys.inWater
-      frame: Qt.rect(sidebar.x, sidebar.y, sidebar.width + keys.gap / 2, sidebar.height + keys.gap / 2)
+      frame: Qt.rect(sidebar.x, sidebar.y, sidebar.width, sidebar.height)
     }
+    // The list and, while searching, the search bar over it.
     Pane {
       visible: keys.inWater && !window.poolShown
-      frame: Qt.rect(sidebar.x + sidebar.width - (sidebar.visible ? keys.gap / 2 : 0), 0,
-        (plate.visible ? plate.x : parent.width) - sidebar.x - sidebar.width + (sidebar.visible ? keys.gap / 2 : 0), nowPlaying.y + keys.gap / 2)
+      frame: Qt.rect(tracks.x, searchBar.visible ? searchBar.y : tracks.y, tracks.width,
+        tracks.y + tracks.height - (searchBar.visible ? searchBar.y : tracks.y))
     }
+    // The bar and its hints.
     Pane {
       visible: keys.inWater
-      frame: Qt.rect(0, nowPlaying.y - keys.gap / 2, parent.width, parent.height - nowPlaying.y + keys.gap / 2)
+      frame: Qt.rect(nowPlaying.x, nowPlaying.y, nowPlaying.width, hints.y + hints.height - nowPlaying.y)
     }
 
     Keys.onPressed: function(event) {
@@ -605,7 +611,11 @@ FloatingWindow {
       color: keys.inWater ? "transparent" : Theme.sunken
       water: keys.inWater
       anchors.top: parent.top
+      anchors.topMargin: keys.gap
+      anchors.left: parent.left
+      anchors.leftMargin: keys.gap
       anchors.bottom: nowPlaying.top
+      anchors.bottomMargin: keys.gap
       visible: prefs.sidebar
       width: visible ? Math.min(Theme.space(280), parent.width * 0.3) : 0
       library: library
@@ -618,14 +628,15 @@ FloatingWindow {
     SearchBar {
       id: searchBar
       color: keys.inWater ? "transparent" : Theme.background
-      inset: keys.inWater ? Theme.spacing.xl : 0
+      water: keys.inWater
       visible: window.searchOpen && player.scope === "player"
       anchors.top: parent.top
-      // In the water, clear of the glass pane's top edge.
-      anchors.topMargin: keys.inWater ? keys.gap : 0
+      anchors.topMargin: keys.gap
       anchors.left: sidebar.right
+      anchors.leftMargin: sidebar.visible ? keys.gap : 0
       // In the water the search sits in the list's pane, not over the pool.
       anchors.right: keys.inWater && plate.visible ? plate.left : parent.right
+      anchors.rightMargin: keys.gap
       library: library
       cursor: tracks.currentIndex
       onCancelled: window.cancelSearch()
@@ -635,11 +646,14 @@ FloatingWindow {
 
     TrackList {
       id: tracks
+      // A hidden search bar has no height and sits a gap down.
       anchors.top: searchBar.bottom
-      anchors.topMargin: keys.inWater && !searchBar.visible ? keys.gap : 0
       anchors.bottom: nowPlaying.top
+      anchors.bottomMargin: keys.gap
       anchors.left: sidebar.right
+      anchors.leftMargin: sidebar.visible ? keys.gap : 0
       anchors.right: plate.left
+      anchors.rightMargin: keys.gap
       visible: player.scope === "player" && !window.poolShown
       library: library
       player: player
@@ -695,12 +709,13 @@ FloatingWindow {
       visible: opacity > 0
       opacity: window.noticeText !== "" ? 1 : 0
       Behavior on opacity { NumberAnimation { duration: 120 } }
-      anchors.bottom: nowPlaying.top
+      anchors.bottom: tracks.bottom
       anchors.bottomMargin: Theme.spacing.xl
       anchors.horizontalCenter: tracks.horizontalCenter
       width: Math.min(toast.implicitWidth + Theme.spacing.huge * 2, tracks.width - Theme.spacing.huge * 2)
       height: toast.implicitHeight + Theme.spacing.lg * 2
       color: Theme.raised
+      radius: keys.inWater ? Theme.space(4) : 0
       border.width: Theme.stroke.hair
       border.color: window.noticeIsError ? Theme.urgent : Theme.border
       z: 5
@@ -724,9 +739,13 @@ FloatingWindow {
       // Wide enough that the list keeps most of the window.
       readonly property bool room: window.width >= Theme.space(1000)
       visible: room && prefs.plate && Visuals.drawn(window.visuals) && player.scope === "player" && !window.poolShown
-      anchors.top: searchBar.bottom
+      // In the water the search stops at the plate, so the plate runs to the top.
+      anchors.top: keys.inWater ? parent.top : searchBar.bottom
+      anchors.topMargin: keys.gap
       anchors.bottom: nowPlaying.top
+      anchors.bottomMargin: keys.gap
       anchors.right: parent.right
+      anchors.rightMargin: keys.gap
       width: visible ? Theme.space(260) : 0
       player: player
       moving: Visuals.moving(window.visuals)
@@ -740,8 +759,11 @@ FloatingWindow {
       visible: window.poolShown
       anchors.top: searchBar.bottom
       anchors.bottom: nowPlaying.top
+      anchors.bottomMargin: keys.gap
       anchors.left: sidebar.right
+      anchors.leftMargin: sidebar.visible ? keys.gap : 0
       anchors.right: parent.right
+      anchors.rightMargin: keys.gap
       player: player
       nextSeed: upNext.next
       drawn: Visuals.drawn(window.visuals)
@@ -756,7 +778,8 @@ FloatingWindow {
       color: keys.inWater ? "transparent" : Theme.sunken
       water: keys.inWater
       anchors.bottom: hints.top
-      width: parent.width
+      x: keys.gap
+      width: parent.width - keys.gap * 2
       player: player
       live: window.visible && screen.shown
       liked: library.playingLiked
@@ -768,13 +791,16 @@ FloatingWindow {
     Rectangle {
       id: hints
       anchors.bottom: parent.bottom
-      width: parent.width
-      height: hintBar.implicitHeight + Theme.spacing.md * 2
+      anchors.bottomMargin: keys.gap
+      x: keys.gap
+      width: parent.width - keys.gap * 2
+      // In the water a little more room below, clear of the glass's edge.
+      height: hintBar.y + hintBar.implicitHeight + (keys.inWater ? Theme.spacing.xl : Theme.spacing.md)
       color: keys.inWater ? "transparent" : Theme.sunken
 
-      // Between the bar and its hints; in the water, inside the glass.
+      // Between the bar and its hints; in the water, in line with the text.
       Rectangle {
-        x: keys.inWater ? keys.gap * 2 : 0
+        x: keys.inWater ? Theme.spacing.huge : 0
         width: parent.width - x * 2
         height: 1
         color: Theme.line
@@ -782,11 +808,15 @@ FloatingWindow {
 
       HintBar {
         id: hintBar
-        anchors.verticalCenter: parent.verticalCenter
+        y: keys.inWater ? Theme.spacing.lg : Theme.spacing.md
         x: Theme.spacing.huge
         width: parent.width - Theme.spacing.huge * 2
         scope: window.scopes
         primaryOnly: true
+        // One line: what does not fit is in the help overlay, and how to
+        // open it (and to quit) always shows.
+        singleLine: true
+        pinned: ["help", "quit"]
         foreground: Theme.foreground
         muted: Theme.muted
         fontFamily: Theme.font.family
@@ -799,6 +829,7 @@ FloatingWindow {
     PlaylistPicker {
       id: picker
       visible: window.pickerOpen
+      water: keys.inWater
       z: 8
       playlists: library.editablePlaylists
       tracks: window.pickerTracks
@@ -809,6 +840,7 @@ FloatingWindow {
     Prompt {
       id: prompt
       visible: window.promptOpen
+      water: keys.inWater
       z: 9
       eyebrow: window.promptEyebrow
       title: window.promptTitle

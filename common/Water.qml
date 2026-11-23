@@ -1,37 +1,57 @@
 import QtQuick
-import QtQuick.Effects
 
 import "Organism.js" as Organism
+import "Plankton.js" as Plankton
+import "Pool.js" as Pool
 
-// The Living ASCII pool (decision D18): the water (shaders/water.frag), the
-// playing track's organism large near `home`, the queue's organisms smaller
-// around it, a soft glow under them and, at full blur, one large organism
-// drifting past out of focus in front.
+// The Living ASCII pool (D18), built as the organism studies build theirs:
 //
-// Nothing moves unless `alive`: every motion is a property animation or the
-// shaders' `time`, and both stop together. Colours come from the host.
+//   the water's colour   shaders/backdrop.frag
+//   the far layer        ripples of light and small organisms far off,
+//                        out of focus
+//   the near layer       marine snow, the playing track's organism and the
+//                        queue's around it, sharp
+//   glow                 a soft copy of the near layer added on top
+//   a passer-by          one large organism in front, very out of focus
+//   the vignette         the edges sinking into the deep
+//
+// Organisms and the water are fields of light over one character grid,
+// one value per cell: each layer's fields are drawn together into one
+// texture (FieldLayer). They swim by themselves (shaders/organism.frag);
+// this item only moves one clock, and only while `alive`. On a track
+// change the new organism grows and glides to the middle while the old one
+// shrinks back into the queue (see Pool.js).
+//
+// Cost. On an integrated GPU every full-screen pass is expensive, so there
+// is one: everything but the sharp characters is drawn small (a quarter, a
+// third, an eighth of the size, which is also what makes it soft) and
+// shaders/compose.frag puts it all together. The pool is redrawn at most
+// `fps` times a second (its motion is slow), the water's colour four times
+// a second, and nothing at all while it is still.
+//
+// `surface` is a small copy of the whole scene for Glass panes, so the
+// water is drawn once however many panes sit over it.
 Item {
   id: root
 
   property string seed: ""
-  // Other tracks to show around it, nearest first (previous, next, queue).
+  // Other tracks to show around it, nearest first (next, queue).
   property var others: []
   property bool alive: false
   property bool awake: true
   // 0 crisp, 1 balanced, 1.9 dreamy.
   property real blur: 1
   // Where the playing organism lives, as fractions of the scene, and how
-  // tall its space is as a fraction of the scene's height.
+  // much of the scene's height its space is.
   property point home: Qt.point(0.5, 0.42)
-  property real span: 0.62
-  // Where the other organisms keep their homes, as fractions of the scene.
-  property rect roam: Qt.rect(0.2, 0.25, 0.6, 0.45)
+  property real span: 0.6
+  // Where the queue's organisms keep their homes, as fractions of the scene.
+  property rect roam: Qt.rect(0.12, 0.2, 0.76, 0.55)
   // How much life the water has; small scenes want less.
-  property int specks: 30
-  property int bubbles: 6
+  property int specks: 40       // flakes of marine snow
+  property int bubbles: 0
   property int weeds: 0
   property bool passer: true
-  // Small organisms drifting across the far layer.
   property int farCount: 4
 
   property var palette: []
@@ -41,260 +61,298 @@ Item {
   property color accent
   property color muted
   property bool light: false
-  // Cell width in px; a cell is twice as tall.
-  property real cell: Math.max(5, Math.round(Math.min(width, height) / 110))
+  // About this many columns across, cells 4.4 to 7 px wide as in the studies
+  // (their large pool has about 6.5 px cells).
+  property int columns: 140
+  property real cell: Math.max(4.4, Math.min(7, width / columns))
+
+  readonly property size grid: Qt.size(Math.max(1, Math.ceil(width / cell)), Math.max(1, Math.ceil(height / (cell * 2))))
+  readonly property Item surface: surfaceCopy
+  readonly property bool soft: blur > 0
 
   function colourAt(i, fallback) { return palette && palette.length > i ? palette[i] : fallback }
+  function frac(id, salt) { return (Organism.hash(id + "~" + salt) % 1000) / 1000 }
 
-  // Seconds; one clock for the water and every drift.
-  property real clock: 0
-  NumberAnimation on clock {
-    from: 0
-    to: 3600
-    duration: 3600000
-    loops: Animation.Infinite
-    running: true
-    paused: !root.alive
+  // Seconds; one clock for everything that moves, stepped `fps` times a
+  // second while alive, so the pool is redrawn no more often than that.
+  // The slow parts read it in coarser steps and are redrawn less often.
+  property int fps: 30
+  property real clock: 30
+  Timer {
+    interval: Math.round(1000 / Math.max(1, root.fps))
+    repeat: true
+    running: root.alive
+    onTriggered: root.clock += interval / 1000
   }
+  readonly property real farClock: Math.floor(clock * 20) / 20
+  readonly property real colourClock: Math.floor(clock * 4) / 4
 
-  // ---- Glyphs for the water, drawn once.
-  readonly property string glyphs: " .·,'-~+*oO°|/\\()"
-  Row {
-    id: atlasRow
-    Repeater {
-      model: root.glyphs.length
-      Text {
-        required property int index
-        // At the cell's own size, so strokes keep their full strength.
-        width: Math.max(3, Math.round(root.cell))
-        height: width * 2
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        text: root.glyphs[index]
-        color: root.ink
-        font.family: "monospace"
-        font.pixelSize: Math.round(width / 0.6)
-        font.weight: Font.Medium
-      }
-    }
-  }
-  ShaderEffectSource {
-    id: waterAtlas
-    sourceItem: atlasRow
-    hideSource: true
-    smooth: false
-    // Mip levels soften the far layer.
-    mipmap: true
-  }
-
-  // One part of the water (see shaders/water.frag): 0 the colour field,
-  // 1 the far layer, 2 the near layer, 3 the vignette.
-  component WaterPart: ShaderEffect {
-    property real part: 0
-    fragmentShader: "shaders/water.frag.qsb"
-    property var atlas: waterAtlas
-    property size area: Qt.size(width, height)
-    property real cell: root.cell
-    property real time: root.clock
-    property real blur: root.blur
-    property real light: root.light ? 1 : 0
-    property real glyphs: root.glyphs.length
-    property real specks: root.specks
-    property real bubbles: root.bubbles
-    property real weeds: root.weeds
-    property real seed: Organism.hash(root.seed) % 997
-    property color ground: root.ground
-    property color deep: root.deep
-    property color accent: root.accent
-    property color ink: root.ink
-    property color muted: root.muted
-    // magenta, yellow and cyan, as the mockup lights its water
-    property color tint0: root.colourAt(3, root.accent)
-    property color tint1: root.colourAt(4, root.accent)
-    property color tint2: root.colourAt(1, root.accent)
-    property color weedA: root.colourAt(0, root.accent)
-    property color weedB: root.colourAt(1, root.accent)
-  }
-
-  WaterPart { anchors.fill: parent; part: 0 }
-
-  // ---- The far layer: ripples, far weeds and small organisms drifting
-  //      across, all out of focus, so the eye lands on the playing one.
-  Item {
-    id: far
-    anchors.fill: parent
-    visible: root.blur <= 0
-    opacity: 0.9
-
-    WaterPart { anchors.fill: parent; part: 1 }
-
-    Repeater {
-      model: root.seed !== "" ? root.farCount : 0
-
-      Plankton {
-        id: drifter
-        required property int index
-        readonly property real phase: (Organism.hash(root.seed + "~far" + index) % 1000) / 1000
-        width: root.height * root.span * (0.4 + phase * 0.25)
-        height: width
-        y: root.height * (0.12 + ((index * 0.37 + phase) % 1) * 0.68) - height / 2
-        seed: "far:" + root.seed + ":" + index
-        alive: root.alive
-        awake: root.awake
-        palette: root.palette
-        ink: root.ink
-        accent: root.accent
-        light: root.light
-        cell: root.cell
-
-        // Across the water and round again, slowly, some each way. Each
-        // starts part of the way across, so the far layer is never empty.
-        readonly property bool rightward: index % 2 === 0
-        readonly property real begin: rightward ? -width : root.width + width
-        readonly property real end: rightward ? root.width + width : -width
-        readonly property int lap: 90000 + phase * 60000
-        x: begin + (end - begin) * phase
-        SequentialAnimation on x {
-          running: root.alive
-          NumberAnimation { to: drifter.end; duration: drifter.lap * (1 - drifter.phase) }
-          NumberAnimation { from: drifter.begin; to: drifter.end; duration: drifter.lap; loops: Animation.Infinite }
-        }
-      }
-    }
-  }
-  MultiEffect {
-    anchors.fill: far
-    visible: root.blur > 0
-    source: far
-    blurEnabled: true
-    blurMax: 16
-    blur: Math.min(1, root.blur * 0.45)
-    opacity: 0.9
-  }
-
-  WaterPart { anchors.fill: parent; part: 2 }
-
-  // ---- The organisms. The playing one is large; the rest smaller and
-  //      spread out, each with a home of its own taken from its id.
+  // ---- Who swims where.
+  readonly property real mainR: height * span * 0.5
   readonly property var swimmers: {
     var out = root.seed !== "" ? [root.seed] : []
     for (var i = 0; i < root.others.length && out.length < 5; i++)
       if (root.others[i] && out.indexOf(root.others[i]) === -1) out.push(root.others[i])
     return out
   }
+  property var slots: []
+  property bool settled: false
+  onSwimmersChanged: slots = Pool.assign(slots, swimmers, 5)
+  Component.onCompleted: {
+    slots = Pool.assign([], swimmers, 5)
+    Qt.callLater(function() { root.settled = true })
+  }
+
+  // One organism in a slot: the playing one large near `home`, one of the
+  // queue smaller about a home of its own, or shrinking away.
+  component Swimmer: OrganismField {
+    property int slot: 0
+    readonly property string job: Pool.role(seed, root.swimmers)
+    readonly property real presence: Plankton.presence[shape.kind] || 0.7
+    seed: root.slots.length > slot ? root.slots[slot] : ""
+    time: root.clock
+    cell: root.cell
+    palette: root.palette
+    ink: root.ink
+    accentColour: root.accent
+    amp: job === "main" && !root.awake ? 0.8 : 1
+
+    radius: job === "main" ? root.mainR * presence : job === "queue" ? root.mainR * 0.34 * presence : 0
+    Behavior on radius {
+      enabled: root.settled
+      NumberAnimation { duration: 2500; easing.type: Easing.InOutSine }
+    }
+    property real homeX: job === "main" ? root.home.x * root.width : (root.roam.x + root.frac(seed, "hx") * root.roam.width) * root.width
+    property real homeY: job === "main" ? root.home.y * root.height : (root.roam.y + root.frac(seed, "hy") * root.roam.height) * root.height
+    Behavior on homeX { enabled: root.settled; NumberAnimation { duration: 4000; easing.type: Easing.InOutSine } }
+    Behavior on homeY { enabled: root.settled; NumberAnimation { duration: 4000; easing.type: Easing.InOutSine } }
+    home: Qt.point(homeX, homeY)
+    roam: job === "main"
+      ? Qt.size(Math.min(root.width * 0.08, root.mainR * 0.6), Math.min(root.height * 0.08, root.mainR * 0.5))
+      : Qt.size(root.roam.width * root.width * 0.3, root.roam.height * root.height * 0.3)
+  }
+
+  // A small organism far off: not a track, the same every time.
+  component Faraway: OrganismField {
+    property int slot: 0
+    seed: "far:" + slot
+    kind: Plankton.kinds[(slot + 1) % 5]
+    time: root.farClock
+    cell: root.cell
+    palette: root.palette
+    ink: root.ink
+    accentColour: root.accent
+    amp: 0.75
+    radius: slot < root.farCount ? root.mainR * (0.2 + root.frac(seed, "r") * 0.14) * (Plankton.presence[kind] || 0.7) : 0
+    home: Qt.point((0.08 + root.frac(seed, "x") * 0.84) * root.width, (0.12 + root.frac(seed, "y") * 0.6) * root.height)
+    roam: Qt.size(root.width * 0.22, root.height * 0.22)
+  }
+
+  // ---- The parts, drawn small and never shown themselves: each is the
+  //      source of a ShaderEffectSource that hides it.
+  ShaderEffect {
+    id: colourFx
+    width: root.width
+    height: root.height
+    fragmentShader: "shaders/backdrop.frag.qsb"
+    property size area: Qt.size(width, height)
+    property real time: root.colourClock
+    property real blur: root.blur
+    property real part: 0
+    property color ground: root.ground
+    property color deep: root.deep
+    property color accent: root.accent
+    // blue, magenta and green, as the studies light their water
+    property color c0: root.colourAt(2, root.accent)
+    property color c1: root.colourAt(3, root.accent)
+    property color c2: root.colourAt(0, root.accent)
+  }
+  ShaderEffectSource {
+    id: colourTex
+    sourceItem: colourFx
+    hideSource: true
+    smooth: true
+    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 4)), Math.max(1, Math.ceil(root.height / 4)))
+  }
 
   Item {
-    id: life
-    anchors.fill: parent
-
-    Repeater {
-      model: root.swimmers
-
-      Plankton {
-        id: swimmer
-        required property string modelData
-        required property int index
-        readonly property bool main: index === 0 && root.seed !== ""
-        readonly property real side: root.height * root.span * (main ? 1 : 0.4)
-        readonly property real hx: main ? root.home.x : root.roam.x + (Organism.hash(modelData + "~hx") % 1000) / 1000 * root.roam.width
-        readonly property real hy: main ? root.home.y : root.roam.y + (Organism.hash(modelData + "~hy") % 1000) / 1000 * root.roam.height
-        property real dx: 0
-        property real dy: 0
-        width: side
-        height: side
-        x: root.width * hx - width / 2 + dx
-        y: root.height * hy - height / 2 + dy
-        z: main ? 1 : 0
-        seed: modelData
-        alive: root.alive
-        awake: root.awake && main
-        palette: root.palette
+    id: farLayer
+    width: root.width
+    height: root.height
+    FieldLayer {
+      id: farField
+      cell: root.cell
+      grid: root.grid
+      PondField {
+        part: 1
+        time: root.farClock
+        grid: root.grid
         ink: root.ink
         accent: root.accent
-        light: root.light
+        muted: root.muted
+      }
+      Faraway { slot: 0 }
+      Faraway { slot: 1 }
+      Faraway { slot: 2 }
+      Faraway { slot: 3 }
+    }
+    GlyphLayer {
+      anchors.fill: parent
+      cell: root.cell
+      grid: root.grid
+      light: root.light
+      ink: root.ink
+      field: farField.texture
+    }
+  }
+  // Drawn at a third of the size and scaled up: out of focus, about as
+  // much as the studies blur theirs.
+  ShaderEffectSource {
+    id: farTex
+    sourceItem: farLayer
+    hideSource: true
+    smooth: true
+    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / (1.5 + root.blur * 1.5))), Math.max(1, Math.ceil(root.height / (1.5 + root.blur * 1.5))))
+  }
+
+  FieldLayer {
+    id: nearField
+    cell: root.cell
+    grid: root.grid
+    PondField {
+      part: 2
+      time: root.clock
+      grid: root.grid
+      snow: root.specks
+      bubbles: root.bubbles
+      weeds: root.weeds
+      seed: Organism.hash(root.seed) % 997
+      ink: root.ink
+      accent: root.accent
+      muted: root.muted
+      tint: root.colourAt(1, root.accent)
+      weedA: root.colourAt(0, root.accent)
+      weedB: root.colourAt(1, root.accent)
+    }
+    Swimmer { slot: 0 }
+    Swimmer { slot: 1 }
+    Swimmer { slot: 2 }
+    Swimmer { slot: 3 }
+    Swimmer { slot: 4 }
+  }
+
+  // The near layer's characters again, a quarter of the size, for the glow.
+  GlyphLayer {
+    id: glowLayer
+    width: root.width
+    height: root.height
+    cell: root.cell
+    grid: root.grid
+    light: root.light
+    ink: root.ink
+    field: nearField.texture
+  }
+  ShaderEffectSource {
+    id: glowTex
+    sourceItem: glowLayer
+    hideSource: true
+    smooth: true
+    live: root.soft
+    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 4)), Math.max(1, Math.ceil(root.height / 4)))
+  }
+
+  Item {
+    id: passerLayer
+    width: root.width
+    height: root.height
+    FieldLayer {
+      id: passerField
+      cell: root.cell
+      grid: root.grid
+      OrganismField {
+        seed: "near:passer"
+        kind: "medusa"
+        time: root.farClock
         cell: root.cell
-        opacity: main ? 1 : 0.8
-        Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-        // A slow glide around its home: the playing one stays close, the
-        // rest wander further.
-        readonly property real reach: root.height * (main ? 0.04 : 0.09)
-        SequentialAnimation on dx {
-          running: root.alive
-          loops: Animation.Infinite
-          NumberAnimation { to: swimmer.reach; duration: 11000 + swimmer.index * 2300; easing.type: Easing.InOutSine }
-          NumberAnimation { to: -swimmer.reach; duration: 11000 + swimmer.index * 2300; easing.type: Easing.InOutSine }
-        }
-        SequentialAnimation on dy {
-          running: root.alive
-          loops: Animation.Infinite
-          NumberAnimation { to: -swimmer.reach * 0.7; duration: 8300 + swimmer.index * 1700; easing.type: Easing.InOutSine }
-          NumberAnimation { to: swimmer.reach * 0.7; duration: 8300 + swimmer.index * 1700; easing.type: Easing.InOutSine }
-        }
-      }
-    }
-  }
-
-  // ---- Glow: a blurred copy of the organisms added on top, so the
-  //      glyphs look lit from inside and light spills into the water.
-  MultiEffect {
-    id: glowBlur
-    anchors.fill: life
-    visible: false
-    layer.enabled: root.blur > 0
-    source: life
-    blurEnabled: true
-    // Tight, as the mockup's bloom: a wide blur thins the light out.
-    blurMax: 16
-    blur: 0.5 + root.blur * 0.2
-    brightness: 0.1
-  }
-  ShaderEffect {
-    anchors.fill: life
-    visible: root.blur > 0
-    fragmentShader: "shaders/glow.frag.qsb"
-    property var source: glowBlur
-    property real strength: 0.9 + root.blur * 0.35
-    property real light: root.light ? 1 : 0
-  }
-
-  // ---- One large organism drifting past in front, out of focus.
-  Loader {
-    active: root.passer && root.blur > 0 && root.seed !== ""
-    anchors.fill: parent
-    sourceComponent: Item {
-      Plankton {
-        id: passing
-        width: root.height * 1.1
-        height: width
-        y: root.height * 0.55
-        NumberAnimation on x {
-          running: root.alive
-          loops: Animation.Infinite
-          from: -passing.width
-          to: root.width + passing.width
-          duration: 140000
-        }
-        visible: false
-        seed: "passer:" + root.seed
-        alive: root.alive
         palette: root.palette
         ink: root.ink
-        accent: root.accent
-        light: root.light
-        cell: root.cell * 1.6
-      }
-      MultiEffect {
-        anchors.fill: passing
-        source: passing
-        blurEnabled: true
-        blurMax: 48
-        blur: 1
-        opacity: root.blur * 0.4
+        accentColour: root.accent
+        amp: 0.9
+        radius: root.passer && root.soft ? root.mainR * 1.5 * 0.72 : 0
+        home: Qt.point(root.width * 0.06, root.height * 0.72)
+        roam: Qt.size(root.width * 0.12, root.height * 0.1)
       }
     }
+    GlyphLayer {
+      anchors.fill: parent
+      cell: root.cell
+      grid: root.grid
+      light: root.light
+      ink: root.ink
+      field: passerField.texture
+    }
+  }
+  // An eighth of the size: very out of focus.
+  ShaderEffectSource {
+    id: passerTex
+    sourceItem: passerLayer
+    hideSource: true
+    smooth: true
+    live: root.passer && root.soft
+    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 8)), Math.max(1, Math.ceil(root.height / 8)))
   }
 
-  // ---- The vignette, over everything: the edges sink into the deep.
-  WaterPart { anchors.fill: parent; part: 3 }
+  // The water's colour, the far layer and the passer-by together, a third
+  // of the size.
+  ShaderEffect {
+    id: underFx
+    width: root.width
+    height: root.height
+    fragmentShader: "shaders/underlay.frag.qsb"
+    property var back: colourTex
+    property var far: farTex
+    property var passer: passerTex
+    property real farAlpha: 0.9
+    property real passerAlpha: root.passer && root.soft ? root.blur * 0.45 : 0
+  }
+  ShaderEffectSource {
+    id: underTex
+    sourceItem: underFx
+    hideSource: true
+    smooth: true
+    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 3)), Math.max(1, Math.ceil(root.height / 3)))
+  }
+
+  GlyphAtlas {
+    id: glyphAtlas
+    cell: root.cell
+    ink: root.ink
+  }
+
+  // ---- Everything together: the one pass over the screen.
+  ShaderEffect {
+    id: scene
+    anchors.fill: parent
+    fragmentShader: "shaders/compose.frag.qsb"
+    property var under: underTex
+    property var near: nearField.texture
+    property var atlas: glyphAtlas
+    property var glow: glowTex
+    property size area: Qt.size(width, height)
+    property size grid: root.grid
+    property real cell: root.cell
+    property real light: root.light ? 1 : 0
+    property real glyphs: glyphAtlas.glyphs.length
+    property real glowStrength: root.soft ? 0.3 + root.blur * 0.32 : 0
+    property color deep: root.deep
+  }
+
+  // ---- A small copy of the whole scene, for glass to blur. It has no size
+  //      of its own, so it is never shown.
+  ShaderEffectSource {
+    id: surfaceCopy
+    sourceItem: scene
+    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 6)), Math.max(1, Math.ceil(root.height / 6)))
+    smooth: true
+  }
 }

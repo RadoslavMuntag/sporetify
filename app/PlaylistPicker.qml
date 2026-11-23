@@ -62,7 +62,10 @@ Sheet {
     anchors.top: filter.bottom
     anchors.topMargin: Theme.spacing.lg
     anchors.bottom: parent.bottom
-    width: parent.width
+    // Set in from the card's edges, so the cursor's fill and brackets stay
+    // inside it; the rows' text keeps the card's margin.
+    x: root.inset
+    width: parent.width - root.inset * 2
     clip: true
     model: root.choices.length
     boundsBehavior: Flickable.StopAtBounds
@@ -73,23 +76,29 @@ Sheet {
       required property int index
       readonly property var playlist: root.choices[index]
       readonly property bool cursor: ListView.isCurrentItem
+      readonly property real pad: root.pad - list.x
       width: list.width
       height: Theme.spacing.rowHeight
-      color: cursor || choiceArea.containsMouse ? Theme.hoverFill : "transparent"
+      radius: root.water ? Theme.space(4) : 0
+      color: root.water && cursor ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+        : cursor || choiceArea.containsMouse ? Theme.hoverFill : "transparent"
+      border.width: root.water && cursor ? Theme.stroke.hair : 0
+      border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.45)
 
       Rectangle {
+        visible: !root.water
         anchors.bottom: parent.bottom
-        x: root.pad
-        width: parent.width - root.pad * 2
+        x: choice.pad
+        width: parent.width - choice.pad * 2
         height: Theme.stroke.hair
         color: Theme.line
       }
-      Bracket { visible: choice.cursor }
+      Bracket { visible: choice.cursor && !root.water }
 
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        x: root.pad
-        width: parent.width - root.pad * 2 - choiceCount.width - Theme.spacing.lg
+        x: choice.pad
+        width: parent.width - choice.pad * 2 - choiceCount.width - Theme.spacing.lg
         elide: Text.ElideRight
         textFormat: Text.PlainText
         text: !choice.playlist ? "" : (choice.playlist.create
@@ -102,7 +111,7 @@ Sheet {
         id: choiceCount
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
-        anchors.rightMargin: root.pad
+        anchors.rightMargin: choice.pad
         textFormat: Text.PlainText
         text: choice.playlist && !choice.playlist.create && choice.playlist.length !== null
           && choice.playlist.length !== undefined ? String(choice.playlist.length) : ""

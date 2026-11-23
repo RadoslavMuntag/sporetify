@@ -96,7 +96,8 @@ app/                 the full app: Main, Theme, Library, Sidebar, TrackList, Now
 compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
-                     Organism, Plankton (+ Plankton.js), Water, Glass, Lens, TidePool, UpNext, Spectrum,
+                     Organism, Plankton (+ Plankton.js), Water (the pool: FieldLayer,
+                     OrganismField, PondField, GlyphLayer, GlyphAtlas, Pool.js), Glass, Lens, TidePool, UpNext, Spectrum,
                      Specimen.js, Visuals.js, OnScreen; shaders/ (GLSL and the checked-in .qsb)
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
@@ -311,6 +312,13 @@ Technical limits for all visuals:
   zero frames rendered. A window on a hidden workspace draws nothing but its
   animations still tick: tie them to `OnScreen.shown` as well as to
   `visible`.
+- The Living ASCII pool is built for an integrated GPU: one full-screen
+  pass (`shaders/compose.frag`), everything else drawn small, fields at a
+  texel per character cell, redrawn at most 30 times a second by a stepped
+  clock while playing and not at all while still. Keep it that way: on this
+  machine one extra full-screen pass costs about 10 points of GPU busy.
+  On a track change organisms grow and glide over 2.5 to 4 s; that is the
+  scene, not a UI transition, and never holds up input.
 - Every visual has an off switch in settings and the app is fully usable with
   all of them off. Transitions stay ≤ 150 ms and never delay input.
 
@@ -376,6 +384,15 @@ Things that bite:
 - After editing a shader in `common/shaders/`, run `scripts/shaders.sh`
   (needs `qt6-shadertools`) and commit the `.qsb`; `scripts/test.sh`
   fails when one is out of date.
+- **Measuring GPU cost:** a process's render-engine time is
+  `drm-engine-render` in `/proc/<pid>/fdinfo/*` (ns); sample it twice and
+  divide by the interval. Read `/sys/class/drm/card1/gt_act_freq_mhz`
+  alongside: the Intel GPU idles at a low clock, so "busy" at 300 MHz is a
+  quarter of what the same figure means at 1200. Measure a copy of the app
+  in a floating window (it must be on screen to render).
+- A `ShaderEffect` whose source is a `ShaderEffectSource` with
+  `visible: false` gets an empty texture: a hidden source is never
+  rendered. Use `hideSource` on a source with no size instead.
 - `/usr/bin/qmltestrunner` is Qt 5. Use `/usr/lib/qt6/bin/qmltestrunner`.
 - Qt logs to the journal when stderr is not a terminal. Set
   `QT_FORCE_STDERR_LOGGING=1` or failures are silent.
