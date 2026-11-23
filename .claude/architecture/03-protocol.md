@@ -94,10 +94,13 @@ Unsolicited frames have `ev` instead of `id`. Sent today:
 | `player` | Any `PlayerState` change | `{player}`: the whole state, with `seq` |
 | `status` | The status changes | `{status}` |
 | `auth` | A browser sign-in ended without signing in | `{ok:false, message}` |
+| `viz` | About 30 times a second while this device plays, to connections subscribed to `viz` only | `{bands, beat}`: 16 levels 0..1, low to high, and a beat pulse 0..1 that jumps to 1 and decays |
 
 `player.position` is `{position_ms, at_ms, rate}`; clients interpolate
-locally and never poll. All of the above reach every client without
-subscribing. `subscribe` / `unsubscribe` exist and track topics per
+locally and never poll. All of the above except `viz` reach every
+client without subscribing. `viz` is lossy: a slow connection skips frames
+and is not dropped for it. Each frame is sent when the audio it describes
+is heard, not when it is decoded, and a stop sends one all-zero frame. `subscribe` / `unsubscribe` exist and track topics per
 connection, for the planned events:
 
 | Planned event | Purpose |
@@ -105,7 +108,6 @@ connection, for the planned events:
 | `queue` | Queue contents changed |
 | `devices` | Connect device list changed |
 | `invalidate` | A cached page a client may be showing has changed |
-| `viz` | Band energies and beat, about 30 Hz, lossy |
 
 ## Operations
 
