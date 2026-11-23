@@ -96,8 +96,8 @@ app/                 the full app: Main, Theme, Library, Sidebar, TrackList, Now
 compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
-                     Organism, Lens, TidePool, UpNext, Spectrum, Specimen.js, Visuals.js,
-                     OnScreen
+                     Organism, Plankton (+ Plankton.js), Lens, TidePool, UpNext, Spectrum,
+                     Specimen.js, Visuals.js, OnScreen; shaders/ (GLSL and the checked-in .qsb)
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
 scripts/             setup.sh and uninstall.sh (for users), install-dev.sh and
@@ -287,7 +287,9 @@ lives inside the lens (now playing, screensaver); the app's chrome stays
 flat and square, as Omarchy's is.
 
 Built so far: the per-track creature (`common/Organism.js` and
-`Organism.qml`, filled or line art) in the bar, mini-player and app; the
+`Organism.qml`, filled or line art) in the bar and mini-player; the
+per-track plankton organism (`common/Plankton.js`, drawn in characters by
+`common/shaders/plankton.frag`; D17) in the lens and the tide pool; the
 lens (`common/Lens.qml`) and the music (`viz` frames from the daemon's
 audio tap, drawn by `common/Spectrum.qml`) in the compact player and the
 app's specimen plate; the app's lists in the Field Guide manner (rules,
@@ -366,6 +368,9 @@ Things that bite:
   The scripts set `CARGO_TARGET_DIR` to `~/.cache/sporetify/target`; when
   calling `cargo` directly, `source scripts/env.sh` first.
 - **No symlinks anywhere in the repo.** `omarchy plugin validate` rejects them.
+- After editing a shader in `common/shaders/`, run `scripts/shaders.sh`
+  (needs `qt6-shadertools`) and commit the `.qsb`; `scripts/test.sh`
+  fails when one is out of date.
 - `/usr/bin/qmltestrunner` is Qt 5. Use `/usr/lib/qt6/bin/qmltestrunner`.
 - Qt logs to the journal when stderr is not a terminal. Set
   `QT_FORCE_STDERR_LOGGING=1` or failures are silent.

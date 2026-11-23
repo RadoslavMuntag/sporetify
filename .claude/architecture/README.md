@@ -34,6 +34,7 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | D15 | Plugin id stays `namelessnovice.sporetify`; licence is MIT | Owner's call on 2026-10-06 |
 | D8 | Audio-reactive data comes from the daemon's own audio path | No dependency on cava or a PipeWire monitor; zero cost when nobody subscribes |
 | D16 | Visual direction is Field Guide (hairlines, catalogue numbers, the creature as line art under a lens), with the tide pool living inside the lens | Owner's call on 2026-11-03 from four mockups: it sits well with Omarchy's own style, and keeps Tide Pool's character for the now-playing view and screensaver. See [08-design.md](08-design.md) |
+| D17 | In the lens and the tide pool every track is a plankton organism (medusa, comb jelly, radiolarian, volvox, diatom; kind from the id), drawn in characters by a fragment shader (`common/shaders/plankton.frag`) | Owner's call on 2026-11-17 from the "Organism studies" mockup: natural forms without faces read better than the eyed blob. A shader keeps the character look GPU-only; the `.qsb` is checked in (`scripts/shaders.sh`). Bar, mini-player and list rows keep `Organism.js` until a row-size form exists |
 
 ## Open questions
 

@@ -4,7 +4,7 @@ import QtQuick.Effects
 import "Specimen.js" as Specimen
 
 // The Field Guide's lens: a round slide with graph paper, the track's
-// creature drawn as line art under it, and a ring of ticks around the rim
+// plankton drawn in characters under it, and a ring of ticks around the rim
 // that doubles as the progress bar. With creatures off the cover fills the
 // lens instead, so it still says what is playing.
 //
@@ -42,6 +42,8 @@ Item {
   property color eye
   property color pupil
   property real stroke: 1
+  // A light theme: the organism's brightest cells darken instead of glow.
+  property bool light: false
 
   // Ticks run out to 1.15 r and the cross marks to 1.34 r.
   readonly property real r: Math.min(width, height) / 2 / 1.36
@@ -85,26 +87,32 @@ Item {
     }
   }
 
-  // ---- The specimen, drifting a little while alive
-  Organism {
+  // ---- The specimen: the track's plankton (Plankton.qml), drifting a
+  //      little while alive and cut to the lens.
+  Plankton {
     id: specimen
     visible: root.creature && !root.pool
-    width: root.r * 1.6
+    width: root.r * 2
     height: width
     x: root.cx - width / 2 + driftX
     y: root.cy - height / 2 + driftY
     property real driftX: 0
     property real driftY: 0
+    // The lens's circle in the specimen's own coordinates.
+    bound: root.r * 0.96 / scale
+    clipAt: Qt.point(width / 2 - driftX / scale, height / 2 - driftY / scale)
     seed: root.seed
     alive: root.alive && visible
     awake: root.awake
     palette: root.palette
+    ink: root.ink
+    accent: root.accent
+    light: root.light
     eye: root.eye
     pupil: root.pupil
-    lineArt: true
     ground: root.ground
     stroke: root.stroke * 1.5
-    scale: 1 + root.pulse * 0.07
+    scale: 1 + root.pulse * 0.05
     Behavior on scale {
       enabled: specimen.alive
       NumberAnimation { duration: 60; easing.type: Easing.OutQuad }
@@ -113,14 +121,14 @@ Item {
     SequentialAnimation on driftX {
       running: specimen.alive
       loops: Animation.Infinite
-      NumberAnimation { from: -root.r * 0.05; to: root.r * 0.05; duration: 3400; easing.type: Easing.InOutSine }
-      NumberAnimation { from: root.r * 0.05; to: -root.r * 0.05; duration: 3400; easing.type: Easing.InOutSine }
+      NumberAnimation { from: -root.r * 0.04; to: root.r * 0.04; duration: 7400; easing.type: Easing.InOutSine }
+      NumberAnimation { from: root.r * 0.04; to: -root.r * 0.04; duration: 7400; easing.type: Easing.InOutSine }
     }
     SequentialAnimation on driftY {
       running: specimen.alive
       loops: Animation.Infinite
-      NumberAnimation { from: -root.r * 0.04; to: root.r * 0.04; duration: 2900; easing.type: Easing.InOutSine }
-      NumberAnimation { from: root.r * 0.04; to: -root.r * 0.04; duration: 2900; easing.type: Easing.InOutSine }
+      NumberAnimation { from: -root.r * 0.04; to: root.r * 0.04; duration: 9100; easing.type: Easing.InOutSine }
+      NumberAnimation { from: root.r * 0.04; to: -root.r * 0.04; duration: 9100; easing.type: Easing.InOutSine }
     }
   }
 
@@ -145,6 +153,7 @@ Item {
       eye: root.eye
       pupil: root.pupil
       stroke: root.stroke
+      light: root.light
     }
   }
 

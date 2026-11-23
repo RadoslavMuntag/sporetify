@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 
 // The tide pool, drawn inside the lens (design milestone V5): the playing
-// track's creature drifting in moving light, specks of matter at several
+// track's plankton drifting in moving light, specks of matter at several
 // depths, and the previous and next tracks' creatures dozing at the edges.
 // On a track change they swim one place along.
 //
@@ -33,6 +33,7 @@ Item {
   property color eye
   property color pupil
   property real stroke: 1
+  property bool light: false
   // Length of the swim on a track change; short, like every transition.
   property int swimMs: 150
 
@@ -182,7 +183,7 @@ Item {
 
   // ---- The creatures. `place` is where one is: 0 the middle, -1 and 1 the
   //      edges; past them it fades out. Size and weight follow the place.
-  component Swimmer: Organism {
+  component Swimmer: Plankton {
     id: swimmer
     property real place: 0
     property int bob: 0
@@ -193,34 +194,40 @@ Item {
     property real driftY: 0
 
     visible: seed !== "" && away < 1.4
-    width: root.r * 1.1
+    width: root.r * 2
     height: width
     x: root.cx + place * root.r * 0.64 - width / 2 + driftX * size
     y: root.cy - height / 2 + driftY * size
-    scale: size * (1 + root.pulse * 0.07 * (1 - near))
+    scale: size * (1 + root.pulse * 0.05 * (1 - near))
     opacity: away <= 1 ? 1 - near * 0.5 : 0.5 * Math.max(0, 1 - (away - 1) / 0.4)
+    // The lens's circle in the swimmer's own (unscaled) coordinates.
+    bound: root.r * 0.96 / scale
+    clipAt: Qt.point(width / 2 + (root.cx - x - width / 2) / scale, height / 2 + (root.cy - y - height / 2) / scale)
+    // Cells keep their size when the organism is drawn smaller.
+    cell: Math.max(4, Math.round(root.r / 40)) / Math.max(0.38, size)
     alive: root.alive && visible
     // The one in the middle is the one playing; the others doze.
     awake: root.awake && away < 0.5
     palette: root.palette
+    ink: root.ink
+    accent: root.accent
+    light: root.light
     eye: root.eye
     pupil: root.pupil
-    lineArt: true
     ground: root.ground
-    // Lines keep their weight when the creature is drawn smaller.
     stroke: root.stroke * 1.5 / Math.max(0.38, size)
 
     SequentialAnimation on driftX {
       running: swimmer.alive
       loops: Animation.Infinite
-      NumberAnimation { from: -root.r * 0.05; to: root.r * 0.05; duration: 3400 + swimmer.bob * 700; easing.type: Easing.InOutSine }
-      NumberAnimation { from: root.r * 0.05; to: -root.r * 0.05; duration: 3400 + swimmer.bob * 700; easing.type: Easing.InOutSine }
+      NumberAnimation { from: -root.r * 0.05; to: root.r * 0.05; duration: 6400 + swimmer.bob * 900; easing.type: Easing.InOutSine }
+      NumberAnimation { from: root.r * 0.05; to: -root.r * 0.05; duration: 6400 + swimmer.bob * 900; easing.type: Easing.InOutSine }
     }
     SequentialAnimation on driftY {
       running: swimmer.alive
       loops: Animation.Infinite
-      NumberAnimation { from: -root.r * 0.05; to: root.r * 0.05; duration: 2900 + swimmer.bob * 900; easing.type: Easing.InOutSine }
-      NumberAnimation { from: root.r * 0.05; to: -root.r * 0.05; duration: 2900 + swimmer.bob * 900; easing.type: Easing.InOutSine }
+      NumberAnimation { from: -root.r * 0.05; to: root.r * 0.05; duration: 7900 + swimmer.bob * 1100; easing.type: Easing.InOutSine }
+      NumberAnimation { from: root.r * 0.05; to: -root.r * 0.05; duration: 7900 + swimmer.bob * 1100; easing.type: Easing.InOutSine }
     }
   }
 

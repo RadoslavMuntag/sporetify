@@ -82,6 +82,7 @@ Rectangle {
       eye: Theme.mode === "light" ? Theme.background : Theme.foreground
       pupil: Theme.mode === "light" ? Theme.foreground : Theme.sunken
       stroke: Theme.stroke.hair
+      light: Theme.mode === "light"
     }
 
     Spectrum {

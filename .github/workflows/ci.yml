@@ -32,7 +32,7 @@ jobs:
       - name: Install toolchain and libraries
         run: |
           pacman -Syu --noconfirm --needed \
-            base-devel git jq rust openssl libpulse qt6-declarative
+            base-devel git jq rust openssl libpulse qt6-declarative qt6-shadertools
 
       - uses: actions/checkout@v4
 
