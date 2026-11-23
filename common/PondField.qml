@@ -7,13 +7,13 @@ import QtQuick
 ShaderEffect {
   id: root
 
-  property int part: 1
+  property real part: 1
   property real time: 0
   property size grid: Qt.size(1, 1)
-  property int snow: 0
-  property int specks: 0
-  property int bubbles: 0
-  property int weeds: 0
+  property real snow: 0
+  property real specks: 0
+  property real bubbles: 0
+  property real weeds: 0
   property real seed: 0
   property color ink
   property color accent
@@ -22,6 +22,9 @@ ShaderEffect {
   property color weedA
   property color weedB
 
+  // Counts and `part` are reals: the shader reads floats, and an int
+  // property reaches it as an int's bits, which read as about zero (the
+  // ripples then filled the near layer and no snow fell, until 2026-11-22).
   anchors.fill: parent
   blending: false
   fragmentShader: "shaders/pond.frag.qsb"

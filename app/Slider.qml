@@ -1,11 +1,15 @@
 import QtQuick
 
 // Horizontal slider, 0..1, drawn as Field Guide line work: a hairline, the
-// set part as a heavier accent line, and a needle. `moved` fires while
-// dragging, `released` once at the end.
+// set part as a heavier accent line, and a needle. With `ascii` it is drawn
+// in characters as in the Living ASCII mockup: `====●-----`, or with
+// `brackets` `[=======---]`. `moved` fires while dragging, `released` once
+// at the end.
 Item {
   id: root
 
+  property bool ascii: false
+  property bool brackets: false
   property real value: 0
   property bool dragging: false
   // What is drawn: the dragged value while dragging, otherwise `value`.
@@ -23,6 +27,7 @@ Item {
   readonly property real needleX: inset + span * shown
 
   Rectangle {
+    visible: !root.ascii
     x: root.inset
     anchors.verticalCenter: parent.verticalCenter
     width: root.span
@@ -30,13 +35,47 @@ Item {
     color: Theme.border
   }
   Rectangle {
+    visible: !root.ascii
     x: root.inset
     anchors.verticalCenter: parent.verticalCenter
     width: root.span * root.shown
     height: Theme.stroke.bold
     color: Theme.accent
   }
+
+  // ---- In characters: as many cells as fit, the set part in accent.
+  FontMetrics {
+    id: metrics
+    font.family: Theme.font.family
+    font.pixelSize: Theme.font.bodySmall
+  }
+  readonly property int cells: Math.max(4, Math.floor(width / Math.max(1, metrics.advanceWidth("=")))
+    - (brackets ? 2 : 0))
+  // With a knob the knob is one of the cells.
+  readonly property int setCells: brackets ? Math.round(shown * cells) : Math.round(shown * (cells - 1))
+  Row {
+    visible: root.ascii
+    anchors.verticalCenter: parent.verticalCenter
+    Text { visible: root.brackets; textFormat: Text.PlainText; font: metrics.font; text: "["; color: Theme.subtle }
+    Text {
+      textFormat: Text.PlainText
+      font.family: metrics.font.family
+      font.pixelSize: metrics.font.pixelSize
+      font.bold: true
+      text: "=".repeat(root.setCells) + (root.brackets ? "" : "●")
+      color: Theme.accent
+    }
+    Text {
+      textFormat: Text.PlainText
+      font: metrics.font
+      text: "-".repeat(Math.max(0, root.cells - root.setCells - (root.brackets ? 0 : 1)))
+      color: Theme.faint
+    }
+    Text { visible: root.brackets; textFormat: Text.PlainText; font: metrics.font; text: "]"; color: Theme.subtle }
+  }
+
   Rectangle {
+    visible: !root.ascii
     x: root.needleX - width / 2
     anchors.verticalCenter: parent.verticalCenter
     width: Theme.stroke.bold

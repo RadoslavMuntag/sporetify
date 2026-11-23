@@ -15,7 +15,7 @@ Slider {
   readonly property int count: durationMs > 0 ? Math.floor(durationMs / 1000 / every) + 1 : 0
 
   Repeater {
-    model: root.count
+    model: root.ascii ? 0 : root.count
 
     Rectangle {
       required property int index

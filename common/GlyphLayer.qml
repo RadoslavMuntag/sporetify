@@ -11,6 +11,9 @@ Item {
   property size grid: Qt.size(1, 1)
   property bool light: false
   property color ink
+  // Scene px per pixel drawn, when the layer is drawn small: its glyphs
+  // are then averaged across each pixel instead of read at one point.
+  property real footprint: 1
   readonly property bool failed: shader.status === ShaderEffect.Error
 
   GlyphAtlas {
@@ -31,5 +34,7 @@ Item {
     property real cell: root.cell
     property real light: root.light ? 1 : 0
     property real glyphs: glyphAtlas.glyphs.length
+    property real footprint: root.footprint
+    property size inset: glyphAtlas.inset
   }
 }

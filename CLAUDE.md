@@ -97,7 +97,7 @@ compact/             the compact player: CompactWindow (keys, IPC), CompactView 
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
                      Organism, Plankton (+ Plankton.js), Water (the pool: FieldLayer,
-                     OrganismField, PondField, GlyphLayer, GlyphAtlas, Pool.js), Glass, Lens, TidePool, UpNext, Spectrum,
+                     OrganismField, PondField, GlyphLayer, GlyphAtlas, Blur, Pool.js), Glass, Lens, TidePool, UpNext, Spectrum,
                      Specimen.js, Visuals.js, OnScreen; shaders/ (GLSL and the checked-in .qsb)
 daemon/              Rust crate `sporetifyd`
 systemd/             sporetifyd.socket + .service (socket-activated user units)
@@ -401,7 +401,23 @@ Things that bite:
   one per attempt (see `common/DaemonClient.qml`).
 - Quickshell refuses absolute-path imports and warns on modules outside the
   config folder, so shared QML must sit under the config root that uses it.
-- `state` is already a property of every QML `Item`; do not reuse the name.
+- A `ShaderEffect` passes an `int` property to a `float` uniform as the
+  int's bits, which read as about zero: declare such properties `real`
+  (the pool's water drew its ripples in the wrong layer and no snow
+  because of it).
+- `state` and `layer` are already properties of every QML `Item`; do not
+  reuse the names (a ShaderEffect uniform called `layer` fails to load).
+- An animation runs even on an invisible item, and any running animation
+  makes Qt redraw the whole window every frame. A `Behavior` fed by a
+  stream (the music feed) on a hidden item kept the app at 60 fps; gate
+  such behaviours on `visible`.
+- Count frames with `QSG_RENDER_TIMING=1` (each frame logs "frame
+  rendered"); it found the hidden spectrum above and the pool's extra
+  frames. A live `ShaderEffectSource` whose source changes asks for one
+  more frame after the one that drew the change, and so does a recursive
+  one; with the pool's clock below 30 Hz a tick costs three frames (see
+  "Extra frames" in `.claude/architecture/08-design.md`). Count at a low
+  clock: at 30 Hz the 60 fps ceiling hides it.
 - Running the app prints "Ignoring unresolvable import .../Commons" for
   `BarWidget.qml` and `MiniPlayer.qml`. That is Quickshell scanning the
   plugin's files, which only resolve inside omarchy-shell. Harmless.
@@ -461,6 +477,13 @@ Things that bite:
   real window costs. To measure a real window without disturbing the
   owner's layout, start it on a hidden special workspace:
   `hyprctl dispatch 'hl.dsp.exec_cmd("<cmd>", { workspace = "special:test silent" })'`.
+- **Real GPU pictures and measurements without the owner's screen** (with
+  their go-ahead): `hyprctl output create headless SPTEST` adds a monitor
+  nobody sees; start the test app on its active workspace
+  (`hyprctl monitors all -j`), then `capture` renders every shader. Its
+  shown workspace can change if the owner switches workspaces, which
+  hides the window and stops it drawing, so check it before trusting a
+  number. Remove it afterwards with `hyprctl output remove SPTEST`.
 - Quickshell's Hyprland model (`Hyprland.monitors`, a monitor's
   `activeWorkspace` and `lastIpcObject`) stays empty on Hyprland 0.56 until
   the user switches workspace. Ask `hyprctl` instead (see

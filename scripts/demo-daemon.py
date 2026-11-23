@@ -12,7 +12,8 @@ played and Spotify is never contacted. Every name in it is invented.
 
 Covers are drawn with Pillow into a folder beside the socket (Pillow is
 not installed system-wide on Omarchy: `uv run --with pillow python3 ...`).
-Subscribing to `viz` gets made-up music frames, 30 a second.
+Subscribing to `viz` gets made-up music frames, 30 a second. Next and
+previous step along Morning Tide, so a track change can be watched.
 """
 
 import hashlib
@@ -132,7 +133,7 @@ def tracks_of(name):
 
 PLAYING = {}
 state = {"playing": True, "volume": 0.72, "shuffle": False, "repeat": False, "seq": 1,
-         "position_ms": 48000, "at_ms": int(time.time() * 1000)}
+         "position_ms": 48000, "at_ms": int(time.time() * 1000), "index": 3}
 
 
 def player():
@@ -173,8 +174,8 @@ def answer(op, args):
     if op == "search":
         return {"query": args.get("query", ""), "tracks": [], "artists": [], "albums": [], "playlists": []}
     if op == "player.up_next":
-        rows = tracks_of("Morning Tide")[4:]
-        return {"context_uri": playlist_uri("Morning Tide"), "context_name": "Morning Tide", "position": 3,
+        rows = tracks_of("Morning Tide")[state["index"] + 1:]
+        return {"context_uri": playlist_uri("Morning Tide"), "context_name": "Morning Tide", "position": state["index"],
                 "total": LENGTHS["Morning Tide"], "shuffle": False, "items": rows}
     if op in ("subscribe", "unsubscribe"):
         return {"topics": args.get("topics", [])}
@@ -227,6 +228,14 @@ class Connection(socketserver.StreamRequestHandler):
                 self.viz = wanted
             if op in ("player.toggle", "player.play", "player.pause"):
                 state["playing"] = op == "player.play" or (op == "player.toggle" and not state["playing"])
+                state["seq"] += 1
+                self.send({"ev": "player", "player": player()})
+            if op in ("player.next", "player.previous"):
+                # Along Morning Tide, so a track change can be watched.
+                state["index"] = (state["index"] + (1 if op == "player.next" else -1)) % LENGTHS["Morning Tide"]
+                PLAYING.clear()
+                PLAYING.update(track("Morning Tide" + str(state["index"])))
+                state["position_ms"], state["at_ms"] = 0, int(time.time() * 1000)
                 state["seq"] += 1
                 self.send({"ev": "player", "player": player()})
             self.send({"id": request["id"], "ok": True, "stale": False, "final": True, "data": answer(op, request.get("args") or {})})

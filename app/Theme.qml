@@ -31,6 +31,14 @@ Singleton {
   readonly property color urgent: pick("red", foreground)
   readonly property color raised: pick("lighter_background", alpha(foreground, 0.06))
   readonly property color sunken: pick("dark_background", background)
+  // The darkest the theme goes: where the pool's water sinks to (D18).
+  readonly property color deep: pick("darker_background", sunken)
+  // The Living ASCII look's two quieter tones of text (D18): `subtle` for
+  // second lines (artist), `faint` for the quietest (album, time, labels).
+  // The theme's muted grey can be as bright as the water behind it; the
+  // foreground, partly see-through, keeps its contrast on water and glass.
+  readonly property color subtle: alpha(foreground, mode === "light" ? 0.68 : 0.62)
+  readonly property color faint: alpha(foreground, mode === "light" ? 0.5 : 0.42)
 
   // Colours a creature's body may take: the theme's named palette.
   readonly property var creatureColors: {

@@ -49,7 +49,7 @@ Rectangle {
 
   component Caption: Text {
     textFormat: Text.PlainText
-    color: Theme.muted
+    color: root.inWater ? Theme.subtle : Theme.muted
     font.family: Theme.font.family
     font.pixelSize: Theme.font.caption
     font.letterSpacing: Theme.font.caption * 0.12
@@ -70,6 +70,7 @@ Rectangle {
         text: root.inWater ? "THE POOL" : "FIG. 1 · " + (root.track ? (root.player.playing ? "NOW PLAYING" : "PAUSED") : "AT REST")
       }
       Caption {
+        id: catalogue
         anchors.right: parent.right
         text: root.track ? "NO. " + Specimen.catalogue(root.track.id) : ""
       }
@@ -169,6 +170,18 @@ Rectangle {
     }
   }
 
+  // Where text sits on the water, in this item, for the water's
+  // characters to make room around it (Water.calm): the labels at the top and the track below.
+  readonly property var calm: {
+    var w = 0
+    for (var i = 0; i < overlay.children.length; i++)
+      if (overlay.children[i].visible && overlay.children[i].contentWidth !== undefined)
+        w = Math.max(w, overlay.children[i].contentWidth)
+    return [Qt.rect(root.pad, root.pad, figure.contentWidth, figureRow.height),
+            Qt.rect(root.pad + figureRow.width - catalogue.contentWidth, root.pad, catalogue.contentWidth, figureRow.height),
+            Qt.rect(overlay.x, overlay.y, Math.min(overlay.width, w), overlay.height)]
+  }
+
   // ---- In the water: the track over the pool, at the bottom.
   Column {
     id: overlay
@@ -184,8 +197,6 @@ Rectangle {
       textFormat: Text.PlainText
       text: root.track ? root.track.title : "Nothing playing"
       color: Theme.foreground
-      style: Text.Outline
-      styleColor: Qt.rgba(Theme.sunken.r, Theme.sunken.g, Theme.sunken.b, 0.4)
       font.family: Theme.font.family
       font.pixelSize: Math.round(Theme.font.body * 1.5)
       font.bold: true
@@ -195,7 +206,7 @@ Rectangle {
       elide: Text.ElideRight
       textFormat: Text.PlainText
       text: root.track ? root.track.artists.join(", ") : ""
-      color: Theme.muted
+      color: Theme.subtle
       font.family: Theme.font.family
       font.pixelSize: Theme.font.body
     }
@@ -205,7 +216,7 @@ Rectangle {
       elide: Text.ElideRight
       textFormat: Text.PlainText
       text: root.track ? Specimen.traits(root.track.id) : ""
-      color: Theme.muted
+      color: Theme.subtle
       opacity: 0.75
       font.family: Theme.font.family
       font.pixelSize: Theme.font.caption

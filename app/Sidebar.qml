@@ -133,10 +133,13 @@ Rectangle {
       border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.45)
 
       Bracket { visible: row.cursor && !root.water }
+      // The open list's accent edge; in the water it sits inside the
+      // rounded fill, as in the mockup.
       Rectangle {
-        visible: row.open && !root.water
+        visible: row.open
+        y: root.water ? row.radius : 0
         width: Theme.space(2)
-        height: parent.height
+        height: parent.height - y * 2
         color: Theme.accent
       }
       Text {
@@ -158,7 +161,10 @@ Rectangle {
           if (root.water && !row.folder) return "<font color=\"" + Theme.accent + "\">" + glyph + "</font>&nbsp;&nbsp;" + name
           return glyph + (row.folder ? " " : "&nbsp;&nbsp;") + name
         }
-        color: row.open ? Theme.accent : (row.folder ? Theme.muted : Theme.foreground)
+        // In the water the open list reads in full foreground on its
+        // accent fill and the rest a step quieter, as in the mockup.
+        color: root.water ? (row.open || row.cursor ? Theme.foreground : row.folder ? Theme.faint : Theme.subtle)
+          : row.open ? Theme.accent : (row.folder ? Theme.muted : Theme.foreground)
         font.family: Theme.font.family
         font.pixelSize: Theme.font.body
       }

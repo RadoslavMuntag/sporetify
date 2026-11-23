@@ -22,7 +22,18 @@ Rectangle {
   // there, so the lens is left out.
   property bool inWater: false
   readonly property point waterAt: Qt.point(lens.x + lens.width / 2, lens.y + lens.height / 2)
-  readonly property real waterRoom: lens.width
+  // The host sizes the playing organism at 0.3 of this (Main's `span`):
+  // 0.93 of the view makes it 0.28 of the open water's height, as in the
+  // studies' pools. The lens is smaller, since it leaves room for its ring.
+  readonly property real waterRoom: root.height * 0.93
+  // Where text sits on the water, in this item, for the water's
+  // characters to make room around it (Water.calm): the two labels at the top and the words below.
+  readonly property var calm: {
+    var w = Math.max(wTitle.contentWidth, wArtist.contentWidth, wTraits.contentWidth)
+    return [Qt.rect(head.x, head.y, figure.contentWidth, head.height),
+            Qt.rect(head.x + head.width - catalogue.contentWidth, head.y, catalogue.contentWidth, head.height),
+            Qt.rect(words.x + (words.width - w) / 2, words.y, w, words.height)]
+  }
 
   readonly property var track: player.track
   readonly property real pad: Theme.spacing.huge
@@ -45,7 +56,7 @@ Rectangle {
 
   component Caption: Text {
     textFormat: Text.PlainText
-    color: Theme.muted
+    color: root.inWater ? Theme.subtle : Theme.muted
     font.family: Theme.font.family
     font.pixelSize: Theme.font.caption
     font.letterSpacing: Theme.font.caption * 0.12
@@ -63,6 +74,7 @@ Rectangle {
         : root.player.playing ? "TIDE POOL" : "TIDE POOL, STILL")
     }
     Caption {
+      id: catalogue
       anchors.right: parent.right
       text: root.track ? "NO. " + Specimen.catalogue(root.track.id) : ""
     }
@@ -106,6 +118,7 @@ Rectangle {
     spacing: Theme.spacing.xs
 
     Text {
+      id: wTitle
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       elide: Text.ElideRight
@@ -117,16 +130,18 @@ Rectangle {
       font.bold: true
     }
     Text {
+      id: wArtist
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       elide: Text.ElideRight
       textFormat: Text.PlainText
       text: root.track ? root.track.artists.join(", ") : ""
-      color: Theme.muted
+      color: root.inWater ? Theme.subtle : Theme.muted
       font.family: Theme.font.family
       font.pixelSize: Theme.font.body
     }
     Caption {
+      id: wTraits
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       text: root.track && root.drawn && root.creatures ? Specimen.traits(root.track.id).toUpperCase() : ""
