@@ -6,7 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use librespot_connect::{ConnectConfig, LoadRequest, LoadRequestOptions, PlayingTrack, Spirc};
 use librespot_core::authentication::Credentials;
@@ -89,12 +89,25 @@ pub struct Playback {
     /// cannot be read back, so this is the only record of it.
     queued: Mutex<Vec<String>>,
     /// The last position librespot reported while sound was really coming
-    /// out: (track uri, position). Unlike the state's position it does not
-    /// move on when playback stalls.
-    heard: Mutex<Option<(String, u64)>>,
+    /// out. Unlike the state's position it does not move on when playback
+    /// stalls. Cleared by a seek or a load, which make it out of date.
+    heard: Mutex<Option<Heard>>,
     /// Set when a session was lost while music played, to start it again
-    /// once the next session is up.
-    resume: Mutex<Option<Instant>>,
+    /// once the next session is up: when sound was last known to play, by
+    /// the wall clock, which unlike a monotonic one counts a suspend.
+    resume: Mutex<Option<u64>>,
+    /// The track an automatic resume asked for, until a track starts. The
+    /// saved context can be the wrong one (playback moved here from another
+    /// device), and librespot then plays its first track from the old offset.
+    resuming: Mutex<Option<String>>,
+}
+
+/// A position librespot reported as playing, and when.
+#[derive(Clone)]
+struct Heard {
+    uri: String,
+    position_ms: u64,
+    at_ms: u64,
 }
 
 impl Playback {
@@ -112,6 +125,7 @@ impl Playback {
             queued: Mutex::new(Vec::new()),
             heard: Mutex::new(None),
             resume: Mutex::new(None),
+            resuming: Mutex::new(None),
         })
     }
 
@@ -143,6 +157,10 @@ impl Playback {
         };
         let (_, player) = self.shared.snapshot();
         let spirc = &active.spirc;
+        if matches!(command, Command::Next | Command::Previous) {
+            // The user chose another track: it is not a wrong one.
+            *self.resuming.lock().expect("resuming lock") = None;
+        }
 
         let sent = match command {
             Command::Play | Command::Toggle if !self.loaded.load(Ordering::Relaxed) => {
@@ -218,6 +236,7 @@ impl Playback {
             return Err(self.unavailable());
         };
         let (_, player) = self.shared.snapshot();
+        *self.resuming.lock().expect("resuming lock") = None;
         let context_uri = request.context_uri.clone();
         self.remember(|saved| saved.context_uri = Some(context_uri));
         let options = LoadRequestOptions {
@@ -252,20 +271,23 @@ impl Playback {
         }
     }
 
-    /// Record where playback is right now. Called before the daemon exits.
     /// Like `remember_position`, but from the position last heard playing,
-    /// when it belongs to the current track.
-    fn remember_heard_position(&self) {
+    /// when it belongs to the current track. Returns when sound was last
+    /// known to play.
+    fn remember_heard_position(&self) -> u64 {
         let (_, state) = self.shared.snapshot();
-        let Some(track) = state.track.clone() else { return };
         let heard = self.heard.lock().expect("heard lock").clone();
+        let last_sound_ms = heard.as_ref().map_or(0, |heard| heard.at_ms).max(state.position.at_ms);
+        let Some(track) = state.track.clone() else { return last_sound_ms };
         let position_ms = resume_position(heard.as_ref(), &track.id, state.position.position_ms);
         self.remember(|saved| {
             saved.position_ms = position_ms;
             saved.track = Some(track);
         });
+        last_sound_ms
     }
 
+    /// Record where playback is right now. Called before the daemon exits.
     pub fn remember_position(&self) {
         let (_, state) = self.shared.snapshot();
         if state.track.is_none() {
@@ -348,6 +370,9 @@ impl Playback {
 
     pub async fn sign_out(&self) -> Result<(), OpError> {
         auth::forget().await.map_err(|e| OpError::new(ErrorCode::Internal, e.to_string()))?;
+        // Music lost before signing out must not start for the next sign-in.
+        *self.resume.lock().expect("resume lock") = None;
+        *self.resuming.lock().expect("resuming lock") = None;
         self.sign_out.notify_one();
         Ok(())
     }
@@ -464,10 +489,14 @@ impl Playback {
 
         // Music that stopped with the last lost connection plays on.
         let resume = self.resume.lock().expect("resume lock").take();
-        if resume.is_some_and(|lost| lost.elapsed() < RESUME_WINDOW) {
+        if resume.is_some_and(|last_sound_ms| within_resume_window(last_sound_ms, now_ms())) {
             eprintln!("sporetifyd: connected again; resuming where the music stopped");
-            if let Err(e) = self.command(Command::Play) {
-                eprintln!("sporetifyd: could not resume: {}", e.message);
+            match self.command(Command::Play) {
+                Ok(()) => {
+                    let track = self.saved.lock().expect("saved lock").track.as_ref().map(|t| t.id.clone());
+                    *self.resuming.lock().expect("resuming lock") = track;
+                }
+                Err(e) => eprintln!("sporetifyd: could not resume: {}", e.message),
             }
         }
 
@@ -492,11 +521,12 @@ impl Playback {
             // The sound may have stopped well before the session was given
             // up: keep the position last heard, not the one the state has
             // moved on to since, and start again from there.
-            self.remember_heard_position();
-            *self.resume.lock().expect("resume lock") = Some(Instant::now());
+            let last_sound_ms = self.remember_heard_position();
+            *self.resume.lock().expect("resume lock") = Some(last_sound_ms);
         } else {
             self.remember_position();
         }
+        *self.resuming.lock().expect("resuming lock") = None;
         self.queued.lock().expect("queued lock").clear();
         self.loaded.store(false, Ordering::Relaxed);
         self.ready.send_replace(false);
@@ -524,13 +554,27 @@ impl Playback {
             // Only for `heard`: the frontends interpolate the position
             // themselves, and a state change every second would wake them.
             if let Ok(uri) = track_id.to_uri() {
-                *self.heard.lock().expect("heard lock") = Some((uri, u64::from(*position_ms)));
+                *self.heard.lock().expect("heard lock") =
+                    Some(Heard { uri, position_ms: u64::from(*position_ms), at_ms: now_ms() });
             }
             return;
+        }
+        if matches!(
+            event,
+            PlayerEvent::Seeked { .. } | PlayerEvent::PositionCorrection { .. } | PlayerEvent::Loading { .. }
+        ) {
+            *self.heard.lock().expect("heard lock") = None;
         }
         match &event {
             PlayerEvent::TrackChanged { audio_item } => {
                 self.loaded.store(true, Ordering::Relaxed);
+                let resumed = self.resuming.lock().expect("resuming lock").take();
+                if resumed.is_some_and(|track| track != audio_item.uri) {
+                    eprintln!("sporetifyd: the resumed list no longer holds the track; pausing");
+                    if let Some(active) = self.active.lock().expect("active lock").as_ref() {
+                        let _ = active.spirc.pause();
+                    }
+                }
                 // A queued track that starts playing has left the queue.
                 let mut queued = self.queued.lock().expect("queued lock");
                 if let Some(index) = queued.iter().position(|uri| *uri == audio_item.uri) {
@@ -663,11 +707,17 @@ fn set_playing(state: &mut PlayerState, playing: bool) {
 /// Where to start a track again after its sound stopped: the position last
 /// heard playing if that was this track, else the track's last known
 /// position, not moved on, since nothing says it played past it.
-fn resume_position(heard: Option<&(String, u64)>, track: &str, last_known_ms: u64) -> u64 {
+fn resume_position(heard: Option<&Heard>, track: &str, last_known_ms: u64) -> u64 {
     match heard {
-        Some((uri, position_ms)) if uri == track => *position_ms,
+        Some(heard) if heard.uri == track => heard.position_ms,
         _ => last_known_ms,
     }
+}
+
+/// Whether sound stopped recently enough to start it again unasked. A machine
+/// that slept for hours while "playing" must wake up silent.
+fn within_resume_window(last_sound_ms: u64, now_ms: u64) -> bool {
+    u128::from(now_ms.saturating_sub(last_sound_ms)) < RESUME_WINDOW.as_millis()
 }
 
 fn position(position_ms: u32, playing: bool) -> Position {
@@ -688,7 +738,10 @@ fn from_device_volume(volume: u16) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{from_device_volume, now_ms, resume_position, set_playing, to_device_volume};
+    use super::{
+        from_device_volume, now_ms, resume_position, set_playing, to_device_volume, within_resume_window, Heard,
+        RESUME_WINDOW,
+    };
     use crate::state::{PlayerState, Position, Track};
 
     fn loaded(playing: bool, position_ms: u64, seconds_ago: u64) -> PlayerState {
@@ -706,7 +759,7 @@ mod tests {
 
     #[test]
     fn music_lost_with_the_connection_starts_again_where_it_was_last_heard() {
-        let heard = ("spotify:track:a".to_owned(), 61_000);
+        let heard = Heard { uri: "spotify:track:a".to_owned(), position_ms: 61_000, at_ms: 0 };
         // Heard playing at 1:01; the state had moved on to 2:30 by the time
         // the session was given up, but the sound had stopped long before.
         assert_eq!(resume_position(Some(&heard), "spotify:track:a", 150_000), 61_000);
@@ -716,7 +769,18 @@ mod tests {
         assert_eq!(resume_position(None, "spotify:track:a", 42_000), 42_000);
     }
 
-        #[test]
+    #[test]
+    fn music_starts_again_only_soon_after_the_sound_stopped() {
+        let window = RESUME_WINDOW.as_millis() as u64;
+        let stopped = 1_000_000;
+        assert!(within_resume_window(stopped, stopped + 90_000));
+        assert!(within_resume_window(stopped, stopped + window - 1));
+        // Suspended overnight while "playing": wakes up silent.
+        assert!(!within_resume_window(stopped, stopped + window));
+        assert!(!within_resume_window(stopped, stopped + 8 * 3_600_000));
+    }
+
+    #[test]
     fn pausing_freezes_the_clock_where_playback_has_got_to() {
         let mut state = loaded(true, 10_000, 5);
         set_playing(&mut state, false);
