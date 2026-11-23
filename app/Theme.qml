@@ -66,6 +66,19 @@ Singleton {
     readonly property int controlHeight: root.space(28)
   }
 
+  // Line weights (Field Guide): hairlines for rules, grids and ticks, and
+  // the heavier line that marks progress.
+  readonly property QtObject stroke: QtObject {
+    readonly property int hair: Math.max(1, Math.round(root.scale))
+    readonly property int bold: Math.max(2, root.space(2))
+  }
+
+  // Motion: every transition is short enough never to hold up input.
+  readonly property QtObject motion: QtObject {
+    readonly property int quick: 80
+    readonly property int standard: 150
+  }
+
   readonly property QtObject font: QtObject {
     // Fontconfig resolves this to the font Omarchy is set to.
     readonly property string family: "monospace"

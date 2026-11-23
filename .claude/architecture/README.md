@@ -12,6 +12,7 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | [05-visuals.md](05-visuals.md) | Spore-inspired visual language and how it is rendered cheaply |
 | [06-roadmap.md](06-roadmap.md) | Milestones, each with a runnable result |
 | [07-plan.md](07-plan.md) | What to work on next, in order |
+| [08-design.md](08-design.md) | The visual direction (Field Guide) and design milestones V0–V8, including the compact player |
 
 ## Decisions so far
 
@@ -32,6 +33,7 @@ documents are the working design; `CLAUDE.md` at the repo root holds the rules t
 | D14 | In-app actions must feel instant; app launch time is not a goal | Owner's call on 2026-10-06: playing, browsing and searching matter, a second to open the window does not |
 | D15 | Plugin id stays `namelessnovice.sporetify`; licence is MIT | Owner's call on 2026-10-06 |
 | D8 | Audio-reactive data comes from the daemon's own audio path | No dependency on cava or a PipeWire monitor; zero cost when nobody subscribes |
+| D16 | Visual direction is Field Guide (hairlines, catalogue numbers, the creature as line art under a lens), with the tide pool living inside the lens | Owner's call on 2026-11-03 from four mockups: it sits well with Omarchy's own style, and keeps Tide Pool's character for the now-playing view and screensaver. See [08-design.md](08-design.md) |
 
 ## Open questions
 
@@ -66,3 +68,5 @@ Resolve these before or during the milestone noted; record the answer above.
 6. **Plugin id.** Answered: it stays, see D15.
 7. **Galaxy view scale (M4).** How many stars can be drawn as one shader pass
    before it costs more than the list it sits beside.
+8. **Visual direction (V0).** Answered: Field Guide with the tide pool
+   inside its lens, see D16.

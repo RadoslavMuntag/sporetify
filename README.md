@@ -137,14 +137,39 @@ This builds the daemon here and links the checkout as the plugin.
 | Where | How |
 | --- | --- |
 | Full app | `sporetify`, the application menu, or `o` in the mini-player |
+| Compact player | `sporetify --compact` (see below) |
 | Mini-player | click the bar icon |
 | Play / pause | right-click the bar icon, or your media keys |
 | Full app from the bar | middle-click the bar icon |
 | Volume | scroll on the bar icon |
 
 Each track has its own small creature, grown from the track itself, shown
-beside it while it plays. Turn them off with `v` in the app or the Creatures
-setting of the bar widget.
+beside it while it plays. `v` in the app switches them between moving,
+still and off; the bar widget has a Creatures setting.
+
+### Compact player
+
+A small window with just what is playing: the track's creature under a
+lens whose ring of ticks fills as the song plays, a fine-line spectrum that
+moves with the music, the title, the artist and the time. Made to sit tiled beside a terminal in a desktop screenshot. It
+lays itself out to fit any window: square, wide or tall.
+
+`sporetify --compact` opens it (or focuses it). Its keys are the
+mini-player's: `Space`, `n`, `p`, `+`, `-`, `f` to like, `o` for the full app,
+`?` for the list, and `q` to close. Clicking the lens plays or pauses.
+
+To float it in a corner on every workspace instead of tiling it, add a
+window rule to your Hyprland config, for example in
+`~/.config/hypr/hyprland.lua`:
+
+```lua
+o.window("sporetify-compact", {
+  float = true,
+  pin = true,
+  size = { 360, 400 },
+  move = { "(monitor_w-window_w-40)", "(monitor_h*0.06)" },
+})
+```
 
 Every surface lists its shortcuts in a footer. The main ones:
 
@@ -174,6 +199,7 @@ check `hyprctl configerrors`:
 ```lua
 o.bind("SUPER + SHIFT + M", "Sporetify", "omarchy shell -q sporetify toggleApp")
 o.bind("SUPER + ALT + M", "Sporetify mini-player", "omarchy shell -q sporetify toggleMini")
+o.bind("SUPER + CTRL + M", "Sporetify compact player", "omarchy shell -q sporetify toggleCompact")
 ```
 
 `SUPER + SHIFT + M` is Omarchy's stock Music binding; put

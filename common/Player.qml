@@ -78,6 +78,36 @@ Item {
     })
   }
 
+  // ---- The music, for surfaces that draw it (the compact player). While
+  //      raised, the daemon sends `viz` frames, about 30 a second; it does no
+  //      analysis at all otherwise. Raise it only while visible and playing.
+  property bool vizWanted: false
+  // 0..1 per band, low to high, and a beat pulse that jumps to 1 and decays.
+  // Empty and 0 when nothing is coming in.
+  property var bands: []
+  property real beat: 0
+  readonly property bool vizOn: vizWanted && client.link === "up"
+  onVizOnChanged: syncViz()
+
+  function syncViz() {
+    if (!vizOn) {
+      bands = []
+      beat = 0
+    }
+    // A lost connection forgets its subscriptions; the next one asks again.
+    if (client.link !== "up") return
+    client.request(vizOn ? "subscribe" : "unsubscribe", { topics: ["viz"] }, { deadline: 2000, scope: "viz" })
+  }
+
+  Connections {
+    target: client
+    function onEvent(name, frame) {
+      if (name !== "viz" || !root.vizOn) return
+      root.bands = frame.bands || []
+      root.beat = frame.beat || 0
+    }
+  }
+
   readonly property real volumeStep: 0.05
   readonly property int seekStepMs: 10000
   property real volumeBeforeMute: 0.5

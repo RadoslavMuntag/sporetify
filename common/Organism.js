@@ -118,3 +118,18 @@ function pick(list, value) {
   if (!list || list.length === 0) return undefined
   return list[Math.min(list.length - 1, Math.floor(value * list.length))]
 }
+
+// Dots that fill the nucleus when the creature is drawn as line art:
+// [{ x, y }] in the same box units, inside the nucleus as Organism.qml
+// places it. Seeded from the id like everything else, so they never move.
+function stipple(id, count) {
+  var shape = create(id)
+  var random = generator(hash(String(id || "")) ^ 0x5bd1e995)
+  var out = []
+  for (var i = 0; i < count; i++) {
+    var angle = random() * 2 * Math.PI
+    var reach = Math.sqrt(random()) * shape.core.r * 0.9
+    out.push({ x: shape.core.x + Math.cos(angle) * reach, y: shape.core.y + 0.1 + Math.sin(angle) * reach })
+  }
+  return out
+}
