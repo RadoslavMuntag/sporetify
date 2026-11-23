@@ -64,7 +64,9 @@ var actions = [
   { id: "reload",      keys: ["R"],              label: "Reload",           scope: "browse", group: "app" },
   { id: "sidebar",     keys: ["b"],              label: "Show / hide sidebar", scope: "browse", group: "app" },
   { id: "covers",      keys: ["c"],              label: "Covers in lists",  scope: "browse", group: "app" },
+  { id: "plate",       keys: ["i"],              label: "Specimen plate",   scope: "browse", group: "app" },
   { id: "visuals",     keys: ["v"],              label: "Visuals: full / reduced / off", scope: "browse", group: "app" },
+  { id: "creatures",   keys: ["C"],              label: "Creatures on / off, everywhere", scope: "browse", group: "app" },
   { id: "help",        keys: ["?"],              label: "All keys",         scope: "browse", group: "app", primary: true },
 
   { id: "signIn",      keys: ["Return"],         label: "Sign in",          scope: "signedOut", group: "app", primary: true },

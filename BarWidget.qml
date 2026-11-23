@@ -29,8 +29,10 @@ BarWidget {
   readonly property int maxTitleWidth: Style.space(Number(setting("maxTitleWidth", 220)))
   readonly property bool titleVisible: showTitle && !vertical && track !== null
 
-  // Each track's creature replaces the plain icon when this is on.
+  // Each track's creature replaces the plain icon when this is on, and the
+  // app's creatures switch has not turned them off everywhere.
   readonly property bool creatures: String(setting("creatures", "On")) !== "Off"
+    && (service ? service.creaturesAllowed !== false : true)
   readonly property color ink: bar ? bar.barForeground : Color.foreground
   function mix(a, b, t) {
     return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1)

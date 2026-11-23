@@ -1,11 +1,12 @@
 import QtQuick
+import QtQuick.Effects
 
 import "Specimen.js" as Specimen
 
 // The Field Guide's lens: a round slide with graph paper, the track's
 // creature drawn as line art under it, and a ring of ticks around the rim
-// that doubles as the progress bar. With creatures off it shows the cover
-// instead, so it still says what is playing.
+// that doubles as the progress bar. With creatures off the cover fills the
+// lens instead, so it still says what is playing.
 //
 // Plain items only. Nothing moves unless `alive`; progress changes only
 // when the host updates `progress`.
@@ -116,18 +117,45 @@ Item {
     }
   }
 
-  // ---- Cover, when creatures are off: the largest square the lens holds
+  // ---- Cover, when creatures are off: filling the lens, cut to its circle.
+  //      The mask is drawn once per cover, not per frame.
+  readonly property bool showCover: !creature && coverPath !== ""
+
   Image {
-    visible: !root.creature && root.coverPath !== ""
-    width: root.r * Math.SQRT2
+    id: cover
+    visible: false
+    width: root.r * 2
     height: width
-    x: root.cx - width / 2
-    y: root.cy - height / 2
-    source: visible ? "file://" + root.coverPath : ""
+    x: root.cx - root.r
+    y: root.cy - root.r
+    source: root.showCover ? "file://" + root.coverPath : ""
     sourceSize.width: Math.ceil(width)
     sourceSize.height: Math.ceil(height)
     fillMode: Image.PreserveAspectCrop
     asynchronous: true
+  }
+  Rectangle {
+    id: circle
+    visible: false
+    layer.enabled: root.showCover
+    layer.smooth: true
+    width: cover.width
+    height: width
+    radius: width / 2
+    color: root.ink
+  }
+  MultiEffect {
+    visible: root.showCover && cover.status === Image.Ready
+    source: cover
+    x: cover.x
+    y: cover.y
+    width: cover.width
+    height: cover.height
+    maskEnabled: true
+    maskSource: circle
+    // Soft by a pixel at the edge, so the circle is not jagged.
+    maskThresholdMin: 0.5
+    maskSpreadAtMin: 1.0
   }
 
   // ---- Rim

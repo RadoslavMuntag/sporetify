@@ -1,6 +1,8 @@
 import QtQuick
 
-// Horizontal slider, 0..1. `moved` fires while dragging, `released` once at the end.
+// Horizontal slider, 0..1, drawn as Field Guide line work: a hairline, the
+// set part as a heavier accent line, and a needle. `moved` fires while
+// dragging, `released` once at the end.
 Item {
   id: root
 
@@ -15,42 +17,40 @@ Item {
   implicitHeight: Theme.spacing.controlHeight
   implicitWidth: Theme.space(160)
 
-  readonly property real knob: Theme.space(12)
+  // Room at each end for the needle.
+  readonly property real inset: Theme.stroke.bold
+  readonly property real span: Math.max(1, width - inset * 2)
+  readonly property real needleX: inset + span * shown
 
   Rectangle {
-    id: track
+    x: root.inset
     anchors.verticalCenter: parent.verticalCenter
-    x: root.knob / 2
-    width: parent.width - root.knob
-    height: Theme.space(3)
-    radius: height / 2
-    color: Theme.selectedFill
-
-    Rectangle {
-      width: parent.width * root.shown
-      height: parent.height
-      radius: parent.radius
-      color: Theme.foreground
-    }
+    width: root.span
+    height: Theme.stroke.hair
+    color: Theme.border
   }
-
   Rectangle {
-    width: root.knob
-    height: root.knob
-    radius: root.knob / 2
+    x: root.inset
     anchors.verticalCenter: parent.verticalCenter
-    x: track.width * root.shown
+    width: root.span * root.shown
+    height: Theme.stroke.bold
+    color: Theme.accent
+  }
+  Rectangle {
+    x: root.needleX - width / 2
+    anchors.verticalCenter: parent.verticalCenter
+    width: Theme.stroke.bold
+    height: Theme.space(area.pressed || area.containsMouse ? 16 : 12)
     color: Theme.foreground
-    scale: area.pressed ? 1.25 : 1
-    Behavior on scale { NumberAnimation { duration: 80 } }
   }
 
   MouseArea {
     id: area
     anchors.fill: parent
+    hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
     function at(x) {
-      return Math.max(0, Math.min(1, (x - root.knob / 2) / Math.max(1, track.width)))
+      return Math.max(0, Math.min(1, (x - root.inset) / root.span))
     }
     onPressed: function(mouse) {
       root.dragValue = at(mouse.x)

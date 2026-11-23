@@ -19,6 +19,8 @@ Item {
   required property var player
   // full | reduced | off
   property string visuals: "full"
+  // Draw the creature; off, the lens shows the cover.
+  property bool creatures: true
   // Whether the window is showing; nothing moves or ticks otherwise.
   property bool live: true
   signal lensClicked()
@@ -29,7 +31,8 @@ Item {
   readonly property bool side: arrangement === "side"
 
   // Everything grows with the window, from 1 at about 300 px.
-  readonly property real zoom: Math.max(1, Math.min(2.4, Math.min(width, side ? height * 1.6 : height) / Theme.space(300)))
+  // When wide, the text has about half the width, so that half decides.
+  readonly property real zoom: Math.max(1, Math.min(2.4, Math.min(side ? width * 0.5 : width, height) / Theme.space(300)))
   function px(size) { return Math.round(size * zoom) }
   readonly property int pad: px(Theme.spacing.huge)
   readonly property int gap: px(Theme.spacing.lg)
@@ -122,17 +125,18 @@ Item {
   // ---- The lens
   Lens {
     id: lens
+    // Wide: at most a little under half the width, so the text keeps room.
     readonly property real room: root.side
-      ? root.height - root.pad * 2
+      ? Math.min(root.height - root.pad * 2, root.width * 0.45)
       : Math.min(root.width - root.pad * 2, above.y - labels.y - labels.height - root.gap * 2)
     width: Math.max(0, room)
     height: width
     x: root.side ? root.pad : (root.width - width) / 2
-    y: root.side ? root.pad : labels.y + labels.height + root.gap + (above.y - root.gap - labels.y - labels.height - root.gap - height) / 2
+    y: root.side ? (root.height - height) / 2 : labels.y + labels.height + root.gap + (above.y - root.gap - labels.y - labels.height - root.gap - height) / 2
 
     seed: root.track ? root.track.id : ""
     progress: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
-    creature: Visuals.drawn(root.visuals)
+    creature: Visuals.drawn(root.visuals) && root.creatures
     coverPath: root.track && root.track.art_path ? root.track.art_path : ""
     alive: root.live && root.playing && Visuals.moving(root.visuals)
     awake: root.playing
@@ -224,7 +228,7 @@ Item {
     }
     Label {
       width: parent.width
-      visible: root.track !== null && Visuals.drawn(root.visuals)
+      visible: root.track !== null && Visuals.drawn(root.visuals) && root.creatures
       text: root.track ? Specimen.traits(root.track.id) : ""
       color: Theme.muted
       opacity: 0.75

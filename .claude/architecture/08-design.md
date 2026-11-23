@@ -25,7 +25,8 @@ catalogue. Character comes from line work, not effects:
   digits of its hash) and traits read off its creature ("3 lobes · 2 eyes ·
   7 hairs").
 - The creature drawn as line art: an outline in the body colour around a
-  pale wash, hairs as fine lines, a stippled nucleus.
+  pale wash, hairs as fine lines, a thin ring for the nucleus (a stippled
+  one was tried and looked bad).
 - The lens: a round slide with graph paper, the creature under it, and a
   ring of 72 ticks around the rim that is also the progress bar.
 - Progress elsewhere as a ruler with ticks every 30 s.
@@ -45,15 +46,17 @@ Recorded as D16 in the README.
 
 - `app/Theme.qml`: `stroke.hair` / `stroke.bold` line weights and
   `motion.quick` / `motion.standard` (80 and 150 ms).
-- Visuals setting with three levels, `full` / `reduced` / `off`
-  (`common/Visuals.js`). `v` in the app cycles it; it is saved as
-  `visuals` in `~/.config/sporetify/app.json`, and older files that only
-  have `creatures` still count. `reduced` draws creatures but keeps them
-  still. The plugin still has its on/off `creatures` setting; moving it to
-  the three levels is left for V4.
+- Two settings (`common/Visuals.js`), saved in
+  `~/.config/sporetify/app.json`: `visuals` with three levels, `full` /
+  `reduced` / `off`, cycled by `v` (`reduced` draws, but still); and
+  `creatures`, on or off everywhere (`Shift C`, asked for by the owner): the
+  app, the compact player, and the plugin's bar and mini-player, whose
+  service reads the same file. Off, a lens shows the cover.
 - `common/OnScreen.qml`: whether one of our windows is on a workspace being
   shown (active workspace, open special workspace, or pinned). It asks
-  `hyprctl` at start and again on Hyprland's workspace and window events.
+  `hyprctl` at start and again on Hyprland's workspace and window events,
+  and finds its window by owning process (matching by class found the
+  owner's own app window when a second copy ran for a test).
   The first version read Quickshell's Hyprland model, which on Hyprland
   0.56 never learns a monitor's workspace until the user switches: every
   window counted as hidden, so nothing moved and no music frames were
@@ -65,7 +68,6 @@ Recorded as D16 in the README.
 - `common/Organism.qml` draws line art (`lineArt`, `ground`, `stroke`) with
   plain items: every lobe grown by the stroke in the body colour, then every
   lobe in the wash on top, so only the outline of the whole body shows.
-  `Organism.stipple` gives the nucleus dots.
 - `common/Lens.qml`, host-agnostic like the creature (colours passed in).
 - `Gallery.qml`: every part in every state, with made-up tracks. It can save
   a picture of itself offscreen (`SPORETIFY_GALLERY_SHOT`), which needs no
@@ -93,7 +95,9 @@ which to prove the direction before restyling the app.
   pause. The only hint on screen is `? keys`, to keep screenshots clean.
 - Without a track or with a fault it says why, with the same words as the
   other surfaces (`Faults.js`); the creature rests in the lens.
-- With visuals off the lens shows the cover.
+- With visuals or creatures off the cover fills the lens, cut to the
+  circle with a `MultiEffect` mask (drawn once per cover). Wide windows
+  keep the lens under half the width so the text has room.
 - IPC `sporetify.compact`: `act`, `close`, `describe`.
 
 Measured (demo daemon): paused 0.1 % of a core; playing on a hidden
@@ -140,19 +144,53 @@ clears when paused).
 Not yet: the FFT version on real music (needs the daemon reinstalled),
 the cost while visible on a real screen, and the mini-player and app.
 
-## V4 · App chrome
+## V4 · App chrome (first pass built)
 
-Restyle what already exists in the Field Guide manner, without moving
-anything: sidebar, track rows (hairline rules, catalogue numbers), the
-corner-bracket cursor, headers with column labels, the now-playing bar
-(ruler progress), square keycaps, the hint bar, search and the help
-overlay. A specimen plate on the right of the app showing the lens and the
-playing creature's traits, hidden when the window is narrow. The plugin's
-`creatures` setting becomes the three-level `visuals`.
+Built, without moving anything:
 
-Exit: every view opened by keyboard in both themes; scrolling a 5 000-track
-list is as smooth as before (compare frame times before and after); new
-README pictures taken (with the demo daemon, per `CLAUDE.md`).
+- Track lists: an eyebrow over the name (what kind of place, and its
+  catalogue number), column labels on lists of tracks, a hairline under
+  every row, a corner-bracket cursor in the accent colour over a faint
+  fill, `▸` on the playing row, and each track's catalogue number after
+  its title when there is room.
+- Sidebar ruled off with a hairline.
+- Now-playing bar: the seek bar is a ruler (`app/Ruler.qml`: a tick every
+  10 s, longer every 30 s, a needle), the volume a line slider with a
+  needle; square keycaps there and in the hint bar (`KeyCap.corner`).
+- Specimen plate (`app/SpecimenPlate.qml`) on the right: the lens, the
+  spectrum, title, artist, and the creature's traits and the track's
+  length. Shown when the window is at least 1000 px wide, visuals are not
+  off, and `i` has not hidden it (saved as `plate` in `app.json`). The
+  app subscribes to `viz` only while the plate shows and the track plays.
+- `capture` on the app's IPC saves a picture of the window, offscreen too,
+  for checking a change in any theme without a window on the desktop.
+
+Checked: pictures in gruvbox and catppuccin-latte against the demo
+daemon; `i`, `v` and the music subscription driven over IPC.
+
+Second pass (2026-11-04): no rounded box is left in the app.
+
+- The search bar sits on the background, ruled off underneath: which
+  search it is as a small capital label, a ruled field, and the result
+  types as tabs whose current one is underlined on that rule.
+- The picker and the prompt are `app/Sheet.qml`: a square card with a
+  hairline border, an eyebrow over the title, ruled off from the content
+  and from the line of keys at its foot. Text is typed on
+  `app/Field.qml`, a line that turns heavier and accent-coloured while it
+  has focus. The picker's rows are ruled and use the bracket cursor
+  (`app/Bracket.qml`, shared with the track list and now the sidebar).
+- Help overlay: square keycaps, hairline rules.
+- Toast, icon buttons and placeholder rows lost their rounding.
+- Search bar, picker, prompt and help overlay moved out of `Main.qml`
+  (1170 lines to about 700).
+
+Checked: pictures of each in gruvbox and catppuccin-latte against the
+demo daemon; picker, prompt, search filters and help driven over IPC.
+Not yet driven by the real keyboard: keys sent by Hyprland to a window
+that never had focus are dropped, and the owner was at the desktop.
+
+Not yet: frame times on a 5 000-track list not compared; README pictures
+not retaken.
 
 ## V5 · Into the lens: the tide pool
 

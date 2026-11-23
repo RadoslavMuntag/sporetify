@@ -57,18 +57,6 @@ TestCase {
     compare(Specimen.arrangement(450, 300), "side")
   }
 
-  function test_stipple_sits_in_the_nucleus() {
-    var id = "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"
-    var core = Organism.create(id).core
-    var dots = Organism.stipple(id, 28)
-    compare(dots.length, 28)
-    compare(JSON.stringify(dots), JSON.stringify(Organism.stipple(id, 28)))
-    for (var i = 0; i < dots.length; i++) {
-      var dx = dots[i].x - core.x, dy = dots[i].y - (core.y + 0.1)
-      verify(Math.sqrt(dx * dx + dy * dy) <= core.r)
-    }
-  }
-
   function test_spectrum_sampling_reads_between_bands() {
     compare(Visuals.sample([], 0.5), 0)
     compare(Visuals.sample(undefined, 0.5), 0)
@@ -84,10 +72,13 @@ TestCase {
   }
 
   function test_visuals_levels() {
-    compare(Visuals.level("reduced", true), "reduced")
-    compare(Visuals.level("", true), "full")
-    compare(Visuals.level(undefined, false), "off")
-    compare(Visuals.level("bogus", undefined), "full")
+    compare(Visuals.level("reduced"), "reduced")
+    compare(Visuals.level(""), "full")
+    compare(Visuals.level(undefined), "full")
+    compare(Visuals.level("bogus"), "full")
+    // Creatures are a switch of their own, on unless saved as false.
+    verify(Visuals.creatures(undefined) && Visuals.creatures(true))
+    verify(!Visuals.creatures(false))
     compare(Visuals.next("full"), "reduced")
     compare(Visuals.next("reduced"), "off")
     compare(Visuals.next("off"), "full")

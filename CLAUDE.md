@@ -89,7 +89,10 @@ App.qml              entry point of the full app (`qs -p App.qml`); at the root 
                      that app/ and common/ are both inside its config folder
 Compact.qml          entry point of the compact player (`qs -p Compact.qml`)
 Gallery.qml          every visual part in every state, for judging a change by eye
-app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar
+app/                 the full app: Main, Theme, Library, Sidebar, TrackList, NowPlayingBar,
+                     SearchBar, PlaylistPicker, Prompt, HelpOverlay, SpecimenPlate,
+                     Sheet (modal card), Field (ruled text field), Bracket (cursor),
+                     Slider, Ruler
 compact/             the compact player: CompactWindow (keys, IPC), CompactView (layout)
 common/              QML shared by plugin and app: DaemonClient, Player, Keymap.js,
                      Loadable.js, Pages.js, Position.js, Faults.js, Links.js, HintBar, KeyCap,
@@ -284,7 +287,9 @@ flat and square, as Omarchy's is.
 Built so far: the per-track creature (`common/Organism.js` and
 `Organism.qml`, filled or line art) in the bar, mini-player and app; the
 lens (`common/Lens.qml`) and the music (`viz` frames from the daemon's
-audio tap, drawn by `common/Spectrum.qml`) in the compact player. Raise
+audio tap, drawn by `common/Spectrum.qml`) in the compact player and the
+app's specimen plate; the app's lists in the Field Guide manner (rules,
+brackets, catalogue numbers, the ruler). Raise
 `Player.vizWanted` only while a surface is visible, playing and at full
 visuals: the daemon analyses audio only while someone subscribes. To judge a change, look at
 `Gallery.qml` (it can also save a picture of itself, see the file).
@@ -373,6 +378,10 @@ Things that bite:
   plugin's files, which only resolve inside omarchy-shell. Harmless.
 - `hyprctl clients` reports logical pixels; multiply by the monitor scale
   before cropping a `grim` screenshot.
+- `qs ipc --pid <pid> call sporetify.app capture <png>` saves a picture of
+  the app, also when it runs offscreen; with `HOME` pointed at another
+  theme (below) and the demo daemon, a change can be judged in any theme
+  without a window on the desktop.
 - Drive the app in tests over its IPC target, not with injected keys:
   `qs ipc --pid <pid> call sporetify.app act <action>` and `... describe`.
   It needs no focus and works with the screen off. `grim` hangs when the
@@ -403,7 +412,10 @@ Things that bite:
 - A Unix socket path is limited to 108 bytes; a socket deep in a temp
   folder fails with "server not found". Keep test socket paths short.
 - **Visual checks without a window on the desktop:** `QT_QPA_PLATFORM=offscreen`
-  renders (in software) and still answers IPC; `Gallery.qml` saves a picture
+  renders (in software) and still answers IPC, but its software renderer
+  skips every `ShaderEffect` / `MultiEffect` (a masked cover comes out
+  empty); check those in a real window, and asking it to use the GPU
+  (`QT_QUICK_BACKEND=rhi`) hangs; `Gallery.qml` saves a picture
   with `SPORETIFY_GALLERY_SHOT=<png>`. CPU measured offscreen is not what a
   real window costs. To measure a real window without disturbing the
   owner's layout, start it on a hidden special workspace:

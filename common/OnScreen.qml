@@ -6,8 +6,8 @@ import Quickshell.Io
 // animations can stop when it is not. A window on a hidden workspace gets
 // no frames drawn, but its animations would still tick and cost CPU.
 //
-// Hyprland only. It asks `hyprctl` which workspace the window (found by its
-// class) is on and which workspaces the monitors show, special ones
+// Hyprland only. It asks `hyprctl` which workspace this process's window is
+// on and which workspaces the monitors show, special ones
 // included; a pinned window counts as shown. It asks once at the start and
 // again when Hyprland reports a change of workspace or window, never on a
 // timer. If it cannot tell, the window counts as shown. A window covered by
@@ -19,20 +19,19 @@ import Quickshell.Io
 QtObject {
   id: root
 
-  // The window's class (the app id from `//@ pragma AppId`).
-  property string appClass: ""
-
   property bool shown: true
 
-  // Prints "true" or "false". jq is already required by setup.
-  readonly property string script: "c=$(hyprctl -j clients | jq -c --arg c \"$1\" '[.[] | select(.class == $c)][0]'); "
+  // Prints "true" or "false". The window is found by its owner, this
+  // process, which is the shell's parent ($PPID): matching by class would
+  // find another window of the same kind. jq is already required by setup.
+  readonly property string script: "c=$(hyprctl -j clients | jq -c --argjson p \"$PPID\" '[.[] | select(.pid == $p)][0]'); "
     + "m=$(hyprctl -j monitors); "
     + "jq -n --argjson c \"${c:-null}\" --argjson m \"${m:-[]}\" "
     + "'if $c == null or $c.pinned then true "
     + "else ([$m[] | .activeWorkspace.name, .specialWorkspace.name] | index($c.workspace.name)) != null end'"
 
   property var query: Process {
-    command: ["sh", "-c", root.script, "sh", root.appClass]
+    command: ["sh", "-c", root.script]
     stdout: StdioCollector {
       onStreamFinished: {
         var answer = text.trim()
@@ -42,7 +41,6 @@ QtObject {
   }
 
   function ask() {
-    if (appClass === "") return
     if (query.running) {
       again.restart()
       return
