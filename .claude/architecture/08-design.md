@@ -49,9 +49,9 @@ Recorded as D16 in the README.
 - Two settings (`common/Visuals.js`), saved in
   `~/.config/sporetify/app.json`: `visuals` with three levels, `full` /
   `reduced` / `off`, cycled by `v` (`reduced` draws, but still); and
-  `creatures`, on or off everywhere (`Shift C`, asked for by the owner): the
-  app, the compact player, and the plugin's bar and mini-player, whose
-  service reads the same file. Off, a lens shows the cover.
+  `creatures`, on or off (`Shift C`, asked for by the owner) for the app and
+  the compact player; the bar and mini-player draw none. Off, a lens shows
+  the cover.
 - `common/OnScreen.qml`: whether one of our windows is on a workspace being
   shown (active workspace, open special workspace, or pinned). It asks
   `hyprctl` at start and again on Hyprland's workspace and window events,

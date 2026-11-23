@@ -87,7 +87,9 @@ Item {
   }
 
   readonly property bool scene: Visuals.drawn(root.visuals) && root.creatures
-  readonly property bool showCard: !root.pool || !root.scene
+  // The pool hides the card, but never a fault or an error it has to show.
+  readonly property bool showCard: !root.pool || !root.scene || root.track === null
+    || player.lastError !== "" || player.scope !== "player"
 
   // ---- The pool, behind everything
   Water {
@@ -96,7 +98,7 @@ Item {
     visible: root.scene
     seed: root.track ? root.track.id : ""
     others: root.nextSeed !== "" ? [root.nextSeed] : []
-    alive: root.live && root.playing && Visuals.moving(root.visuals)
+    alive: root.scene && root.live && root.playing && Visuals.moving(root.visuals)
     awake: root.playing
     blur: Visuals.moving(root.visuals) ? 1 : 0
     home: !root.showCard ? Qt.point(0.5, 0.5) : root.side ? Qt.point(0.22, 0.5) : Qt.point(0.5, 0.42)
@@ -198,6 +200,8 @@ Item {
     height: root.side ? root.height - labels.y - labels.height - root.gap - root.pad : info.implicitHeight + inset * 2
     y: root.side ? labels.y + labels.height + root.gap : root.height - root.pad - height
     surface: root.scene ? water.surface : null
+    // A click on the card is not a click on the water, which plays and pauses.
+    MouseArea { anchors.fill: parent }
     scene: Qt.size(water.width, water.height)
     area: Qt.rect(x, y, width, height)
     blur: water.blur

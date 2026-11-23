@@ -132,7 +132,7 @@ for the audio tap and as the original intent.
 
 - **Audio tap in the daemon** (`viz`): band energies and a beat pulse from
   the playback path, sent only to subscribers.
-- **Creatures react to the music** in the bar, mini-player and app.
+- **Creatures react to the music** in the app.
 - **Tide-pool now-playing view:** the playing track's creature drifting in a
   scene, its neighbours at the edges.
 - **Helix loader** in place of "Loading…".

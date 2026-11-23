@@ -137,7 +137,8 @@ void main() {
 
   // ---- Chains. Leaning back against the motion, by up to a half.
   float sp = length(vel) / u;
-  float back = atan(-vel.y, -vel.x);
+  // atan(0, 0) is undefined, and a NaN here would stay in the state for good.
+  float back = sp > 0.0 ? atan(-vel.y, -vel.x) : 0.0;
   float bw = min(0.5, sp / (0.08 * Ru + 1.0) * 0.45);
   float down = a + PI * 0.5;
   bool slow = idx >= 14.5;
