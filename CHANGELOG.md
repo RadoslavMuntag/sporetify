@@ -4,93 +4,39 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
-## Unreleased
+## 0.2.0 (not released yet)
 
-- Compact player: a small now-playing window for a tiled desktop
-  (`sporetify --compact`, or `toggleCompact` from a Hyprland bind). The
-  track's creature is drawn as line art under a lens whose ring of ticks
-  shows how far the song has played.
-- The compact player moves with the music: a fine-line spectrum under the
-  lens, and the creature swells on the beat. The daemon analyses the audio
-  only while a window that shows it is open and playing.
-- The app takes on the same look: ruled lists with a bracket cursor and a
-  catalogue number for every track, a ruler for the seek bar, square
-  keycaps, and a specimen plate on the right with the playing track's
-  creature, its traits and the music (`i` hides it).
-- `v` in the app now cycles the visuals between moving, still and off, and
-  `Shift C` turns the creatures off everywhere: the app, the compact
-  player, the bar and the mini-player.
-- Creatures stop animating while their window is on a workspace that is
-  not shown, not only when it is closed.
-- The search bar, playlist picker, prompts and the shortcut overlay are
-  square and ruled like the rest of the app.
-- `z` in the app opens the tide pool: the playing track's creature, large,
-  in moving light, with the previous and next tracks' creatures at the
-  edges, swimming one place along on a track change. `z` in the compact
-  player shows the same pool in its lens.
-- The lens and the tide pool show a new organism for each track, drawn in
-  characters on the GPU: a medusa, comb jelly, radiolarian, volvox colony
-  or diatom, with no face, lit at the rim and moving in its own way (a
-  slow bell beat, light running down comb rows, a rolling colony). The bar
-  and mini-player keep the small creature for now.
+A new look, a compact player, and fixes to playback and playlists. Version
+0.1.2 was never released; its fixes are listed here.
+
 - A new look, Living ASCII: the app and the compact player sit on a pool
-  drawn in characters, with light rippling through it, marine snow and
-  small organisms far off, and the playing track's organism swimming in
-  it among the queue's: medusae pulse along with their tentacles trailing,
-  comb jellies glide. On a track change the new one grows and swims to
-  the middle. The sidebar,
-  list and player bar are glass over the water. With visuals or creatures
-  off the app is plain and flat as before.
-- The pool is closer to the organism studies: the colour in the water
-  fades softly instead of in patches, the far water and the passer-by are
-  properly out of focus instead of grainy, the glass blurs smoothly, the
-  characters are drawn pixel for pixel and sharp, and the characters in
-  the water make room around text that sits on it, so it reads without a
-  shadow under it.
-- The pool looks like the organism studies again: the water is darker,
-  with separate pools of colour instead of an even haze, the playing
-  organism in the pool view is as large as in the studies and glows,
-  the far water is less washed out, and marine snow falls again. Sharp
-  dotted lines that crossed the water are gone. It also costs less to
-  draw.
-- The organisms swim like those in the studies: they pick somewhere to go,
-  turn toward it slowly and swim there, medusae in strokes they coast
-  out of, and their tentacles trail through every turn, the whole
-  tentacle at once rather than a segment at a time; they move on every
-  frame the pool draws.
-- The track playing in a list is easy to spot: its row has an accent
-  fill and a bold accent title, and in the water look it keeps its
-  creature instead of a tiny arrow (without the water, a full-size play or
-  pause icon). The list's creature column, the sidebar, the progress bar
-  (`====●----`) and the volume (`vol [=====---]`) follow the Living
-  ASCII mockup more closely.
-- In the water look the app no longer asks the daemon to analyse the
-  music, which nothing there showed; it also kept the window redrawing.
-- The glass panes and what is on them line up: lists, rows and rules
-  stay inside their pane instead of running into its edges or past its
-  foot, the gaps between panes are even, the hints fit on one line (the
-  rest are under `?`), and the playlist picker, prompts and notices are
-  rounded like the panes. The compact player's card leaves more room
-  around its text.
-- In that look every track in a list shows a small mark of its organism,
-  the open playlist and the cursor are lit in the accent colour, and the
-  covers in the list header and the player bar are drawn in characters.
+  drawn in characters, with light moving through the water, marine snow,
+  and glass panes over it. With visuals or creatures off the app is plain
+  and flat.
+- Every track has a plankton organism of its own, drawn in characters: a
+  medusa, comb jelly, radiolarian, volvox colony or diatom. They swim in
+  the pool, and on a track change the new one grows and swims to the
+  middle.
+- Compact player: a small now-playing window for a tiled desktop
+  (`sporetify --compact`, or `toggleCompact` from a Hyprland bind).
+- `z` opens the tide pool: the playing track's organism, large, in the
+  app or in the compact player's lens.
+- A plate on the right shows the playing track's organism and its traits
+  (`i` hides it).
+- The daemon can follow the music for the visuals. It analyses the audio
+  only while a window that shows it is open and playing.
+- `v` cycles the visuals between moving, still and off, and `Shift C` turns
+  the creatures off in the app and the compact player. Visuals turned off
+  in an earlier version stay off.
+- The track playing in a list is easy to spot, each row shows a small mark
+  of its organism, and the progress bar and volume are drawn in characters.
+- The search bar, playlist picker, prompts and shortcut overlay match the
+  new look. `?` also lists the keys for typing in a field.
 - The bar and the mini-player no longer draw a creature. The animated bar
-  icon made the shell redraw the bar every frame while music played, which
-  kept the GPU busy even with the app closed. The bar widget's Creatures
-  setting is gone with it.
-- The now-playing bar shows the cover alone; the creature beside it is
-  gone (the plate on the right shows it).
-- Fixed: turning creatures off while the app or the compact player was
-  running left the lens empty instead of showing the cover.
-- A new icon in the Field Guide look: the creature grown from the word
-  "sporetify", in line art on a round slide, with a play mark for its
-  nucleus and the lens's progress arc around it.
-
-## 0.1.2 (not released yet)
-
-Fixes to editing playlists, and to lists that never refreshed.
-
+  icon kept the GPU busy even with the app closed. The bar widget's
+  Creatures setting is gone with it.
+- Animations stop while their window is on a workspace that is not shown.
+- A new icon.
 - Moving a track never moves the wrong one. If the playlist changed since
   it was shown, nothing moves and the list is reloaded.
 - A new playlist appears only once it is complete: a create cut off
@@ -102,7 +48,9 @@ Fixes to editing playlists, and to lists that never refreshed.
   cable pulled, a switch to Wi-Fi). It used to keep saying "playing" with
   no sound, and nothing could start it again short of restarting the
   daemon. Now it reconnects once Spotify's connection is found dead (about
-  a minute and a half) and carries on from where the sound stopped.
+  a minute and a half) and carries on from where the sound stopped, if
+  that was within the last five minutes. A machine that slept wakes up
+  silent.
 - Playlists Spotify rewrites on a schedule (Discover Weekly, Release Radar,
   the Daily Mixes, daylist) and playlists edited on another device no
   longer keep the tracks they had when Sporetify first saved them. A saved list
