@@ -195,7 +195,7 @@ Every surface lists its shortcuts in a footer. The main ones:
 | `Backspace` | Back | `?` | Every shortcut |
 | `b` | Show / hide the sidebar | `c` | Covers in lists on / off |
 | `i` | Specimen plate on / off | `v` | Visuals: moving / still / off |
-| `Shift C` | Creatures on / off, everywhere | `z` | Into the lens (tide pool) and back |
+| `Shift C` | Creatures on / off | `z` | Into the lens (tide pool) and back |
 | `←` / `→` | Seek 10 s | `Esc` | Cancel search (closes the mini-player) |
 | `Ctrl C` | Quit the app | | |
 

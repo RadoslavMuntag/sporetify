@@ -78,6 +78,13 @@ TestCase {
     compare(Visuals.level(""), "full")
     compare(Visuals.level(undefined), "full")
     compare(Visuals.level("bogus"), "full")
+    // A file from before the levels: its one switch, off, stays off.
+    compare(Visuals.level("", false), "off")
+    compare(Visuals.level(undefined, false), "off")
+    compare(Visuals.level("", true), "full")
+    compare(Visuals.level("full", false), "full")
+    verify(Visuals.legacyOff("", false) && Visuals.legacyOff(undefined, false))
+    verify(!Visuals.legacyOff("", true) && !Visuals.legacyOff("off", false))
     // Creatures are a switch of their own, on unless saved as false.
     verify(Visuals.creatures(undefined) && Visuals.creatures(true))
     verify(!Visuals.creatures(false))

@@ -19,8 +19,8 @@ Item {
     anchors.fill: parent
     visible: !effect.visible
     source: root.source
-    sourceSize.width: Math.ceil(width)
-    sourceSize.height: Math.ceil(height)
+    sourceSize.width: Math.ceil(width * 2)
+    sourceSize.height: Math.ceil(height * 2)
     fillMode: Image.PreserveAspectCrop
     asynchronous: true
   }

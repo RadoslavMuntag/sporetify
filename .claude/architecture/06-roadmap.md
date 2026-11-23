@@ -137,8 +137,8 @@ passes; scrolling a 5 000-track playlist stays smooth.
 
 ## M4 · Spore visuals (organisms done; continued as V1–V8)
 
-Built: the organism generator and component, shown in the bar, mini-player
-and app, with off switches (see "What exists" in
+Built: the organism generator and component, shown in the app (the bar and
+mini-player dropped it for its GPU cost), with off switches (see "What exists" in
 [05-visuals.md](05-visuals.md)).
 
 Since 2026-11-03 the visuals follow the Field Guide milestones in

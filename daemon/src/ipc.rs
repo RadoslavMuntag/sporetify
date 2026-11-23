@@ -20,6 +20,9 @@ use crate::state::{Shared, ALWAYS_TOPICS};
 
 /// Lines queued for a client that is not reading. Past this it is dropped.
 const OUTBOX_LINES: usize = 256;
+/// Lines that may be waiting for a `viz` frame still to be queued. Keeps
+/// frames fresh, and the rest of the outbox for lines that must arrive.
+const VIZ_BACKLOG: usize = 8;
 
 #[derive(Clone)]
 pub struct ServerConfig {
@@ -80,7 +83,10 @@ impl Outbox {
     /// For frames that may be skipped (`viz`): a client that is behind
     /// misses some, but is not dropped for it.
     fn send_lossy(&self, line: Arc<str>) {
-        let _ = self.lines.try_send(line);
+        let waiting = self.lines.max_capacity() - self.lines.capacity();
+        if waiting < VIZ_BACKLOG {
+            let _ = self.lines.try_send(line);
+        }
     }
 }
 
@@ -333,5 +339,28 @@ impl LineReader {
                 return Ok(None);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod outbox_tests {
+    use super::*;
+
+    #[test]
+    fn a_client_behind_on_viz_frames_keeps_its_connection_and_replies() {
+        let (lines, _receiver) = mpsc::channel::<Arc<str>>(OUTBOX_LINES);
+        let outbox = Outbox { lines, overflow: Arc::new(Notify::new()) };
+        for _ in 0..OUTBOX_LINES * 2 {
+            outbox.send_lossy(Arc::from("viz"));
+        }
+        assert_eq!(outbox.lines.max_capacity() - outbox.lines.capacity(), VIZ_BACKLOG);
+
+        // Every line that must arrive still fits.
+        for _ in 0..OUTBOX_LINES - VIZ_BACKLOG {
+            outbox.send("reply");
+        }
+        let overflowed = outbox.overflow.notified();
+        tokio::pin!(overflowed);
+        assert!(!overflowed.as_mut().enable(), "the client was dropped");
     }
 }

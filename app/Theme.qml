@@ -44,8 +44,10 @@ Singleton {
   readonly property var creatureColors: {
     var names = ["green", "cyan", "blue", "magenta", "yellow", "orange", "red"]
     var out = []
-    for (var i = 0; i < names.length; i++) if (palette[names[i]] !== undefined) out.push(Qt.color(palette[names[i]]))
-    return out.length > 0 ? out : [accent]
+    // Read by position (Plankton.colour), so a colour the theme lacks keeps
+    // its place.
+    for (var i = 0; i < names.length; i++) out.push(palette[names[i]] !== undefined ? Qt.color(palette[names[i]]) : accent)
+    return out
   }
 
   // Control states, same strengths as the shell's defaults.

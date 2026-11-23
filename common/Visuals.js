@@ -4,13 +4,22 @@
 //
 // `visuals`: "full" draws and animates the scenes (lens, spectrum, plate),
 // "reduced" draws them still, "off" leaves them out.
-// `creatures`: whether any creature is drawn, anywhere: in the app, the
-// compact player, the bar and the mini-player. Off, a lens shows the cover.
+// `creatures`: whether creatures are drawn in the app and the compact
+// player. Off, a lens shows the cover.
 
 var levels = ["full", "reduced", "off"]
 
-function level(saved) {
-  return levels.indexOf(saved) !== -1 ? saved : "full"
+// Before `visuals` existed, `creatures: false` was the one switch for all
+// of them, so a file with that value and no level means they were off.
+function level(saved, creatures) {
+  if (levels.indexOf(saved) !== -1) return saved
+  return creatures === false ? "off" : "full"
+}
+
+// A file from before the levels with its one switch off. Either key that
+// brings something back brings all of it back.
+function legacyOff(saved, creatures) {
+  return levels.indexOf(saved) === -1 && creatures === false
 }
 
 function creatures(saved) {

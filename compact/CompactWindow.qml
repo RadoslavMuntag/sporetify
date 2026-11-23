@@ -55,7 +55,7 @@ FloatingWindow {
     onLoaded: {
       try {
         var saved = JSON.parse(text())
-        window.visuals = Visuals.level(saved.visuals)
+        window.visuals = Visuals.level(saved.visuals, saved.creatures)
         window.creatures = Visuals.creatures(saved.creatures)
       } catch (e) {
         window.visuals = "full"
@@ -120,7 +120,9 @@ FloatingWindow {
       // The key list takes any key and closes.
       if (window.keysOpen) {
         event.accepted = true
-        window.keysOpen = false
+        // Shift on its way to `?`, or a key still held, is not a new press.
+        var modifier = [Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_CapsLock].indexOf(event.key) !== -1
+        if (!modifier && !event.isAutoRepeat) window.keysOpen = false
         return
       }
       var action = Keymap.actionFor(event.key, event.text, window.scopes, event.modifiers)
@@ -148,6 +150,9 @@ FloatingWindow {
       opacity: window.keysOpen ? 1 : 0
       Behavior on opacity { NumberAnimation { duration: Theme.motion.quick } }
       color: Theme.sunken
+
+      // A click closes the list and never reaches the player behind it.
+      MouseArea { anchors.fill: parent; onClicked: window.keysOpen = false }
 
       Column {
         anchors.centerIn: parent

@@ -115,6 +115,7 @@ FloatingWindow {
       toggleFolder(item.id)
       return
     }
+    poolOpen = false
     if (item.kind === "foryou") {
       library.go({ kind: "foryou", name: "For you" }, tracks.currentIndex)
       pane = "list"
@@ -136,8 +137,8 @@ FloatingWindow {
       id: prefs
       // full | reduced | off; see common/Visuals.js.
       property string visuals: ""
-      // Draw creatures at all, here and in the compact player, the bar and
-      // the mini-player (which read this file).
+      // Draw creatures at all, here and in the compact player (which reads
+      // this file).
       property bool creatures: true
       // Show covers on the rows of lists.
       property bool covers: true
@@ -150,7 +151,7 @@ FloatingWindow {
     }
   }
 
-  readonly property string visuals: Visuals.level(prefs.visuals)
+  readonly property string visuals: Visuals.level(prefs.visuals, prefs.creatures)
 
   readonly property var foldedFolders: {
     var out = {}
@@ -327,12 +328,16 @@ FloatingWindow {
       pane = "list"
       return
     case "visuals":
-      prefs.visuals = Visuals.next(visuals)
+      var nextLevel = Visuals.next(visuals)
+      if (Visuals.legacyOff(prefs.visuals, prefs.creatures)) prefs.creatures = true
+      prefs.visuals = nextLevel
       library.notice("Visuals: " + prefs.visuals, false)
       return
     case "creatures":
+      // Fix the level first: with none saved it is read from this switch.
+      prefs.visuals = Visuals.legacyOff(prefs.visuals, prefs.creatures) ? "full" : visuals
       prefs.creatures = !prefs.creatures
-      library.notice("Creatures " + (prefs.creatures ? "on" : "off") + ", everywhere", false)
+      library.notice("Creatures " + (prefs.creatures ? "on" : "off"), false)
       return
     case "covers": prefs.covers = !prefs.covers; return
     case "plate":
@@ -538,7 +543,7 @@ FloatingWindow {
       }
       roam: Qt.rect((sidebar.x + sidebar.width) / Math.max(1, width) + 0.05, 0.15,
         Math.max(0.1, ((plate.visible ? plate.x : width) - sidebar.x - sidebar.width) / Math.max(1, width) - 0.1), 0.6)
-      alive: window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
+      alive: keys.inWater && window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
       awake: player.playing
       blur: Visuals.moving(window.visuals) ? 1 : 0
       home: keys.opening
@@ -612,6 +617,13 @@ FloatingWindow {
         return
       }
       var action = Keymap.actionFor(event.key, event.text, window.scopes, event.modifiers)
+      // A modal card keeps what its field did not use; only quitting works.
+      // With the focus here instead of in its field, keys work as usual, so
+      // the card can always be closed.
+      if ((picker.visible || prompt.visible) && !keys.activeFocus && action !== "quit") {
+        event.accepted = true
+        return
+      }
       if (!action) return
       event.accepted = true
       window.act(action)
@@ -663,7 +675,7 @@ FloatingWindow {
       anchors.bottomMargin: keys.gap
       anchors.left: sidebar.right
       anchors.leftMargin: sidebar.visible ? keys.gap : 0
-      anchors.right: plate.left
+      anchors.right: plate.visible ? plate.left : parent.right
       anchors.rightMargin: keys.gap
       visible: player.scope === "player" && !window.poolShown
       library: library
@@ -795,8 +807,8 @@ FloatingWindow {
       live: window.visible && screen.shown
       liked: library.playingLiked
       onLikeRequested: library.toggleLike(-1)
-      onAlbumRequested: { library.openRelated("album", -1); window.pane = "list" }
-      onArtistRequested: { library.openRelated("artist", -1); window.pane = "list" }
+      onAlbumRequested: { window.poolOpen = false; library.openRelated("album", -1); window.pane = "list" }
+      onArtistRequested: { window.poolOpen = false; library.openRelated("artist", -1); window.pane = "list" }
     }
 
     Rectangle {
@@ -863,7 +875,7 @@ FloatingWindow {
       id: help
       z: 10
       open: window.helpOpen
-      scopes: window.scopes
+      scopes: player.scope === "player" ? window.scopes.concat(["field"]) : window.scopes
       onCloseRequested: window.helpOpen = false
     }
   }

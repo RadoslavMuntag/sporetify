@@ -75,10 +75,8 @@ Properties:
 
 ## Scenes
 
-**Bar cell.** The current track's organism as the widget icon. Playing: slow
-breathing. Paused: still, eyes closed. Starting: helix. Offline or signed out:
-desaturated towards `muted`. Falls back to a plain glyph when visuals are off
-or the bar is too small.
+**Bar.** A plain icon, no organism: animated on an always-shown bar it made
+the shell redraw every frame, about half of the integrated GPU.
 
 **Tide pool (now playing).** The organism drifts in a soft-lit pool with a few
 out-of-focus particles for depth. Band energies swell the lobes, the beat pulse

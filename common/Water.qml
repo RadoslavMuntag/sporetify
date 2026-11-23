@@ -118,7 +118,9 @@ Item {
   readonly property real mainR: height * span * 0.5
   readonly property var swimmers: {
     var out = root.seed !== "" ? [root.seed] : []
-    for (var i = 0; i < root.others.length && out.length < 5; i++)
+    // Four of the five slots, so the one leaving on a track change can
+    // shrink away in the fifth instead of turning into the newcomer.
+    for (var i = 0; i < root.others.length && out.length < 4; i++)
       if (root.others[i] && out.indexOf(root.others[i]) === -1) out.push(root.others[i])
     return out
   }
@@ -134,7 +136,8 @@ Item {
   // queue smaller about a home of its own, or shrinking away.
   component Swimmer: OrganismField {
     property int slot: 0
-    readonly property string job: Pool.role(seed, root.swimmers)
+    // With no track playing, nobody in the queue takes the playing role.
+    readonly property string job: Pool.role(seed, root.seed !== "" ? root.swimmers : [""].concat(root.swimmers))
     readonly property real presence: Plankton.presence[shape.kind] || 0.7
     seed: root.slots.length > slot ? root.slots[slot] : ""
     time: root.clock
@@ -146,13 +149,13 @@ Item {
 
     radius: job === "main" ? root.mainR * presence : job === "queue" ? root.mainR * 0.34 * presence : 0
     Behavior on radius {
-      enabled: root.settled
+      enabled: root.settled && root.alive
       NumberAnimation { duration: 2500; easing.type: Easing.InOutSine }
     }
     property real homeX: job === "main" ? root.home.x * root.width : (root.roam.x + root.frac(seed, "hx") * root.roam.width) * root.width
     property real homeY: job === "main" ? root.home.y * root.height : (root.roam.y + root.frac(seed, "hy") * root.roam.height) * root.height
-    Behavior on homeX { enabled: root.settled; NumberAnimation { duration: 4000; easing.type: Easing.InOutSine } }
-    Behavior on homeY { enabled: root.settled; NumberAnimation { duration: 4000; easing.type: Easing.InOutSine } }
+    Behavior on homeX { enabled: root.settled && root.alive; NumberAnimation { duration: 4000; easing.type: Easing.InOutSine } }
+    Behavior on homeY { enabled: root.settled && root.alive; NumberAnimation { duration: 4000; easing.type: Easing.InOutSine } }
     home: Qt.point(homeX, homeY)
     roam: job === "main"
       ? Qt.size(Math.min(root.width * 0.08, root.mainR * 0.6), Math.min(root.height * 0.08, root.mainR * 0.5))

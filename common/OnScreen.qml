@@ -27,7 +27,7 @@ QtObject {
   readonly property string script: "c=$(hyprctl -j clients | jq -c --argjson p \"$PPID\" '[.[] | select(.pid == $p)][0]'); "
     + "m=$(hyprctl -j monitors); "
     + "jq -n --argjson c \"${c:-null}\" --argjson m \"${m:-[]}\" "
-    + "'if $c == null or $c.pinned then true "
+    + "'if $c == null or $c.pinned or ($m | length) == 0 then true "
     + "else ([$m[] | .activeWorkspace.name, .specialWorkspace.name] | index($c.workspace.name)) != null end'"
 
   property var query: Process {

@@ -49,7 +49,9 @@ Item {
     font.family: Theme.font.family
     font.pixelSize: Theme.font.bodySmall
   }
-  readonly property int cells: Math.max(4, Math.floor(width / Math.max(1, metrics.advanceWidth("=")))
+  // A property, unlike FontMetrics' method, so a font change is followed.
+  TextMetrics { id: cellMetrics; font: metrics.font; text: "=" }
+  readonly property int cells: Math.max(4, Math.floor(width / Math.max(1, cellMetrics.advanceWidth))
     - (brackets ? 2 : 0))
   // With a knob the knob is one of the cells.
   readonly property int setCells: brackets ? Math.round(shown * cells) : Math.round(shown * (cells - 1))

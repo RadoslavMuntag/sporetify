@@ -56,7 +56,7 @@ Also here: `Organism.js` and `Organism.qml`, the per-track creature; see
 ## Shell plugin
 
 ```
-manifest.json     kinds: service + bar-widget; settings: showTrackTitle, maxTitleWidth, creatures
+manifest.json     kinds: service + bar-widget; settings: showTrackTitle, maxTitleWidth
 Service.qml       Player + IPC target "sporetify" + MPRIS watch + openApp()
 BarWidget.qml     icon and track title; owns the mini-player
 MiniPlayer.qml    KeyboardPanel: title, seek, transport, volume, keycaps, hint bar
