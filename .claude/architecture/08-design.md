@@ -316,6 +316,98 @@ detail). What changed, and why:
   view 47% busy at 550 MHz, pool view 34%, compact player 13% at 450 MHz
   (of 1200 MHz max); paused 0.4%.
 
+Softened like the studies (2026-11-17, owner: "the color patches are
+harsh, the foreground is visually merged with background, and the blur
+and glow is not as sophisticated"). Compared against the studies
+rendered in a browser, the causes were:
+
+- The colour discs faded over a ±40 px smoothstep; the studies' CSS
+  `blur(40px)` is a Gaussian (σ 40), fading over a fifth of the disc. Now
+  a Gaussian edge (logistic form), sized to the disc. The discs are also
+  sized as the studies' 21:9 hero would be for the scene's height, so a
+  taller scene is not dark in the middle.
+- The far layer, the glow and the passer-by were drawn small by reading
+  each glyph at one point per pixel: thin strokes were hit or missed, so
+  the "out of focus" far water was hard specks as sharp as the near layer.
+  Small glyph layers now average four points per pixel (GlyphLayer
+  `footprint`), and every soft layer goes through one separable Gaussian
+  (`Blur`, `shaders/blur.frag`) at its small size: far at 1/3 (σ 2.6 px),
+  glow at 1/4 (σ 7 px), passer at 1/8 (σ 9 px), the glass surface at 1/6
+  (σ 13 px), the studies' own figures.
+- The glow is fed by each cell's share of ink (`shaders/glowfield.frag`,
+  shares measured from JetBrains Mono): blurred to a cell's width it looks
+  the same as blurred glyphs and costs one read per pixel. It is screened
+  on as the studies do (multiplied on light themes).
+- Glass read a ring of eight taps around each pixel (ghosting); now one
+  pre-blurred surface read with a cubic B-spline (four taps).
+- The atlas was read nearest-neighbour and stretched 1.19× (the old 8%
+  inset), so strokes were uneven. Cells are now a whole number of device
+  pixels and the atlas holds glyphs at that size, read one texel per pixel
+  with a half-texel inset.
+- Text straight on the water had nothing under it; the studies give it a
+  text-shadow in the deep colour. Hosts now pass the rects of such text
+  (`Water.calm`, up to three) and `compose.frag` sinks the water toward
+  the deep behind them with a Gaussian falloff. (2026-11-22, owner
+  disliked the shadow: replaced. The near layer's characters, their glow
+  and the motes now clear away around the text instead, a cell at a time
+  with a ragged dithered edge, and nothing is darkened. Secondary text on
+  the water uses `Theme.subtle`, the foreground partly see-through, because the theme's muted grey can be as bright as the
+  water. The outline on the plate's and compact player's labels is gone.)
+- Cost, measured as render-engine busy × mean GPU clock on a copy of the
+  app on a headless Hyprland output (`hyprctl output create headless`),
+  demo daemon, playing, old and new interleaved, 12 s windows. The GPU
+  clock wanders 300 to 1000 MHz, so single runs vary by ±15%. Medians:
+  list view 363 → 326 Mcycles/s (no change within the noise), pool view
+  198 → 229 (+15%). To get there the far layer is drawn at 1/3 and
+  stepped at 10 Hz, and the glow reads the field instead of glyphs.
+
+Swimming simulated, depth and motes (2026-11-17, owner: movement "still
+feels unnatural compared to the mockup", the foreground creatures could
+stand out more from the layers behind, and the studies' few floating
+one-pixel particles look good):
+
+- Motion was a closed form of time: each organism circled its home on a
+  fixed wobbly loop, always turning the same way, and medusae were held
+  within 20° of upright while the loop carried them sideways, so they
+  slid. The studies simulate instead, and so does the pool now:
+  `shaders/swim.frag` keeps each organism's state (position, velocity,
+  heading, turning, wander target, two tentacle chains) in 36 RGBA32F
+  texels of a recursive ShaderEffectSource (`OrganismField`), one step
+  per move of the clock at 15 Hz. The studies' rules: a target every 14
+  to 30 s, turning at most 0.08 (medusae) or 0.06 rad/s (comb jellies),
+  medusae pushing only while the bell contracts and then coasting and
+  sinking, drifters pulled, drag; chain segments each ease toward the one
+  before and lean back against the motion. A segment follows its
+  neighbour as it was a step ago (fragments run in parallel). When the
+  host moves home (another view, a track change) the water carries the
+  organism and its target along. A swimmer's box is the whole layer, so
+  it is never cut off; the lens keeps the closed-form sway.
+- Depth: the far layer dimmer (0.72) and blurrier (σ 3.4 px), the near
+  characters a little stronger (alpha 0.26 + 1.15 × light) and the glow
+  stronger (0.36 + 0.4 × blur).
+- Motes in `compose.frag`: specks a pixel or two across, in two depths
+  sinking at 5 and 9 px/s, the nearer larger with a small halo. A grid
+  per depth with at most one mote per cell that never leaves it, so each
+  pixel asks one cell; a sine-free hash so empty pixels cost almost
+  nothing. `Water.motes` scales the count.
+- Found on the way, older than all of this: in the water look the app
+  still subscribed to the music feed, though nothing visible used it, and
+  the hidden spectrum's `Behavior on height` animated on every frame of
+  it, which made Qt redraw the window at 60 fps. Now no feed in the water,
+  and the spectrum eases only while visible.
+- Open: the pool makes Qt render the window twice per clock tick (15 Hz
+  clock: 30 frames/s; 30 Hz: 60), the second frame 0 ms after the first,
+  in the old build too. Hiding organisms, water fields, glyph layers or
+  blurs, or making every layer non-live and scheduled, does not change
+  it; a minimal harness of chained layers renders once per tick. Worth
+  finding: it doubles the cost of every full-screen pass. (Explained
+  2026-11-22, see "Extra frames" below.)
+- Cost (same method as above, medusa track): HEAD list 257, pool 219
+  Mcycles/s; this version list ~400, pool ~350. The GPU sat at 90-97%
+  busy without raising its clock past ~450 MHz, so the figures are capped
+  and the per-part shares are rough: motes ~12-15%, the far layer's
+  averaging ~5%, the simulation within the noise.
+
 Layout tidied (2026-11-21, owner: the UI elements were "all over the
 place. gaps, ui elements overlapping, spilling"). The panes were drawn by
 `Main.qml` from padded-out frames while each panel guessed its own inset
@@ -359,3 +451,107 @@ tiled next to a terminal, the window rule, the IPC bind).
 
 Exit: pictures show no real library; the marketplace listing updated with
 the owner's go-ahead.
+
+Closer to the mockup (2026-11-22, owner: the playing row's indicator was
+"super small and offseted"; match the Living ASCII mockup as much as
+possible). Compared against a headless render of the mockup's app:
+
+- The playing row keeps its organism mark (it was replaced by a small
+  `▸` at the column's left edge). In the water it is lit like the
+  mockup's: accent fill 8 % with a faint accent edge, the title bold in
+  accent; the cursor stays the stronger fill (16 %, edge 45 %) and wins
+  where they meet. Without the water the playing row has the faint fill
+  and nf-md-play / nf-md-pause at `iconLarge` in place of its number.
+- The first column is CREATURE, as wide as the mockup's, marks centred at
+  body size. Catalogue numbers after titles are left out in the water.
+- Text tones as in the mockup: `Theme.subtle` (foreground at 62 %, 68 %
+  light) for second lines, `Theme.faint` (42 %, 50 % light) for album,
+  time and labels. The theme's muted grey can match the water's
+  brightness.
+- Sidebar: the open list has the accent edge inside its fill, reads in
+  full foreground, the rest in `subtle`.
+- The bar's seek and volume are drawn in characters (`Slider.ascii`):
+  `====●-----` and `vol [=======---]`, still dragged with the pointer and
+  redrawn only when the position text is (twice a second).
+
+Pool compared with the studies again (2026-11-22, owner: compare the two
+at balanced blur and work out the differences; the decisions were left to
+me). Both rendered at balanced blur in gruvbox with a radiolarian
+playing, the studies in a headless browser and the app on a headless
+output, the water's colour measured with the characters blurred away:
+
+- A bug: `PondField` passed `part`, `snow`, `specks`, `bubbles` and
+  `weeds` as `int` to float uniforms. An int reaches a float uniform as
+  its bits, which read as about zero: `part < 1.5` held in the near layer
+  too, so the far layer's ripples were drawn sharp in front (the dotted
+  lines and boxes in the water), and no snow fell at all. The motes of
+  the day before stood in for that snow; they are gone and the snow is
+  back. They also cost 12-15% of the pool's GPU time.
+- The water was half again as bright (mean luma 66 against the studies'
+  45; the bottom right 68 against 18) and an even haze. The colour discs
+  were sized as the 21:9 hero for any scene, 966 px in a 1300x900 window
+  against the studies' 598; now 46% of the width with a 16:10 floor. The
+  water was also laid out over the whole window, whose darkest part sat
+  under the bar's glass: `Water.region` is now the open water (the app
+  passes the window above the bar) and the colour and the vignette are
+  laid out over it. The deep is `darker_background` (`Theme.deep`), as in
+  the studies, not `dark_background`. After: mean 49, bottom right 27.
+- The playing organism in the pool view was 0.11 of the height against
+  the studies' 0.15-0.165; `PoolView.waterRoom` now gives 0.28 x the
+  view, as the studies' pools.
+- The glow added 0.32 of light on average (p99 4.7) against the studies'
+  0.53 (8.7). Darker water and the larger organism brought it to 0.39;
+  it is blurred at a quarter of the size, not the studies' half, so it is
+  wider and fainter, and its strength is now 0.45 + 0.45 x blur (0.9 at
+  balanced, at most 1): 0.46 (p99 6.3).
+- The far layer is back at the studies' 0.9 and σ 2.6 px: the darker
+  water gives the near layer its contrast, which the dimmer, blurrier far
+  layer of 2026-11-17 was standing in for.
+- The passer-by is drawn in front of the sharp layer and its glow in
+  `compose.frag`, as the studies lay theirs, not under them in the
+  underlay. The app's pool view still has none (the studies' pools have
+  none); the compact player has it.
+- Left as is: the clocks (30 Hz, the far layer 10 Hz, swimming 15 Hz,
+  where the studies run every frame), tentacle chains that pass a change
+  one segment per step, and organisms overwriting rather than adding
+  where they overlap.
+- Cost, same method as before, base and new interleaved, 12 s each, demo
+  daemon playing: pool view 47 and 61 -> 41 and 35 Mcycles/s, list view
+  74 and 92 -> 48 and 64.
+- Testing note: a window on a headless output does render (60 frames a
+  second here); pictures taken too early only look empty because a new
+  organism takes several seconds to grow.
+
+Extra frames, tentacles, swim rate (2026-11-22, continuing the comparison
+with the studies):
+
+- Extra frames, measured with `QSG_RENDER_TIMING` and the pool's clock
+  at 10 Hz (at 30 Hz everything sits at the 60 fps ceiling and hides it):
+  31 frames a second, three per tick. A bare 10 Hz property change draws
+  10. The recursive, live swimming state gives one extra frame (22 with
+  it not live); every live layer whose source changes gives the other:
+  turning any one layer off changes nothing, all of them off gives 10.
+  Qt's layer asks for an update when its source is marked dirty while it
+  is live or has a grab scheduled, and the request lands after the frame
+  that already drew the change, so the next frame draws nothing new.
+  Driving the layers from the clock (not live while alive,
+  `scheduleUpdate()` per tick) brought it to two per tick, not one:
+  scheduling a grab and changing its source in one frame still asks
+  again. At the real 30 Hz clock it measured no GPU saving (both at
+  60 fps, 42-55 against 40-47 Mcycles/s, interleaved), so it was not
+  kept. Drawing the finished pool into a texture once per tick, so the
+  extra frame only copies it, cost more (50-94). What would help: fewer
+  ticks, or a clock whose ticks fall on alternate vsyncs.
+- Tentacle chains: each segment eased toward its neighbour as it was a
+  step before, so a turn reached a 12-segment tentacle's tip most of a
+  second late. `swim.frag` now walks each chain from the root in every
+  fragment (at most 18 steps, 36 fragments), so each segment follows its
+  neighbour's new angle, as the studies do.
+- Swimming steps at every move of the pool's clock (30 a second) instead
+  of 15, so organisms move on every frame the pool draws. No measurable
+  cost (pool view 36-49 against 46-52 Mcycles/s).
+- Left: organisms that overlap cover each other instead of adding their
+  light, as the studies' fields do. The field packs brightness and a
+  character code into one value and Qt's blending cannot add those; it
+  would need another field format, for a difference seen only where two
+  organisms overlap.

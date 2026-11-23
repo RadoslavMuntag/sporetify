@@ -9,15 +9,12 @@
 // does not light are left alone (discarded), so the water and other
 // organisms under its box show.
 //
-// It swims. Everything is a function of `time`, so the host animates one
-// number, and only while the scene is alive:
-//   - it follows a slow, meandering loop around `home` (`roam` px each way);
-//     medusae move along it in strokes and coast between them, comb jellies
-//     glide, radiolarians and volvox drift, diatoms glide back and forth;
-//   - swimmers face the way they go;
-//   - tentacles trail along the path the body took a moment ago, so they
-//     bend through a turn and stream out behind a stroke, and hang when it
-//     is still.
+// It swims as the studies' organisms do: shaders/swim.frag simulates it
+// (wander targets, turning, strokes and coasting, drag) and keeps its
+// position, heading and tentacle chains in a small texture, `swim`, read
+// here. Medusae push in strokes and coast, comb jellies glide, radiolarians
+// and volvox drift, diatoms glide back and forth; tentacles hang when it
+// is still and stream behind a stroke or a turn.
 // With `wander` off it stays near `home` and only sways (a lens).
 //
 // Output, per cell: rgb the colour of the brightest part; alpha a code.
@@ -74,6 +71,7 @@ layout(std140, binding = 0) uniform buf {
   vec4 rain3;
   vec4 rain4;
 };
+layout(binding = 1) uniform sampler2D swim;   // shaders/swim.frag's state
 
 const float TAU = 6.2831853;
 const float PI = 3.1415927;
@@ -144,90 +142,42 @@ float hash1(float n) { return fract(sin(n * 12.9898 + 4.1414) * 43758.5453); }
 float ease(float x) { return x * x * (3.0 - 2.0 * x); }
 
 // ------------------------------------------------------------ motion
+// Swimming is simulated, as in the studies, by shaders/swim.frag: each
+// organism keeps its own state (OrganismField), read here as `swim`. Kept
+// still (a lens: wanderOn 0) it only sways about home, worked out from
+// `time`, its tentacles hanging.
 
-// How fast each kind travels, in R per second, as in the studies.
-float speedR() {
-  return kindIndex < 0.5 ? 0.14 : kindIndex < 1.5 ? 0.11 : kindIndex < 2.5 ? 0.045 : kindIndex < 3.5 ? 0.05 : 0.035;
-}
 float period() { return kindIndex < 0.5 ? p0.y : 5.0; }
 // Where in its beat a medusa is: 0..1, contraction in the first 0.3.
 float beatAt(float t) { return fract(t / period() + fract(phase * 0.37)); }
 
-// The path's own clock. A medusa moves along it in strokes: most of the
-// way during the contraction, then coasting to a stop.
-float pathClock(float t) {
-  if (kindIndex > 0.5) return t;
-  float x = t / period() + fract(phase * 0.37);
-  float n = floor(x), ph = x - n;
-  float g = ph < 0.3 ? 0.6 * (1.0 - cos(ph / 0.3 * PI)) * 0.5
-    : 0.6 + 0.4 * (1.0 - exp(-(ph - 0.3) * 5.0)) / (1.0 - exp(-3.5));
-  return (n + g) * period();
+bool swims() { return wanderOn > 0.5; }
+vec4 swimAt(float i) { return texture(swim, vec2((i + 0.5) / 36.0, 0.5)); }
+
+vec2 swayAt(float t) { return home + radius * vec2(sin(t * 0.07 + phase) * 0.06, sin(t * 0.09 + phase * 2.0) * 0.07); }
+float swayHeading(float t) {
+  if (kindIndex < 0.5) return sin(t * 0.05 + phase) * 0.12;
+  if (kindIndex < 1.5) return sin(t * 0.04 + phase) * 0.25;
+  if (kindIndex > 3.5 && p0.x > 0.5) return PI * 0.5 + sin(t * 0.03 + phase) * 0.15;
+  return 0.0;
 }
 
-bool swims() { return wanderOn > 0.5 && length(roam) > radius * 0.2; }
-
-// A slow meandering loop around home: never stops, so a swimmer always
-// has a way to face, and turns gently.
-vec2 loopAt(float s) {
-  float L = max(length(roam), 1.0);
-  // Turning no faster than the studies let anything steer (about 0.06
-  // rad/s): a small loop is swum slowly rather than spun round.
-  float w = min(speedR() * radius / L, 0.06);
-  float dir = fract(phase * 0.173) < 0.5 ? -1.0 : 1.0;
-  float th = dir * w * s + 0.9 * sin(0.29 * w * s + phase * 1.3) + phase * 2.0;
-  float r = 1.0 + 0.3 * sin(0.47 * w * s + phase * 3.1);
-  return home + vec2(cos(th) * roam.x, sin(th) * roam.y) * r;
-}
-
-vec2 posAt(float t) {
-  if (!swims()) return home + radius * vec2(sin(t * 0.07 + phase) * 0.06, sin(t * 0.09 + phase * 2.0) * 0.07);
-  vec2 p = loopAt(pathClock(t));
-  if (kindIndex < 0.5) {
-    // Sinking a little while it coasts, lifted again by the next stroke.
-    float ph = beatAt(t);
-    p.y += radius * 0.05 * (ph < 0.3 ? 1.0 - smoothstep(0.0, 0.3, ph) : (ph - 0.3) / 0.7);
-  }
-  return p;
-}
-
-float headingAt(float t) {
-  bool pennate = kindIndex > 3.5 && p0.x > 0.5;
-  if (!swims()) {
-    if (kindIndex < 0.5) return sin(t * 0.05 + phase) * 0.12;
-    if (kindIndex < 1.5) return sin(t * 0.04 + phase) * 0.25;
-    if (pennate) return PI * 0.5 + sin(t * 0.03 + phase) * 0.15;
-    return 0.0;
-  }
-  if (kindIndex > 1.5 && !pennate) return 0.0;
-  float s = pathClock(t);
-  vec2 v = loopAt(s + 0.5) - loopAt(s - 0.5);
-  float a = atan(v.x, -v.y);
-  // A medusa stays roughly upright: going down, it sinks bell up.
-  if (kindIndex < 0.5) a = clamp(a, -0.35, 0.35);
-  return a;
-}
-
-// Which way each part of a trailing tentacle lies, as the studies' chains
-// do it: down from the body, leaning back toward where the body came from
-// by up to a half as it speeds up, each segment following the path a
-// moment further back, so a tentacle bends through a turn. `dirs[j]` is
-// the world direction of segment j (1..10).
-vec2 dirs[11];
-void tentacleDirs() {
+// The chains' segments as world directions: `fastChain` the tentacles
+// (12 segments), `slowChain` oral arms and comb jelly tentacles (18). Each
+// segment eases toward the one before it in swim.frag, so a stroke or a
+// turn travels down them; kept still they hang straight down.
+vec2 fastChain[12];
+vec2 slowChain[18];
+void loadChains(bool fast, bool slow) {
   vec2 down = rot(vec2(0.0, 1.0), A);
-  for (int j = 0; j < 11; j++) dirs[j] = down;
-  if (!swims()) return;
-  vec2 now = posAt(time);
-  float sp = length(now - posAt(time - 1.0)) / radius;
-  float w = min(0.5, sp * 4.0);
-  if (w < 0.01) return;
-  vec2 before = now;
-  for (int j = 1; j < 11; j++) {
-    vec2 p = posAt(time - float(j) * 0.7);
-    vec2 back = p - before;
-    float l = length(back);
-    if (l > 1e-3) dirs[j] = normalize(mix(down, back / l, w));
-    before = p;
+  bool live = swims();
+  if (fast) for (int j = 0; j < 12; j++) {
+    float g = swimAt(3.0 + float(j)).x;
+    fastChain[j] = live ? vec2(cos(g), sin(g)) : down;
+  }
+  if (slow) for (int j = 0; j < 18; j++) {
+    float g = swimAt(15.0 + float(j)).x;
+    slowChain[j] = live ? vec2(cos(g), sin(g)) : down;
   }
 }
 
@@ -243,38 +193,40 @@ void medusa() {
   float H = bell * (1.0 + 0.3 * c), Wm = 1.0 - 0.12 * c, pinch = 0.07 + c * 0.28, Wr = Wm * (1.0 - pinch);
   vec2 q = toBody(C, A);     // body coordinates, y down, rim at 0
 
-  // Tentacles: from the rim, hanging and trailing (tentacleDirs), splayed
-  // a little more at each beat and waving slowly along their length.
+  // Tentacles: from the rim along the chain (hanging, trailing), fanned
+  // out around the bell, a little more at each beat (the beat reaches the
+  // tips late and softened), and waving slowly along their length.
   if (length(C) < tLen + 1.6) {
-    tentacleDirs();
-    float seg = tLen / 10.0;
+    loadChains(true, arms > 0.5);
+    float seg = tLen / 12.0;
     for (int i = 0; i < 22; i++) {
       if (float(i) >= tentacles) break;
       float th = float(i) / tentacles * TAU + turn;
       float z = sin(th);
       vec2 p = rot(vec2(cos(th) * Wr * 0.97, sin(th) * Wr * tilt), A);
       if (length(C - p) < K * 1.2 && abs(C.x - p.x) < K * 0.5) add(0.35 + 0.2 * z, markColour);
-      float splay = -cos(th) * (0.1 + 0.45 * c), wave = 0.0;
-      for (int j = 1; j < 11; j++) {
+      float wave = 0.0;
+      for (int j = 0; j < 12; j++) {
+        float splay = -cos(th) * (0.1 + 0.45 * mix(c, 0.3, min(1.0, float(j) / 5.0)));
         wave += sin(time * 0.4 - float(j) * 0.45 + th * 3.0) * 0.05;
-        vec2 q2 = p + rot(dirs[j], splay * (1.0 - float(j) / 12.0) + wave) * seg;
+        vec2 q2 = p + rot(fastChain[j], splay + wave) * seg;
         if (segDist(p, q2) < K * 0.5) {
-          add((0.2 + 0.1 * z) * (1.0 - 0.65 * float(j) / 10.0), bodyColour);
+          add((0.2 + 0.1 * z) * (1.0 - 0.65 * float(j) / 12.0), bodyColour);
           break;
         }
         p = q2;
       }
     }
 
-    // Oral arms: thicker, with a slow frill, trailing the same way.
-    float aseg = armLen / 6.0;
+    // Oral arms: thicker, with a slow frill, on the slower chain.
+    float aseg = armLen / 9.0;
     for (int i = 0; i < 4; i++) {
       if (float(i) >= arms) break;
       float th = float(i) / arms * TAU + 0.785 + turn;
       vec2 p = rot(vec2(cos(th) * Wr * 0.16, -H * 0.1), A);
-      for (int j = 1; j < 7; j++) {
-        float f = float(j) / 6.0, wd = 0.07 * (1.0 - f * 0.7);
-        vec2 d = rot(dirs[j], -cos(th) * 0.18);
+      for (int j = 0; j < 9; j++) {
+        float f = float(j) / 9.0, wd = 0.07 * (1.0 - f * 0.7);
+        vec2 d = rot(slowChain[j], -cos(th) * 0.18);
         p += d * aseg;
         vec2 fr = vec2(-d.y, d.x) * sin(time * 0.35 + float(j) * 1.4 + th) * wd;
         dot2(p + fr, max(wd, K * 0.5), 0.3 * (1.0 - f * 0.5), bodyColour);
@@ -329,19 +281,19 @@ void ctenophore() {
 
   // Two fishing tentacles streaming behind, with side filaments.
   if (isRound && length(C) < tLen + 1.6) {
-    tentacleDirs();
-    float seg = tLen / 10.0;
+    loadChains(false, true);
+    float seg = tLen / 18.0;
     for (int i = 0; i < 2; i++) {
       float side = i == 0 ? 1.0 : -1.0;
       vec2 p = rot(vec2(side * 0.45 * b, 0.15 * a), A);
       float wave = 0.0;
-      for (int j = 1; j < 11; j++) {
+      for (int j = 0; j < 18; j++) {
         wave += sin(time * 0.4 - float(j) * 0.45 + side * 2.0) * 0.06;
-        vec2 d = rot(dirs[j], -side * 0.3 + wave);
+        vec2 d = rot(slowChain[j], -side * 0.3 + wave);
         vec2 q2 = p + d * seg;
-        thread(p, q2, 0.15 * (1.0 - 0.5 * float(j) / 10.0), bodyColour);
-        if (mod(float(j), 2.0) > 0.5) {
-          float fl = 0.22 * (1.0 - float(j) / 10.0);
+        thread(p, q2, 0.15 * (1.0 - 0.5 * float(j) / 18.0), bodyColour);
+        if (j >= 3 && mod(float(j), 2.0) > 0.5) {
+          float fl = 0.22 * (1.0 - float(j) / 18.0);
           float fa = side * (1.1 + 0.15 * sin(time * 0.3 + float(j)));
           thread(q2, q2 + rot(d, fa) * fl, 0.09, bodyColour);
         }
@@ -501,8 +453,9 @@ void diatom() {
   bool pennate = p0.x > 0.5;
   float width = p0.y, tip = p0.z, striae = p0.w, rings = p1.x, rays = p1.y, drops = p1.z, glide = p1.w;
   if (pennate) {
-    // Glides along its long axis, stops, glides back.
-    float g = sin(fract(time / glide + phase) * TAU) * 0.12;
+    // Glides along its long axis, stops, glides back: swimming, swim.frag
+    // moves it; kept still, it slides a little about its place.
+    float g = swims() ? 0.0 : sin(fract(time / glide + phase) * TAU) * 0.12;
     vec2 o = rot(vec2(0.0, -g), A);
     vec2 q = toBody(C - o, A);
     float AA = 1.15, B = width * 1.4, k = tip * 0.6;
@@ -563,8 +516,14 @@ void main() {
   if (radius < cell * 0.9 || amp <= 0.0) discard;
   if (bound > 0.0 && length(px - clipAt) > bound) discard;
 
-  vec2 pos = posAt(time);
-  A = headingAt(time);
+  vec2 pos = swayAt(time);
+  A = swayHeading(time);
+  if (swims()) {
+    // Until swim.frag has taken its first step for this track, it is at home.
+    vec4 s0 = swimAt(0.0), s1 = swimAt(1.0), s2 = swimAt(2.0);
+    if (abs(s2.w - (phase + 1.0)) < 0.001) { pos = s0.xy; A = s1.x; }
+    else pos = home;
+  }
   // A medusa or comb jelly kept still (a lens) is centred on its whole
   // length, so the bell and the tentacles share the space.
   if (!swims()) {

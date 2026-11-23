@@ -32,7 +32,9 @@ Item {
 
   // ---- Column layout, shared by the column labels and every row.
   readonly property real pad: Theme.spacing.huge
-  readonly property real numberWidth: Theme.space(water ? 48 : 36)
+  // In the water the first column holds each track's organism, centred,
+  // as wide as the mockup's CREATURE column.
+  readonly property real numberWidth: Theme.space(water ? 76 : 36)
   readonly property real timeWidth: Theme.space(52)
   readonly property real markWidth: Theme.space(24)
   // On an album page every row would show the same cover.
@@ -118,7 +120,7 @@ Item {
         elide: Text.ElideRight
         textFormat: Text.PlainText
         text: root.eyebrow
-        color: Theme.muted
+        color: root.water ? Theme.faint : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.caption
         font.letterSpacing: Theme.font.caption * 0.12
@@ -150,7 +152,8 @@ Item {
           return root.library.subtitle
         }
         color: root.library.markedCount > 0 ? Theme.accent
-        : (root.library.collection.state === "error" ? Theme.urgent : Theme.muted)
+        : root.library.collection.state === "error" ? Theme.urgent
+        : root.water ? Theme.subtle : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
       }
@@ -170,7 +173,7 @@ Item {
   component ColumnLabel: Text {
     anchors.verticalCenter: parent.verticalCenter
     textFormat: Text.PlainText
-    color: Theme.muted
+    color: root.water ? Theme.faint : Theme.muted
     font.family: Theme.font.family
     font.pixelSize: Theme.font.caption
     font.letterSpacing: Theme.font.caption * 0.12
@@ -192,7 +195,12 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       width: parent.width
       height: Theme.font.caption * 1.4
-      ColumnLabel { x: root.pad; text: root.water ? "LIFE" : "#" }
+      ColumnLabel {
+        x: root.pad
+        width: root.water ? root.numberWidth : implicitWidth
+        horizontalAlignment: root.water ? Text.AlignHCenter : Text.AlignLeft
+        text: root.water ? "CREATURE" : "#"
+      }
       ColumnLabel { x: columns.textX; text: "TITLE" }
       ColumnLabel { x: columns.textX + columns.flexible * 0.6; text: "ALBUM" }
       ColumnLabel { anchors.right: parent.right; anchors.rightMargin: root.pad; text: "TIME" }
@@ -291,11 +299,18 @@ Item {
       width: list.width
       height: Theme.spacing.trackRow
       radius: root.water ? Theme.space(5) : 0
+      // In the water the cursor is an accent fill with an accent edge, and
+      // the playing row a fainter one of each, as in the mockup; where
+      // both meet the cursor wins and the bold accent title still says
+      // which track plays. Without the water the playing row keeps the
+      // faint accent fill and the cursor its brackets.
+      readonly property bool lit: root.water && (cursor || isPlaying)
       color: kind === "heading" ? "transparent"
-        : root.water && cursor ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+        : lit ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, cursor ? 0.16 : 0.08)
+        : isPlaying ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
         : (cursor || hover.containsMouse) ? Theme.hoverFill : "transparent"
-      border.width: root.water && cursor ? Theme.stroke.hair : 0
-      border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.45)
+      border.width: lit ? Theme.stroke.hair : 0
+      border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, cursor ? 0.45 : 0.24)
 
       // A hairline under every row, as in a ruled catalogue.
       Rectangle {
@@ -336,13 +351,16 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         x: row.pad
         width: row.numberWidth
+        horizontalAlignment: root.water ? Text.AlignHCenter : Text.AlignLeft
         textFormat: Text.PlainText
         visible: row.kind !== "heading"
-        // nf-md-volume_high marks the playing row; the others the kind of row.
         text: {
           // nf-md-check on a selected row.
           if (row.marked) return "󰄬"
-          if (row.isPlaying) return "▸"
+          // Without the water the playing row shows nf-md-play or
+          // nf-md-pause in place of its number; in the water it keeps its
+          // organism and the row itself is lit.
+          if (row.isPlaying && !(root.water && row.organism)) return root.player.playing ? "󰐊" : "󰏤"
           switch (row.kind) {
           case "album": return "󰀥"
           case "artist": return "󰠃"
@@ -353,13 +371,18 @@ Item {
           // A list with sections numbers its tracks itself (see Pages.numberTracks).
           return String(row.track && row.track.n ? row.track.n : row.index + 1)
         }
-        color: row.isPlaying || row.marked ? Theme.accent
-          : root.water && row.organism ? row.markColour
+        color: root.water && row.organism && !row.marked ? row.markColour
+          : row.isPlaying || row.marked ? Theme.accent
           : Theme.muted
         // Marks such as "<=>" must not be joined into one arrow.
         font.features: { "liga": 0, "calt": 0 }
         font.family: Theme.font.family
-        font.pixelSize: Theme.font.bodySmall
+        // Organisms read at body size and the play icon at icon size;
+        // numbers stay small.
+        readonly property bool playIcon: !row.marked && row.isPlaying && !(root.water && row.organism)
+        font.pixelSize: playIcon ? Theme.font.iconLarge : row.marked ? Theme.font.icon
+          : root.water ? Theme.font.body : Theme.font.bodySmall
+        font.bold: root.water && row.isPlaying
       }
 
       Rectangle {
@@ -426,7 +449,8 @@ Item {
           }
           Text {
             id: number
-            visible: row.kind === "" && row.track !== null && parent.width > Theme.space(150)
+            // The water look leaves catalogue numbers to the pool and the plate.
+            visible: !root.water && row.kind === "" && row.track !== null && parent.width > Theme.space(150)
             anchors.baseline: title.baseline
             textFormat: Text.PlainText
             text: visible ? "No. " + Specimen.catalogue(row.track.uri) : ""
@@ -442,7 +466,7 @@ Item {
           elide: Text.ElideRight
           textFormat: Text.PlainText
           text: row.detail
-          color: Theme.muted
+          color: root.water ? Theme.subtle : Theme.muted
           font.family: Theme.font.family
           font.pixelSize: Theme.font.bodySmall
         }
@@ -456,7 +480,7 @@ Item {
         elide: Text.ElideRight
         textFormat: Text.PlainText
         text: row.track && row.kind === "" ? row.track.album : ""
-        color: Theme.muted
+        color: root.water ? Theme.faint : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
       }
@@ -481,7 +505,7 @@ Item {
         anchors.rightMargin: row.pad
         textFormat: Text.PlainText
         text: row.track ? Position.clock(row.track.duration_ms) : ""
-        color: Theme.muted
+        color: root.water ? Theme.faint : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
       }

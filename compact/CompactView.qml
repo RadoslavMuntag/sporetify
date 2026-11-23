@@ -105,13 +105,16 @@ Item {
     passer: !root.side
     palette: Theme.creatureColors
     ground: Theme.background
-    deep: Theme.sunken
+    deep: Theme.deep
     ink: Theme.foreground
     accent: Theme.accent
     muted: Theme.muted
     light: Theme.mode === "light"
     // The studies' small pool has about 78 columns across.
     columns: 78
+    // The labels at the top sit straight on the water.
+    calm: [Qt.rect(labels.x, labels.y, stateLabel.contentWidth, labels.height),
+      Qt.rect(labels.x + keysHint.x, labels.y, keysHint.width, labels.height)]
 
     MouseArea {
       anchors.fill: parent
@@ -151,14 +154,13 @@ Item {
     height: keysHint.height
 
     Label {
+      id: stateLabel
       anchors.left: parent.left
       anchors.right: keysHint.left
       anchors.rightMargin: root.gap
       anchors.verticalCenter: parent.verticalCenter
       text: (root.track ? (root.playing ? "now playing" : "paused") + " · No. " + Specimen.catalogue(root.track.id) : "sporetify").toUpperCase()
-      color: Theme.muted
-      style: Text.Outline
-      styleColor: Qt.rgba(Theme.sunken.r, Theme.sunken.g, Theme.sunken.b, 0.5)
+      color: Theme.subtle
       font.pixelSize: root.px(Theme.font.caption)
       font.letterSpacing: root.px(Theme.font.caption) * 0.12
     }
@@ -179,7 +181,7 @@ Item {
       Label {
         anchors.verticalCenter: parent.verticalCenter
         text: "keys"
-        color: Theme.muted
+        color: Theme.subtle
         font.pixelSize: root.px(Theme.font.caption)
       }
     }

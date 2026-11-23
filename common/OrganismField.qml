@@ -3,10 +3,12 @@ import QtQuick
 import "Plankton.js" as Plankton
 
 // One organism as a field of light, inside a FieldLayer
-// (shaders/organism.frag). The item covers only the box the organism can
-// reach (snapped to whole cells), so a layer of several organisms costs
-// little more than one. It swims about `home` by itself; the host moves
-// `time`.
+// (shaders/organism.frag). It swims about `home` by itself, as the
+// organism studies simulate it (shaders/swim.frag, which keeps its state
+// in a small texture that feeds itself); the host only moves `time`.
+// Swimming, it covers the whole layer, so it is never cut off wherever it
+// goes (the layer is one fragment per character cell, and cells it does
+// not reach end at once); kept still, only the box it reaches.
 ShaderEffect {
   id: root
 
@@ -47,10 +49,10 @@ ShaderEffect {
   readonly property real spanY: (wander ? roam.height * 1.35 : radius * 0.1) + radius * (reach + 1)
   readonly property real layerW: parent ? parent.width : 0
   readonly property real layerH: parent ? parent.height : 0
-  readonly property real x0: Math.max(0, Math.floor((home.x - spanX) / cell) * cell)
-  readonly property real y0: Math.max(0, Math.floor((home.y - spanY) / (cell * 2)) * cell * 2)
-  readonly property real x1: Math.min(layerW, Math.ceil((home.x + spanX) / cell) * cell)
-  readonly property real y1: Math.min(layerH, Math.ceil((home.y + spanY) / (cell * 2)) * cell * 2)
+  readonly property real x0: wander ? 0 : Math.max(0, Math.floor((home.x - spanX) / cell) * cell)
+  readonly property real y0: wander ? 0 : Math.max(0, Math.floor((home.y - spanY) / (cell * 2)) * cell * 2)
+  readonly property real x1: wander ? layerW : Math.min(layerW, Math.ceil((home.x + spanX) / cell) * cell)
+  readonly property real y1: wander ? layerH : Math.min(layerH, Math.ceil((home.y + spanY) / (cell * 2)) * cell * 2)
 
   visible: radius >= cell * 0.9 && seed !== "" && x1 > x0 && y1 > y0
   x: x0
@@ -75,6 +77,43 @@ ShaderEffect {
   property color bodyColour: named(packed.main)
   property color markColour: named(packed.mark)
   property color glass: ink
+  property var swim: swimState
+
+  // ---- How it swims: 36 texels that are their own input, one step per
+  //      move of `time` (shaders/swim.frag). Never shown: hidden by the
+  //      source that reads it.
+  ShaderEffect {
+    id: swimStep
+    width: 36
+    height: 1
+    visible: root.wander
+    blending: false
+    fragmentShader: "shaders/swim.frag.qsb"
+    property var swim: swimState
+    property point home: root.home
+    property size roam: root.roam
+    property size pond: Qt.size(root.layerW, root.layerH)
+    property real cell: root.cell
+    property real radius: root.radius
+    // A step at every move of the host's clock (30 a second in the pool).
+    // At fifteen, organisms moved only every other frame the pool drew; a
+    // step is one tiny pass (36 texels), and the frame is drawn anyway.
+    property real time: root.time
+    property real phase: root.phase
+    property real kindIndex: root.kindIndex
+    property vector4d p0: root.p0
+    property vector4d p1: root.p1
+  }
+  ShaderEffectSource {
+    id: swimState
+    sourceItem: swimStep
+    hideSource: true
+    recursive: true
+    format: ShaderEffectSource.RGBA32F
+    textureSize: Qt.size(36, 1)
+    smooth: false
+  }
+
   // The comb rows' light: cyan, blue, magenta, green, yellow.
   property color rain0: named("cyan")
   property color rain1: named("blue")

@@ -41,6 +41,31 @@ the daemon that matches.
   the middle. The sidebar,
   list and player bar are glass over the water. With visuals or creatures
   off the app is plain and flat as before.
+- The pool is closer to the organism studies: the colour in the water
+  fades softly instead of in patches, the far water and the passer-by are
+  properly out of focus instead of grainy, the glass blurs smoothly, the
+  characters are drawn pixel for pixel and sharp, and the characters in
+  the water make room around text that sits on it, so it reads without a
+  shadow under it.
+- The pool looks like the organism studies again: the water is darker,
+  with separate pools of colour instead of an even haze, the playing
+  organism in the pool view is as large as in the studies and glows,
+  the far water is less washed out, and marine snow falls again. Sharp
+  dotted lines that crossed the water are gone. It also costs less to
+  draw.
+- The organisms swim like those in the studies: they pick somewhere to go,
+  turn toward it slowly and swim there, medusae in strokes they coast
+  out of, and their tentacles trail through every turn, the whole
+  tentacle at once rather than a segment at a time; they move on every
+  frame the pool draws.
+- The track playing in a list is easy to spot: its row has an accent
+  fill and a bold accent title, and in the water look it keeps its
+  creature instead of a tiny arrow (without the water, a full-size play or
+  pause icon). The list's creature column, the sidebar, the progress bar
+  (`====●----`) and the volume (`vol [=====---]`) follow the Living
+  ASCII mockup more closely.
+- In the water look the app no longer asks the daemon to analyse the
+  music, which nothing there showed; it also kept the window redrawing.
 - The glass panes and what is on them line up: lists, rows and rules
   stay inside their pane instead of running into its edges or past its
   foot, the gaps between panes are even, the hints fit on one line (the

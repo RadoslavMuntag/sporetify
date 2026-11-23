@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 
 import "Organism.js" as Organism
 import "Plankton.js" as Plankton
@@ -11,8 +12,9 @@ import "Pool.js" as Pool
 //                        out of focus
 //   the near layer       marine snow, the playing track's organism and the
 //                        queue's around it, sharp
-//   glow                 a soft copy of the near layer added on top
+//   glow                 a soft copy of the near layer, screened on top
 //   a passer-by          one large organism in front, very out of focus
+//   calm                 the near layer making room around text on it
 //   the vignette         the edges sinking into the deep
 //
 // Organisms and the water are fields of light over one character grid,
@@ -24,13 +26,20 @@ import "Pool.js" as Pool
 //
 // Cost. On an integrated GPU every full-screen pass is expensive, so there
 // is one: everything but the sharp characters is drawn small (a quarter, a
-// third, an eighth of the size, which is also what makes it soft) and
-// shaders/compose.frag puts it all together. The pool is redrawn at most
-// `fps` times a second (its motion is slow), the water's colour four times
-// a second, and nothing at all while it is still.
+// third, an eighth of the size) and shaders/compose.frag puts it all
+// together. The pool is redrawn at most `fps` times a second (its motion
+// is slow), the water's colour four times a second, and nothing at all
+// while it is still.
 //
-// `surface` is a small copy of the whole scene for Glass panes, so the
-// water is drawn once however many panes sit over it.
+// Softness. Scaling a small layer up makes it blocky, not soft, and a
+// layer of characters drawn small at one point per pixel comes out as hard
+// specks. So the small glyph layers average each pixel's glyphs
+// (GlyphLayer's `footprint`), and every soft layer goes through one
+// Gaussian blur (Blur) at its small size, as the studies' CSS blur does.
+// The colour discs fade as a Gaussian too.
+//
+// `surface` is a small, blurred copy of the whole scene for Glass panes,
+// so the water is drawn and blurred once however many panes sit over it.
 Item {
   id: root
 
@@ -52,7 +61,16 @@ Item {
   property int bubbles: 0
   property int weeds: 0
   property bool passer: true
+  // Where text sits straight on the water, as rects in this item: the
+  // near layer's characters and their glow clear away around them, with a
+  // ragged edge, so the text reads on open water. Up to three.
+  property var calm: []
   property int farCount: 4
+  // The open water, in this item: the water's colour and the vignette are
+  // laid out over it. Where glass covers part of the scene for good (the
+  // app's bar), leave that part out, or the water's darkest part sits
+  // under the glass.
+  property rect region: Qt.rect(0, 0, width, height)
 
   property var palette: []
   property color ground
@@ -64,13 +82,20 @@ Item {
   // About this many columns across, cells 4.4 to 7 px wide as in the studies
   // (their large pool has about 6.5 px cells).
   property int columns: 140
-  property real cell: Math.max(4.4, Math.min(7, width / columns))
+  // A whole number of device pixels, so each character is drawn from the
+  // atlas one texel per pixel, as sharp as the studies' (GlyphAtlas).
+  readonly property real dpr: Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
+  property real cell: Math.round(Math.max(4.4, Math.min(7, width / columns)) * dpr) / dpr
 
   readonly property size grid: Qt.size(Math.max(1, Math.ceil(width / cell)), Math.max(1, Math.ceil(height / (cell * 2))))
-  readonly property Item surface: surfaceCopy
+  readonly property Item surface: surfaceBlur.texture
   readonly property bool soft: blur > 0
 
   function colourAt(i, fallback) { return palette && palette.length > i ? palette[i] : fallback }
+  function calmAt(i) {
+    var r = root.calm && root.calm.length > i ? root.calm[i] : null
+    return r && r.width > 0 && r.height > 0 ? Qt.vector4d(r.x, r.y, r.width, r.height) : Qt.vector4d(0, 0, 0, 0)
+  }
   function frac(id, salt) { return (Organism.hash(id + "~" + salt) % 1000) / 1000 }
 
   // Seconds; one clock for everything that moves, stepped `fps` times a
@@ -84,7 +109,9 @@ Item {
     running: root.alive
     onTriggered: root.clock += interval / 1000
   }
-  readonly property real farClock: Math.floor(clock * 20) / 20
+  // The far layer and the passer-by are blurred and slow: ten steps a
+  // second look as smooth there and cost half of twenty.
+  readonly property real farClock: Math.floor(clock * 10) / 10
   readonly property real colourClock: Math.floor(clock * 4) / 4
 
   // ---- Who swims where.
@@ -156,9 +183,9 @@ Item {
     height: root.height
     fragmentShader: "shaders/backdrop.frag.qsb"
     property size area: Qt.size(width, height)
+    property vector4d region: Qt.vector4d(root.region.x, root.region.y, root.region.width, root.region.height)
     property real time: root.colourClock
     property real blur: root.blur
-    property real part: 0
     property color ground: root.ground
     property color deep: root.deep
     property color accent: root.accent
@@ -203,16 +230,26 @@ Item {
       light: root.light
       ink: root.ink
       field: farField.texture
+      footprint: 3
     }
   }
-  // Drawn at a third of the size and scaled up: out of focus, about as
-  // much as the studies blur theirs.
+  // Drawn at a third of the size, each pixel the average of the glyphs it
+  // covers, then blurred: out of focus as the studies' far layer is (CSS
+  // blur 2.6 px, at 0.9), soft characters rather than blobs.
   ShaderEffectSource {
     id: farTex
     sourceItem: farLayer
     hideSource: true
     smooth: true
-    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / (1.5 + root.blur * 1.5))), Math.max(1, Math.ceil(root.height / (1.5 + root.blur * 1.5))))
+    textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 3)), Math.max(1, Math.ceil(root.height / 3)))
+  }
+  Blur {
+    id: farBlur
+    width: root.width
+    height: root.height
+    source: farTex
+    textureSize: farTex.textureSize
+    sigma: Math.max(0.35, root.blur * 2.6 / 3)
   }
 
   FieldLayer {
@@ -241,16 +278,20 @@ Item {
     Swimmer { slot: 4 }
   }
 
-  // The near layer's characters again, a quarter of the size, for the glow.
-  GlyphLayer {
+  // The near layer's light, a quarter of the size and blurred, for the
+  // glow: the studies' bloom (a half-size copy, CSS blur 7 px, screened
+  // over the scene). Each cell's share of ink stands in for its glyph
+  // (shaders/glowfield.frag); blurred this much, they look the same.
+  ShaderEffect {
     id: glowLayer
     width: root.width
     height: root.height
-    cell: root.cell
-    grid: root.grid
-    light: root.light
-    ink: root.ink
-    field: nearField.texture
+    fragmentShader: "shaders/glowfield.frag.qsb"
+    property var field: nearField.texture
+    property size area: Qt.size(width, height)
+    property size grid: root.grid
+    property real cell: root.cell
+    property real light: root.light ? 1 : 0
   }
   ShaderEffectSource {
     id: glowTex
@@ -259,6 +300,15 @@ Item {
     smooth: true
     live: root.soft
     textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 4)), Math.max(1, Math.ceil(root.height / 4)))
+  }
+  Blur {
+    id: glowBlur
+    width: root.width
+    height: root.height
+    source: glowTex
+    live: root.soft
+    textureSize: glowTex.textureSize
+    sigma: (3 + root.blur * 4) / 4
   }
 
   Item {
@@ -290,9 +340,10 @@ Item {
       light: root.light
       ink: root.ink
       field: passerField.texture
+      footprint: 8
     }
   }
-  // An eighth of the size: very out of focus.
+  // An eighth of the size and blurred: very out of focus (CSS blur 9 px).
   ShaderEffectSource {
     id: passerTex
     sourceItem: passerLayer
@@ -301,19 +352,25 @@ Item {
     live: root.passer && root.soft
     textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 8)), Math.max(1, Math.ceil(root.height / 8)))
   }
+  Blur {
+    id: passerBlur
+    width: root.width
+    height: root.height
+    source: passerTex
+    live: root.passer && root.soft
+    textureSize: passerTex.textureSize
+    sigma: root.blur * 9 / 8
+  }
 
-  // The water's colour, the far layer and the passer-by together, a third
-  // of the size.
+  // The water's colour and the far layer together, a third of the size.
   ShaderEffect {
     id: underFx
     width: root.width
     height: root.height
     fragmentShader: "shaders/underlay.frag.qsb"
     property var back: colourTex
-    property var far: farTex
-    property var passer: passerTex
+    property var far: farBlur.texture
     property real farAlpha: 0.9
-    property real passerAlpha: root.passer && root.soft ? root.blur * 0.45 : 0
   }
   ShaderEffectSource {
     id: underTex
@@ -337,22 +394,43 @@ Item {
     property var under: underTex
     property var near: nearField.texture
     property var atlas: glyphAtlas
-    property var glow: glowTex
+    property var glow: glowBlur.texture
+    property var passer: passerBlur.texture
+    // The studies' passer-by: blur 9 px, at 0.45 (balanced).
+    property real passerAlpha: root.passer && root.soft ? root.blur * 0.45 : 0
     property size area: Qt.size(width, height)
     property size grid: root.grid
     property real cell: root.cell
     property real light: root.light ? 1 : 0
     property real glyphs: glyphAtlas.glyphs.length
-    property real glowStrength: root.soft ? 0.3 + root.blur * 0.32 : 0
+    // Screened on as the studies' bloom (0.62 at balanced), but stronger:
+    // this glow is blurred at a quarter of the size, not half, so it comes
+    // out wider and fainter; at 0.76 it added about 0.7 of the studies'
+    // light around the same kind of organism (measured 2026-11-22).
+    property real glowStrength: root.soft ? Math.min(1, 0.45 + root.blur * 0.45) : 0
     property color deep: root.deep
+    property size inset: glyphAtlas.inset
+    property vector4d calm0: root.calmAt(0)
+    property vector4d calm1: root.calmAt(1)
+    property vector4d calm2: root.calmAt(2)
+    property vector4d region: Qt.vector4d(root.region.x, root.region.y, root.region.width, root.region.height)
   }
 
-  // ---- A small copy of the whole scene, for glass to blur. It has no size
+  // ---- A small copy of the whole scene, blurred once for every pane of
+  //      glass (the studies' backdrop-filter: blur 13 px). It has no size
   //      of its own, so it is never shown.
   ShaderEffectSource {
     id: surfaceCopy
     sourceItem: scene
     textureSize: Qt.size(Math.max(1, Math.ceil(root.width / 6)), Math.max(1, Math.ceil(root.height / 6)))
     smooth: true
+  }
+  Blur {
+    id: surfaceBlur
+    width: root.width
+    height: root.height
+    source: surfaceCopy
+    textureSize: surfaceCopy.textureSize
+    sigma: (2 + root.blur * 11) / 6
   }
 }

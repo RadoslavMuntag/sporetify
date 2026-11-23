@@ -33,8 +33,11 @@ FloatingWindow {
   Player {
     id: player
     wanted: window.visible
-    // The daemon analyses the audio only while the plate shows it.
-    vizWanted: (plate.visible || pool.visible) && window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
+    // The daemon analyses the audio only while the plate's spectrum or the
+    // lens shows it. In the water neither is drawn; a feed nobody sees
+    // still ran the hidden spectrum's easing, which redrew the whole window
+    // at 60 frames a second.
+    vizWanted: !keys.inWater && (plate.visible || pool.visible) && window.visible && screen.shown && player.playing && Visuals.moving(window.visuals)
   }
 
   UpNext {
@@ -545,9 +548,17 @@ FloatingWindow {
       span: keys.opening ? Math.min(0.7, keys.opening.waterRoom * 0.6 / Math.max(1, height)) : 0.3
       specks: 30
       passer: false
+      // The water above the bar: the bar's glass covers the rest for good.
+      region: Qt.rect(0, 0, width, Math.max(1, nowPlaying.y))
+      // Text straight on the water: the pool view's or the plate's.
+      calm: {
+        var host = window.poolShown ? pool : plate.visible ? plate : null
+        if (!host) return []
+        return host.calm.map(function(r) { return Qt.rect(host.x + r.x, host.y + r.y, r.width, r.height) })
+      }
       palette: Theme.creatureColors
       ground: Theme.background
-      deep: Theme.sunken
+      deep: Theme.deep
       ink: Theme.foreground
       accent: Theme.accent
       muted: Theme.muted

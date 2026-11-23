@@ -37,6 +37,7 @@ Item {
     property real strength: root.light ? 0.6 : 0.55
     property color tint: root.tint
     property color edge: root.edge
+    property size texels: root.surface && root.surface.textureSize ? root.surface.textureSize : Qt.size(1, 1)
     // Something must be bound even when there is no water; it is not read.
     property var surface: root.surface ? root.surface : blank
   }

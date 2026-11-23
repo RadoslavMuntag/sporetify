@@ -102,7 +102,7 @@ Rectangle {
         elide: Text.ElideRight
         textFormat: Text.PlainText
         text: root.track ? root.track.artists.join(", ") : (root.player.lastError !== "" ? root.player.lastError : "")
-        color: root.track ? Theme.muted : Theme.urgent
+        color: !root.track ? Theme.urgent : root.water ? Theme.subtle : Theme.muted
         font.family: Theme.font.family
         font.pixelSize: Theme.font.bodySmall
 
@@ -169,7 +169,7 @@ Rectangle {
           horizontalAlignment: Text.AlignRight
           textFormat: Text.PlainText
           text: Position.clock(seek.dragging && root.track ? seek.dragValue * root.track.duration_ms : root.positionMs)
-          color: Theme.muted
+          color: root.water ? Theme.faint : Theme.muted
           font.family: Theme.font.family
           font.pixelSize: Theme.font.caption
         }
@@ -177,6 +177,7 @@ Rectangle {
           id: seek
           anchors.verticalCenter: parent.verticalCenter
           width: parent.width - elapsed.width - remaining.width - parent.spacing * 2
+          ascii: root.water
           durationMs: root.track ? root.track.duration_ms : 0
           value: root.track && root.track.duration_ms > 0 ? root.positionMs / root.track.duration_ms : 0
           // Seeking commits on release so a drag does not re-buffer per frame.
@@ -190,7 +191,7 @@ Rectangle {
           width: Theme.space(40)
           textFormat: Text.PlainText
           text: root.track ? Position.clock(root.track.duration_ms) : "0:00"
-          color: Theme.muted
+          color: root.water ? Theme.faint : Theme.muted
           font.family: Theme.font.family
           font.pixelSize: Theme.font.caption
         }
@@ -204,8 +205,20 @@ Rectangle {
       spacing: Theme.spacing.md
 
       Cap { anchors.verticalCenter: parent.verticalCenter; label: Keymap.keyLabel("volumeDown") }
+      // The mockup's "vol [=======---]".
+      Text {
+        visible: root.water
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "vol"
+        color: Theme.subtle
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.bodySmall
+      }
       Slider {
         anchors.verticalCenter: parent.verticalCenter
+        ascii: root.water
+        brackets: true
         width: Theme.space(130)
         value: root.player.volume
         onMoved: function(value) { root.player.setVolume(value) }

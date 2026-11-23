@@ -43,8 +43,10 @@ Item {
       anchors.bottomMargin: root.stroke
       color: index < root.lines / 4 ? root.accent : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.7)
 
+      // Only while shown: an animation runs even on a hidden item, and a
+      // running one makes the whole window redraw every frame.
       Behavior on height {
-        enabled: root.smooth
+        enabled: root.smooth && root.visible
         NumberAnimation { duration: 90; easing.type: Easing.OutQuad }
       }
     }

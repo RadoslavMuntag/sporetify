@@ -1,7 +1,7 @@
 #version 440
 
 // A pane of glass over the water (D18): the water behind it, taken from a
-// small copy of the whole scene (`surface`) and softened further here, its
+// small, blurred copy of the whole scene (`surface`), its
 // colour lifted (saturate 150%), under a tint, with rounded corners, a
 // hairline edge and a highlight along the top. One small copy serves every
 // pane, so the water is never drawn again for the glass.
@@ -21,23 +21,36 @@ layout(std140, binding = 0) uniform buf {
   float strength; // how much tint covers the water
   vec4 tint;
   vec4 edge;
+  vec2 texels;    // the surface's size in texels
 };
 layout(binding = 1) uniform sampler2D surface;
+
+// The surface comes already blurred, and small: read straight, its texels
+// would show as soft squares six pixels wide. A cubic B-spline across
+// them is smooth everywhere, in four reads (each between texels, so the
+// linear filter does part of the weighing).
+vec4 smoothRead(vec2 uv) {
+  vec2 size = max(texels, vec2(1.0));
+  vec2 p = uv * size - 0.5;
+  vec2 i = floor(p), f = p - i;
+  vec2 f2 = f * f, f3 = f2 * f;
+  vec2 w0 = (-f3 + 3.0 * f2 - 3.0 * f + 1.0) / 6.0;
+  vec2 w1 = (3.0 * f3 - 6.0 * f2 + 4.0) / 6.0;
+  vec2 w2 = (-3.0 * f3 + 3.0 * f2 + 3.0 * f + 1.0) / 6.0;
+  vec2 w3 = f3 / 6.0;
+  vec2 g0 = w0 + w1, g1 = w2 + w3;
+  vec2 h0 = (i - 0.5 + w1 / g0) / size;
+  vec2 h1 = (i + 1.5 + w3 / g1) / size;
+  return g0.y * (g0.x * texture(surface, h0) + g1.x * texture(surface, vec2(h1.x, h0.y)))
+       + g1.y * (g0.x * texture(surface, vec2(h0.x, h1.y)) + g1.x * texture(surface, h1));
+}
 
 void main() {
   vec2 px = qt_TexCoord0 * extent;
   vec3 col = tint.rgb;
   float cover = 0.9;
   if (sampling > 0.5) {
-    vec2 at = pane.xy + px;
-    float spread = 4.0 + blur * 9.0;
-    vec3 sum = vec3(0.0);
-    for (int i = 0; i < 8; i++) {
-      float a = float(i) * 0.785398;
-      sum += texture(surface, (at + vec2(cos(a), sin(a)) * spread) / scene).rgb;
-    }
-    sum += texture(surface, at / scene).rgb * 2.0;
-    vec3 water = sum / 10.0;
+    vec3 water = smoothRead((pane.xy + px) / scene).rgb;
     float lum = dot(water, vec3(0.3, 0.59, 0.11));
     water = clamp(mix(vec3(lum), water, 1.5), 0.0, 1.0);
     col = mix(water, tint.rgb, strength);
