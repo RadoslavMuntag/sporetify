@@ -87,9 +87,11 @@ Item {
   }
 
   readonly property bool scene: Visuals.drawn(root.visuals) && root.creatures
-  // The pool hides the card, but never a fault or an error it has to show.
+  // The pool hides the card, but never a fault it has to show. A passing
+  // command error stays out of this: nothing clears it until the next
+  // command, and it would hold the card up over the pool.
   readonly property bool showCard: !root.pool || !root.scene || root.track === null
-    || player.lastError !== "" || player.scope !== "player"
+    || player.scope !== "player"
 
   // ---- The pool, behind everything
   Water {

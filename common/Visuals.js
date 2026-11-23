@@ -16,6 +16,12 @@ function level(saved, creatures) {
   return creatures === false ? "off" : "full"
 }
 
+// A file from before the levels with its one switch off. Either key that
+// brings something back brings all of it back.
+function legacyOff(saved, creatures) {
+  return levels.indexOf(saved) === -1 && creatures === false
+}
+
 function creatures(saved) {
   return saved !== false
 }
