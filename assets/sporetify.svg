@@ -1,31 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <!-- Sporetify: a small creature in a cell, with a play mark for a body. -->
-  <defs>
-    <linearGradient id="pool" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1f3a3a"/>
-      <stop offset="1" stop-color="#12201f"/>
-    </linearGradient>
-    <radialGradient id="body" cx="0.38" cy="0.32" r="0.8">
-      <stop offset="0" stop-color="#a6f0c6"/>
-      <stop offset="1" stop-color="#3fb98a"/>
-    </radialGradient>
-  </defs>
-  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#pool)"/>
-  <!-- feelers -->
-  <g fill="none" stroke="#3fb98a" stroke-width="5" stroke-linecap="round">
-    <path d="M46 44 Q36 30 30 26"/>
-    <path d="M82 44 Q92 30 98 26"/>
-    <path d="M38 88 Q28 96 24 104"/>
-    <path d="M90 88 Q100 96 104 104"/>
+  <!-- Sporetify: the creature grown from the word "sporetify" (common/Organism.js),
+       drawn as line art on a round slide, a play mark for its nucleus, and
+       the lens's progress arc around it. -->
+  <circle cx="64" cy="64" r="56" fill="#18201e"/>
+  <circle cx="64" cy="64" r="56" fill="none" stroke="#e9e4d4" stroke-opacity="0.18" stroke-width="4"/>
+  <path d="M64 8a56 56 0 1 1 -48.5 84" fill="none" stroke="#e8b04a" stroke-width="5" stroke-linecap="round"/>
+  <g stroke="#8fd1b0" stroke-width="4.5" stroke-linecap="round">
+    <line x1="64" y1="62" x2="81.21" y2="89.85"/>
+    <line x1="64" y1="62" x2="36.95" y2="78.72"/>
+    <line x1="64" y1="62" x2="45.49" y2="32.05"/>
+    <line x1="64" y1="62" x2="92.68" y2="44.27"/>
   </g>
-  <g fill="#a6f0c6">
-    <circle cx="29" cy="25" r="5"/>
-    <circle cx="99" cy="25" r="5"/>
+  <g fill="#8fd1b0">
+    <circle cx="64" cy="62" r="27.58"/>
+    <circle cx="73.68" cy="76.53" r="20.45"/>
+    <circle cx="54.32" cy="76.53" r="20.45"/>
   </g>
-  <!-- body: a soft, slightly uneven blob -->
-  <path fill="url(#body)" d="M64 30c20 0 36 13 37 33 1 21-15 36-37 36S26 84 27 63c1-20 17-33 37-33z"/>
-  <!-- play mark -->
-  <path fill="#12201f" d="M56 50v30a3 3 0 0 0 4.6 2.5l23-15a3 3 0 0 0 0-5l-23-15A3 3 0 0 0 56 50z"/>
-  <!-- eye glint -->
-  <circle cx="46" cy="50" r="4" fill="#f4fff9"/>
+  <g fill="#24352f">
+    <circle cx="64" cy="62" r="23.08"/>
+    <circle cx="73.68" cy="76.53" r="15.95"/>
+    <circle cx="54.32" cy="76.53" r="15.95"/>
+  </g>
+  <path d="M60.03 67.2v17.03l13.62 -8.51z" fill="#e8b04a" stroke="#e8b04a" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="53.57" cy="56.07" r="4.26" fill="#e9e4d4" stroke="#8fd1b0" stroke-width="4.5"/>
+  <circle cx="53.57" cy="56.07" r="2.13" fill="#18201e"/>
+  <circle cx="74.43" cy="56.07" r="4.26" fill="#e9e4d4" stroke="#8fd1b0" stroke-width="4.5"/>
+  <circle cx="74.43" cy="56.07" r="2.13" fill="#18201e"/>
 </svg>
