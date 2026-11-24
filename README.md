@@ -161,6 +161,12 @@ lens whose ring of ticks fills as the song plays, a fine-line spectrum that
 moves with the music, the title, the artist and the time. Made to sit tiled beside a terminal in a desktop screenshot. It
 lays itself out to fit any window: square, wide or tall.
 
+<p align="center">
+  <img src="docs/screenshots/compact-pool.gif" alt="A medusa drawn in characters swimming in the compact player's tide pool" width="360">
+  <br>
+  <sub>The compact player's tide pool (<code>z</code>): the playing track's medusa, and the next track's creature at the edge.</sub>
+</p>
+
 `sporetify --compact` opens it (or focuses it). Its keys are the
 mini-player's: `Space`, `n`, `p`, `+`, `-`, `f` to like, `o` for the full app,
 `z` for the tide pool in the lens, `?` for the list, and `q` to close. Clicking the lens plays or pauses.
