@@ -4,7 +4,7 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
-## 0.2.0 (not released yet)
+## 0.2.0 (2026-11-24)
 
 A new look, a compact player, and fixes to playback and playlists. Version
 0.1.2 was never released; its fixes are listed here.
