@@ -25,3 +25,22 @@ function parse(text) {
   if (parts.length !== 2 || kinds.indexOf(parts[0]) < 0 || !validId(parts[1])) return null
   return { kind: parts[0], uri: "spotify:" + parts[0] + ":" + parts[1] }
 }
+
+// Where the playing track was played from, as a place the app can open,
+// from the daemon's `player.up_next` answer. Null when the daemon knows no
+// context or the track is not in it (the context is remembered from an
+// earlier play, and the track may since have come from another device).
+// A playlist or Liked Songs opens with the cursor on the track's position;
+// an album or artist page finds the track by uri once its rows are in.
+function playingPlace(upNext, trackUri) {
+  if (!upNext || typeof upNext.context_uri !== "string" || typeof upNext.position !== "number") return null
+  var uri = upNext.context_uri
+  var name = upNext.context_name || ""
+  if (/^spotify:user:[^:]+:collection$/.test(uri))
+    return { kind: "playlist", uri: uri, name: name || "Liked Songs", cursor: upNext.position }
+  var link = parse(uri)
+  if (!link) return null
+  if (link.kind === "playlist") return { kind: "playlist", uri: uri, name: name, cursor: upNext.position }
+  if (link.kind === "album" || link.kind === "artist") return { kind: link.kind, uri: uri, name: name, focus: trackUri || "" }
+  return null
+}

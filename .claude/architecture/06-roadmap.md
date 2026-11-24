@@ -83,6 +83,13 @@ track playing next, the bar's right and middle click, the search keys and
 `Esc`, the heart, shuffle and repeat. (What exactly was covered, such as a
 light theme or a second monitor, was not itemised.)
 
+At launch the app opens where the playing track came from (2026-11-24):
+`player.up_next` names the context the daemon remembers and the track's
+position in it; the playlist, Liked Songs or album opens with the cursor
+on the track. The context is the last one Sporetify itself started, so a
+track that is not in it (playback moved from another device) opens its
+album instead. Pure mapping in `Links.playingPlace`, tested.
+
 Still to do: a devices view, reading and reordering the queue. Launch time
 was measured at about 970 ms and is no longer a goal (decision D14).
 
