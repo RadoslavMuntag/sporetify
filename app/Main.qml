@@ -72,7 +72,53 @@ FloatingWindow {
       var link = pendingLink
       pendingLink = ""
       openLink(link)
+    } else if (phase === "ready") {
+      openPlaying()
     }
+  }
+
+  // At launch the app opens where the playing track was played from (a
+  // playlist, Liked Songs, an album) with the cursor on it, rather than an
+  // empty page; failing that, the track's album. Only once, only online
+  // (offline there is nothing to fetch), and never over a place the user
+  // has opened meanwhile. Fails silently: nothing was asked for.
+  property bool triedPlaying: false
+  function openPlaying() {
+    if (triedPlaying || library.historyIndex >= 0) return
+    triedPlaying = true
+    var trackUri = player.trackId
+    if (trackUri === "") return
+    player.request("player.up_next", { limit: 1 }, {
+      deadline: 5000, scope: "open-playing",
+      onDone: function(result) {
+        if (!result.ok || library.historyIndex >= 0) return
+        var place = Links.playingPlace(result.data, trackUri)
+        if (place) {
+          library.go(place, tracks.currentIndex)
+          window.pane = "list"
+        } else {
+          showInAlbum(trackUri, true)
+        }
+      }
+    })
+  }
+
+  // Show a track in its album, with the cursor on it. `quietly` drops a
+  // failure, and the answer too if the user went somewhere meanwhile.
+  function showInAlbum(trackUri, quietly) {
+    player.request("library.track", { uri: trackUri }, {
+      deadline: 5000, scope: quietly ? "open-playing" : "open-link",
+      onDone: function(result) {
+        if (quietly && library.historyIndex >= 0) return
+        var row = result.ok ? result.data.track : null
+        if (!row || !row.album_uri) {
+          if (!quietly) library.notice("Could not open that track" + (result.ok ? "" : ": " + result.error.message), true)
+          return
+        }
+        library.go({ kind: "album", uri: row.album_uri, name: row.album, focus: trackUri }, tracks.currentIndex)
+        window.pane = "list"
+      }
+    })
   }
   Component.onCompleted: loadWhenReady()
 
@@ -93,18 +139,7 @@ FloatingWindow {
       return "opened " + link.uri
     }
     // A track is shown in its album.
-    player.request("library.track", { uri: link.uri }, {
-      deadline: 5000, scope: "open-link",
-      onDone: function(result) {
-        var row = result.ok ? result.data.track : null
-        if (!row || !row.album_uri) {
-          library.notice("Could not open that track" + (result.ok ? "" : ": " + result.error.message), true)
-          return
-        }
-        library.go({ kind: "album", uri: row.album_uri, name: row.album }, tracks.currentIndex)
-        window.pane = "list"
-      }
-    })
+    showInAlbum(link.uri, false)
     return "opening " + link.uri
   }
 

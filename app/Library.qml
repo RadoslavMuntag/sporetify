@@ -55,6 +55,9 @@ Item {
   readonly property bool canGoForward: historyIndex >= 0 && historyIndex < history.length - 1
   // Where the cursor should land once rows arrive (set when walking history).
   property int restoreCursor: -1
+  // A track the cursor should land on once rows arrive, by uri (set when
+  // the app opens where the playing track came from); "" for none.
+  property string focusUri: ""
   signal cursorRestoreRequested(int index)
 
   // Whether the playing track is in Liked Songs; kept by the shared player.
@@ -97,16 +100,18 @@ Item {
 
   // Go somewhere new. `cursor` is where the cursor is now, remembered so
   // that coming back lands on the same row.
+  // `place.cursor` (a row) or `place.focus` (a track uri) say where the
+  // cursor starts; by default at the top.
   function go(place, cursor) {
     if (historyIndex >= 0 && cursor !== undefined) history[historyIndex].cursor = cursor
     var next = history.slice(0, historyIndex + 1)
     next.push({
       kind: place.kind, uri: place.uri || "", name: place.name || "", query: place.query || "",
-      mode: place.mode || "spotify", filter: place.filter || "all", cursor: 0
+      mode: place.mode || "spotify", filter: place.filter || "all", cursor: place.cursor || 0
     })
     history = next
     historyIndex = next.length - 1
-    show(next[historyIndex], false)
+    show(next[historyIndex], false, place.focus)
   }
 
   function back(cursor) {
@@ -203,8 +208,9 @@ Item {
     markedCount = 0
   }
 
-  function show(place, refresh) {
+  function show(place, refresh, focus) {
     leaveCurrent()
+    focusUri = focus || ""
     kind = place.kind
     uri = place.uri
     query = place.query
@@ -245,6 +251,11 @@ Item {
         apply(result.data)
         root.revision++
         root.collection = Loadable.ready(true)
+        if (root.focusUri !== "") {
+          var found = root.indexOfUri(root.focusUri)
+          if (found >= 0) root.restoreCursor = found
+          root.focusUri = ""
+        }
         if (root.restoreCursor >= 0) {
           root.cursorRestoreRequested(root.restoreCursor)
           root.restoreCursor = -1
@@ -252,6 +263,14 @@ Item {
       }
     })
     inFlight.push(handle)
+  }
+
+  // The first row holding the track `trackUri`, or -1.
+  function indexOfUri(trackUri) {
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i] && rows[i].uri === trackUri) return i
+    }
+    return -1
   }
 
   // ---- Thumbnails for rows

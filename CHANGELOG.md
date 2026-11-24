@@ -4,6 +4,13 @@ Versions follow the plugin's `manifest.json`. The daemon and the plugin are
 released together and must be the same version; `scripts/setup.sh` installs
 the daemon that matches.
 
+## Not released yet
+
+- The app opens where the playing track was played from: its playlist,
+  Liked Songs or album, with the cursor on the track, instead of an empty
+  page. When that is not known, it opens the track's album.
+- A track link opens its album with the cursor on that track.
+
 ## 0.2.0 (2026-11-24)
 
 A new look, a compact player, and fixes to playback and playlists. Version
